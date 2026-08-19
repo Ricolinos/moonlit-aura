@@ -95,11 +95,47 @@ ffmpeg -y -loglevel error -f lavfi -i "smptebars=size=160x120:rate=1" \
 ffmpeg -y -loglevel error -f lavfi -i "color=c=0xAA6622:s=100x100" \
   -frames:v 1 "$OUT_DIR/Photos/photo4_unsupported.png"
 
-echo "==> Generando fixture de Video (test-media/Videos)"
+# F7: 4 fotos mas para ejercitar photo_categories.cfg (photo/image/ai)
+# -- "sin categoria.jpg" queda deliberadamente fuera del indice: debe
+# aparecer en "todas" pero en ninguna de las 3 filas filtradas
+# (contrato D.2: sin entrada = sin categoria, no un error).
+gen_cover_jpg "0x88AA44" "320x240" "$OUT_DIR/Photos/sunset.jpg"
+gen_cover_jpg "0xCCCCCC" "320x240" "$OUT_DIR/Photos/diagram.jpg"
+gen_cover_jpg "0xFF66CC" "320x240" "$OUT_DIR/Photos/dreamscape.jpg"
+gen_cover_jpg "0x336699" "320x240" "$OUT_DIR/Photos/sin categoria.jpg"
+
+echo "==> Generando fixtures de Video (test-media/Videos)"
 mkdir -p "$OUT_DIR/Videos"
-ffmpeg -y -loglevel error -f lavfi -i "testsrc=size=320x240:rate=15:duration=2" \
-  -f lavfi -i "sine=frequency=440:duration=2" \
-  -c:v mpeg2video -q:v 5 -c:a mp2 "$OUT_DIR/Videos/test.mpg"
+gen_video() {
+  local name="$1" freq="$2"
+  ffmpeg -y -loglevel error -f lavfi -i "testsrc=size=320x240:rate=15:duration=2" \
+    -f lavfi -i "sine=frequency=${freq}:duration=2" \
+    -c:v mpeg2video -q:v 5 -c:a mp2 "$OUT_DIR/Videos/$name.mpg"
+}
+gen_video "test" 440
+gen_video "Feature Presentation" 300
+gen_video "Season Premiere" 350
+gen_video "Behind the Scenes" 500
+# "Sin categoria" no entra al indice a proposito -- mismo criterio que
+# "sin categoria.jpg" arriba.
+gen_video "Sin categoria" 600
+
+echo "==> Generando indices de categoria (test-media/aura)"
+mkdir -p "$OUT_DIR/aura"
+cat > "$OUT_DIR/aura/video_categories.cfg" <<'EOF'
+# aura-video-categories v1
+Feature Presentation.mpg: movie
+Season Premiere.mpg: series
+Behind the Scenes.mpg: clip
+test.mpg: clip
+EOF
+cat > "$OUT_DIR/aura/photo_categories.cfg" <<'EOF'
+# aura-photo-categories v1
+sunset.jpg: photo
+diagram.jpg: image
+dreamscape.jpg: ai
+photo1.jpg: photo
+EOF
 
 # F4: biblioteca musical de prueba para metro_music.c (proveedores sobre
 # tagcache_search*) -- 2 artistas, 3 albumes, 12 pistas, 3 generos en el
@@ -181,9 +217,11 @@ EOF
 SIMDISK="$ROOT_DIR/firmware/build-sim/simdisk"
 if [[ -d "$SIMDISK" ]]; then
   echo "==> Instalando fixtures en $SIMDISK"
-  mkdir -p "$SIMDISK/Photos" "$SIMDISK/Videos"
+  mkdir -p "$SIMDISK/Photos" "$SIMDISK/Videos" "$SIMDISK/.rockbox/aura"
   cp "$OUT_DIR"/Photos/* "$SIMDISK/Photos/"
   cp "$OUT_DIR"/Videos/*.mpg "$SIMDISK/Videos/"
+  cp "$OUT_DIR"/aura/video_categories.cfg "$SIMDISK/.rockbox/aura/"
+  cp "$OUT_DIR"/aura/photo_categories.cfg "$SIMDISK/.rockbox/aura/"
   # Fixtures de MUSICA: solo bajo peticion explicita
   # (METRO_INSTALL_MUSIC_FIXTURES=1), para no ensuciar el simulador con
   # una biblioteca de prueba cuando alguien solo necesita probar

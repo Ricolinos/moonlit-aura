@@ -331,3 +331,7 @@ metro/metro_sync.c
 metro/metro_sync_marker.c
 metro/metro_device.c
 metro/metro_device_name.c
+metro/metro_fsutil.c
+metro/metro_media_categories.c
+metro/metro_video.c
+metro/metro_photos.c

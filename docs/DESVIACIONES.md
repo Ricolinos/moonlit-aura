@@ -217,3 +217,15 @@ Durante la captura de las evidencias de F4 (`docs/screenshots/F4-*.png`), UNA co
 **Por qué**: los tres recortes reflejan que Metro v1 es deliberadamente más chico que Aura (§1.2 del plan, "Metro es deliberadamente más chico") — replicar la UI de progreso por sección o la invalidación de caché de Aura sería construir infraestructura para un caché que Metro no tiene.
 
 **Impacto en `PLAN_MAESTRO.md`**: ninguno en las claves del contrato ni en el comportamiento observable de C1-C7 (todas verificadas). Si F7 termina necesitando un caché real de video/fotos (por ejemplo, para miniaturas), `metro_sync.c` gana ahí las llamadas de invalidación que le faltan — no es un cambio de diseño, es la costura ya prevista (`metro_sync.h` documenta esto en su comentario de módulo).
+
+---
+
+## F7-1 — Sin póster de video (`Videos/<archivo>.jpg`), sin miniaturas de foto
+
+**Plan decía**: la tabla D del contrato de Aura Studio (leída del repo hermano) documenta `Videos/<archivo sin extensión>.jpg` como un póster opcional que Aura Studio puede sincronizar junto a cada video, usado por CoverDrift (el carrusel visual de Aura) — y Aura Studio también coloca miniaturas cacheadas de fotos en un formato propio.
+
+**Qué se hizo**: `metro_video.c`/`metro_photos.c` ignoran por completo cualquier `.jpg` que acompañe a un video, y no generan ni leen ninguna miniatura — cada fila de Videos/Fotos es texto plano (el nombre de archivo), igual que cualquier otra lista de Metro hasta ahora.
+
+**Por qué**: Metro nunca ha mostrado una imagen fuera de la carátula de Now Playing (F5) — no hay ningún carrusel visual tipo CoverDrift en el árbol de navegación de Metro (`PLAN_MAESTRO.md` §2.2, el árbol de Videos/Fotos es una lista de pivots, no un carrusel), así que no hay ningún lugar donde un póster o una miniatura se mostrarían. Construir el pipeline de decodificación+caché+display para algo que no tiene consumidor sería trabajo especulativo.
+
+**Impacto en `PLAN_MAESTRO.md`**: ninguno en el comportamiento de C12-C14 (todos verificados sin pósters/miniaturas). Si una fase futura agrega un componente visual a Videos/Fotos (fuera del plan actual de fases F0-F13), el póster ya está documentado en el contrato y solo falta leerlo — no hace falta que Aura Studio cambie nada de su lado.

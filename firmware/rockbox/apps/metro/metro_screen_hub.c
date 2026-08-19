@@ -28,6 +28,8 @@
 #include "metro_screen_settings.h"
 #include "metro_screen_nowplaying.h"
 #include "metro_music.h"
+#include "metro_video.h"
+#include "metro_photos.h"
 #include "metro_draw.h"
 #include "metro_theme.h"
 #include "metro_lang.h"
@@ -40,64 +42,162 @@
 static void open_album_songs(int32_t album_seek, const char *album_label);
 static void open_genre_songs(int32_t genre_seek, const char *genre_label);
 
-/* --- dummy row provider, shared by every videos/photos pivot -- F4
- * replaced music's own dummy_* usage with metro_music (below); F7
- * replaces this one for videos/photos, nothing else changes. */
+/* --- videos: real files under /Videos (F7) -- category pivots
+ * (movies/series/clips) only appear when video_categories.cfg tagged
+ * at least one currently-listed file; otherwise just "all"
+ * (PLAN_MAESTRO.md S2.2, contract D-316: index absent/empty is a
+ * supported case, not an error). video_pivots[]/videos_page.npivots
+ * are rebuilt by build_videos_page() each time the videos row is
+ * entered -- same reuse-one-static-instance rule as the music
+ * subpages (metro_page.h: only one such page can be on the nav stack
+ * at a time). */
 
-struct dummy_ctx {
-    enum metro_lang_id name_id;
-    int count;
-    char buf[32];
+static metro_video_item_t s_video_all[METRO_VIDEO_MAX];
+static int s_video_all_n;
+static metro_video_item_t s_video_movies[METRO_VIDEO_MAX];
+static int s_video_movies_n;
+static metro_video_item_t s_video_series[METRO_VIDEO_MAX];
+static int s_video_series_n;
+static metro_video_item_t s_video_clips[METRO_VIDEO_MAX];
+static int s_video_clips_n;
+
+struct video_pivot_ctx {
+    metro_video_item_t *items;
+    int *count;
 };
 
-static int dummy_count(void *ctx)
+static struct video_pivot_ctx video_all_ctx    = { s_video_all,    &s_video_all_n };
+static struct video_pivot_ctx video_movies_ctx = { s_video_movies, &s_video_movies_n };
+static struct video_pivot_ctx video_series_ctx = { s_video_series, &s_video_series_n };
+static struct video_pivot_ctx video_clips_ctx  = { s_video_clips,  &s_video_clips_n };
+
+static int video_pivot_count(void *ctx)
 {
-    return ((struct dummy_ctx *)ctx)->count;
+    return *((struct video_pivot_ctx *)ctx)->count;
 }
 
-static void dummy_get_row(void *ctx, int index, struct metro_row *out)
+static void video_pivot_get_row(void *ctx, int index, struct metro_row *out)
 {
-    struct dummy_ctx *d = ctx;
-
-    snprintf(d->buf, sizeof(d->buf), "%s %d", metro_lang_str(d->name_id), index + 1);
-    out->title = d->buf;
+    struct video_pivot_ctx *c = ctx;
+    out->title = c->items[index].filename;
     out->subtitle = NULL;
     out->kind = METRO_ROW_ACTION;
 }
 
-static void dummy_on_select(void *ctx, int index)
+static void video_pivot_on_select(void *ctx, int index)
 {
-    (void)ctx;
-    (void)index;
+    struct video_pivot_ctx *c = ctx;
+    metro_video_play(c->items[index].filename);
 }
 
-#define DUMMY_ROWS 30
+static struct metro_pivot video_pivots[4];
+static struct metro_page videos_page = { LANG_HUB_VIDEOS, video_pivots, 1, NULL };
 
-static struct dummy_ctx videos_all_ctx    = { LANG_PIVOT_ALL,    DUMMY_ROWS, "" };
-static struct dummy_ctx videos_movies_ctx = { LANG_PIVOT_MOVIES, DUMMY_ROWS, "" };
-static struct dummy_ctx videos_series_ctx = { LANG_PIVOT_SERIES, DUMMY_ROWS, "" };
-static struct dummy_ctx videos_clips_ctx  = { LANG_PIVOT_CLIPS,  DUMMY_ROWS, "" };
+static void build_videos_page(void)
+{
+    int i, n = 0;
 
-static const struct metro_pivot videos_pivots[] = {
-    { LANG_PIVOT_ALL,    dummy_count, dummy_get_row, dummy_on_select, &videos_all_ctx },
-    { LANG_PIVOT_MOVIES, dummy_count, dummy_get_row, dummy_on_select, &videos_movies_ctx },
-    { LANG_PIVOT_SERIES, dummy_count, dummy_get_row, dummy_on_select, &videos_series_ctx },
-    { LANG_PIVOT_CLIPS,  dummy_count, dummy_get_row, dummy_on_select, &videos_clips_ctx },
+    s_video_all_n = metro_video_list(s_video_all, METRO_VIDEO_MAX);
+    s_video_movies_n = s_video_series_n = s_video_clips_n = 0;
+    for (i = 0; i < s_video_all_n; i++)
+    {
+        switch (s_video_all[i].category)
+        {
+            case METRO_VIDEO_CAT_MOVIE:  s_video_movies[s_video_movies_n++] = s_video_all[i]; break;
+            case METRO_VIDEO_CAT_SERIES: s_video_series[s_video_series_n++] = s_video_all[i]; break;
+            case METRO_VIDEO_CAT_CLIP:   s_video_clips[s_video_clips_n++]  = s_video_all[i];  break;
+            default: break;
+        }
+    }
+
+    video_pivots[n++] = (struct metro_pivot){
+        LANG_PIVOT_ALL, video_pivot_count, video_pivot_get_row, video_pivot_on_select, &video_all_ctx };
+    if (s_video_movies_n || s_video_series_n || s_video_clips_n)
+    {
+        video_pivots[n++] = (struct metro_pivot){
+            LANG_PIVOT_MOVIES, video_pivot_count, video_pivot_get_row, video_pivot_on_select, &video_movies_ctx };
+        video_pivots[n++] = (struct metro_pivot){
+            LANG_PIVOT_SERIES, video_pivot_count, video_pivot_get_row, video_pivot_on_select, &video_series_ctx };
+        video_pivots[n++] = (struct metro_pivot){
+            LANG_PIVOT_CLIPS, video_pivot_count, video_pivot_get_row, video_pivot_on_select, &video_clips_ctx };
+    }
+    videos_page.npivots = n;
+}
+
+/* --- photos: real files under /Photos (F7) -- same conditional-pivot
+ * rule as videos, against photo_categories.cfg (photo/image/ai). */
+
+static metro_photo_item_t s_photo_all[METRO_PHOTOS_MAX];
+static int s_photo_all_n;
+static metro_photo_item_t s_photo_photos[METRO_PHOTOS_MAX];
+static int s_photo_photos_n;
+static metro_photo_item_t s_photo_images[METRO_PHOTOS_MAX];
+static int s_photo_images_n;
+static metro_photo_item_t s_photo_ai[METRO_PHOTOS_MAX];
+static int s_photo_ai_n;
+
+struct photo_pivot_ctx {
+    metro_photo_item_t *items;
+    int *count;
 };
-static const struct metro_page videos_page = { LANG_HUB_VIDEOS, videos_pivots, 4, NULL };
 
-static struct dummy_ctx photos_all_ctx    = { LANG_PIVOT_ALL,    DUMMY_ROWS, "" };
-static struct dummy_ctx photos_photos_ctx = { LANG_PIVOT_PHOTOS, DUMMY_ROWS, "" };
-static struct dummy_ctx photos_images_ctx = { LANG_PIVOT_IMAGES, DUMMY_ROWS, "" };
-static struct dummy_ctx photos_ai_ctx     = { LANG_PIVOT_AI,     DUMMY_ROWS, "" };
+static struct photo_pivot_ctx photo_all_ctx    = { s_photo_all,    &s_photo_all_n };
+static struct photo_pivot_ctx photo_photos_ctx = { s_photo_photos, &s_photo_photos_n };
+static struct photo_pivot_ctx photo_images_ctx = { s_photo_images, &s_photo_images_n };
+static struct photo_pivot_ctx photo_ai_ctx     = { s_photo_ai,     &s_photo_ai_n };
 
-static const struct metro_pivot photos_pivots[] = {
-    { LANG_PIVOT_ALL,    dummy_count, dummy_get_row, dummy_on_select, &photos_all_ctx },
-    { LANG_PIVOT_PHOTOS, dummy_count, dummy_get_row, dummy_on_select, &photos_photos_ctx },
-    { LANG_PIVOT_IMAGES, dummy_count, dummy_get_row, dummy_on_select, &photos_images_ctx },
-    { LANG_PIVOT_AI,     dummy_count, dummy_get_row, dummy_on_select, &photos_ai_ctx },
-};
-static const struct metro_page photos_page = { LANG_HUB_PHOTOS, photos_pivots, 4, NULL };
+static int photo_pivot_count(void *ctx)
+{
+    return *((struct photo_pivot_ctx *)ctx)->count;
+}
+
+static void photo_pivot_get_row(void *ctx, int index, struct metro_row *out)
+{
+    struct photo_pivot_ctx *c = ctx;
+    out->title = c->items[index].filename;
+    out->subtitle = NULL;
+    out->kind = METRO_ROW_ACTION;
+}
+
+static void photo_pivot_on_select(void *ctx, int index)
+{
+    struct photo_pivot_ctx *c = ctx;
+    metro_photos_view(c->items[index].filename);
+}
+
+static struct metro_pivot photo_pivots[4];
+static struct metro_page photos_page = { LANG_HUB_PHOTOS, photo_pivots, 1, NULL };
+
+static void build_photos_page(void)
+{
+    int i, n = 0;
+
+    s_photo_all_n = metro_photos_list(s_photo_all, METRO_PHOTOS_MAX);
+    s_photo_photos_n = s_photo_images_n = s_photo_ai_n = 0;
+    for (i = 0; i < s_photo_all_n; i++)
+    {
+        switch (s_photo_all[i].category)
+        {
+            case METRO_PHOTO_CAT_PHOTO: s_photo_photos[s_photo_photos_n++] = s_photo_all[i]; break;
+            case METRO_PHOTO_CAT_IMAGE: s_photo_images[s_photo_images_n++] = s_photo_all[i]; break;
+            case METRO_PHOTO_CAT_AI:    s_photo_ai[s_photo_ai_n++]         = s_photo_all[i]; break;
+            default: break;
+        }
+    }
+
+    photo_pivots[n++] = (struct metro_pivot){
+        LANG_PIVOT_ALL, photo_pivot_count, photo_pivot_get_row, photo_pivot_on_select, &photo_all_ctx };
+    if (s_photo_photos_n || s_photo_images_n || s_photo_ai_n)
+    {
+        photo_pivots[n++] = (struct metro_pivot){
+            LANG_PIVOT_PHOTOS, photo_pivot_count, photo_pivot_get_row, photo_pivot_on_select, &photo_photos_ctx };
+        photo_pivots[n++] = (struct metro_pivot){
+            LANG_PIVOT_IMAGES, photo_pivot_count, photo_pivot_get_row, photo_pivot_on_select, &photo_images_ctx };
+        photo_pivots[n++] = (struct metro_pivot){
+            LANG_PIVOT_AI, photo_pivot_count, photo_pivot_get_row, photo_pivot_on_select, &photo_ai_ctx };
+    }
+    photos_page.npivots = n;
+}
 
 /* --- music: real tagcache-backed lists (F4) -----------------------------
  * Each top-level pivot (artists/albums/songs/genres/playlists) caches
@@ -426,8 +526,8 @@ static void hub_on_select(void *ctx, int index)
                 metro_screen_list_push(&music_page);
             }
             break;
-        case 1: metro_screen_list_push(&videos_page); break;
-        case 2: metro_screen_list_push(&photos_page); break;
+        case 1: build_videos_page(); metro_screen_list_push(&videos_page); break;
+        case 2: build_photos_page(); metro_screen_list_push(&photos_page); break;
         case 3: metro_screen_list_push(metro_screen_settings_page()); break;
         default: break;
     }
