@@ -224,3 +224,36 @@ limpieza de pantalla (comportamiento nativo de
 en `metro_main.h`, ya no `static`) se llama ahora desde ambos cuerpos
 de `init()` en `apps/main.c`, justo después de `settings_load()` —
 mismo punto exacto que usa Aura-Firmware.
+
+### M-024 — F2: `metro_draw_rows()`/`draw_pivots()`/`draw_tile()`/`draw_progress()` se difieren a F3
+
+Ver `docs/DESVIACIONES.md` F2-1. Esas cuatro primitivas operan sobre
+tipos (`struct metro_page`/`metro_pivot`/`metro_row`) que el propio
+plan define recién en F3 — escribirlas antes exigía inventar firmas
+provisionales. `metro_draw.c` de F2 solo trae lo que su propio
+criterio de "hecho" necesita: `clear`, `text`, `text_cut_right`,
+`header`, `battery`.
+
+### M-025 — F2: captura visual de `F2-type-specimen.png` no lograda en esta sesión (limitación de entorno, no de código)
+
+Ver `docs/DESVIACIONES.md` F2-2 — hallazgo importante para toda fase
+futura que dependa de `sim_shot.sh` con `metro_main()` corriendo su
+loop de botones. Causa raíz identificada con alta confianza: falla de
+AppKit (`nextEventMatchingMask should only be called from the Main
+Thread!`) al bombear eventos SDL desde el hilo del "dispositivo"
+(`HAVE_SDL_THREADS`, activo por el propio `FIXME` ya presente en
+`tools/configure` para macOS ≥ 26.4 — este Mac corre 26.5.2)
+concurrente con el hilo de volcado headless (`uisimulator/common/sim_tasks.c`).
+Determinista para cualquier `METRO_SIM_AUTODUMP_TICKS` ≥ 30 en esta
+sesión; sin ventana segura posible porque el propio arranque de
+Rockbox (`show_logo_boot()`) ya ocupa los primeros ~100 ticks.
+Verificado por 6+ técnicas distintas sin éxito (detalle completo en
+`docs/DESVIACIONES.md` F2-2). No se alteró `metro_main()` para
+maquillar el síntoma (un `sleep()` fijo antes del loop degradaría la
+responsividad real del producto). Verificación de F2 se apoyó en el
+log `DEBUGF` de carga de fuentes (evidencia sólida y completa) más
+compilación limpia para simulador y target real. **Pendiente**: el
+dueño debe intentar la captura en una sesión interactiva propia (no en
+segundo plano) — si el problema persiste ahí, amerita una fase de
+investigación dedicada antes de F3, dado que F3+ depende de captura
+con botones inyectados.

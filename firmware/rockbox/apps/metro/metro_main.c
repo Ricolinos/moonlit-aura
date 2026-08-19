@@ -28,6 +28,9 @@
 
 #include "metro_main.h"
 #include "metro_screen_splash.h"
+#include "metro_screen_specimen.h"
+#include "metro_fonts.h"
+#include "metro_theme.h"
 
 /* See metro_main.h for why this must be called from apps/main.c's
  * init(), not from here. None of these settings are exposed anywhere
@@ -55,6 +58,14 @@ void metro_main(void)
      * see metro_main.h for why it can't run here, after init() returns. */
     metro_screen_splash_show();
 
+    metro_fonts_init();
+    metro_theme_init();
+
+    /* F2: the type/palette specimen stands in for a real screen until
+     * F3 lands the twist navigation core and metro_screen_hub. See
+     * PLAN_MAESTRO.md F2, docs/DESVIACIONES.md F2-1. */
+    metro_screen_specimen_show();
+
     while (1)
     {
         int button = button_get_w_tmo(HZ);
@@ -64,6 +75,6 @@ void metro_main(void)
          * cable is unplugged) -- see PLAN_MAESTRO.md M-006/A.1. Redraw
          * after returning from USB in case anything on screen changed. */
         if (default_event_handler(button) == SYS_USB_CONNECTED)
-            metro_screen_splash_show();
+            metro_screen_specimen_show();
     }
 }

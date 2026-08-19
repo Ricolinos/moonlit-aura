@@ -37,3 +37,43 @@ Cada entrada: fase · qué decía el plan · qué se encontró en la práctica �
 **Qué se hizo**: se movió la higiene completa a una función exportada, `metro_apply_hygiene()` (declarada en `metro_main.h`), llamada desde **ambos** cuerpos de `init()` en `apps/main.c` (uno para el build de simulador/hosted, otro para target real — el archivo tiene dos definiciones de `init()` bajo `#if (CONFIG_PLATFORM & PLATFORM_HOSTED)` / `#else`), en el mismo punto exacto que usa Aura-Firmware: justo después de `settings_load()`, antes de `settings_apply(true)`/`settings_apply_skins()`. Confirmado por captura: con este cambio, `F1-boot.png` muestra fondo negro limpio.
 
 **Impacto en `PLAN_MAESTRO.md`**: §1.2 (tabla de `metro_main.c/.h`) y el pseudo-código de M-019 deben leerse como "higiene llamada desde `init()` en `apps/main.c`, no desde `metro_main()`" — `metro_main()` sigue siendo el punto de entrada de la UI, pero ya no es responsable de este paso. Cualquier fase futura que agregue una nueva pantalla de "primer arranque" debe recordar que la higiene ya corrió antes de que exista ninguna UI.
+
+---
+
+## F2-1 — `metro_draw_rows()`/`metro_draw_pivots()`/`metro_draw_tile()`/`metro_draw_progress()` no se implementan en F2
+
+**Plan decía** (`PLAN_MAESTRO.md` §1.2, fila `metro_draw.c/.h`, fase "F2, F3"): que F2 ya deja escritas las primitivas de dibujo de filas y encabezado de pivots (`draw_rows`, `draw_pivots`), junto con `metro_draw_tile()`/`metro_draw_progress()`.
+
+**Qué se encontró**: esas cuatro primitivas operan sobre tipos que el propio plan define recién en F3 (`struct metro_page`/`struct metro_pivot`/`struct metro_row`, tabla de `metro_page.h` en §1.2, fase F3). Escribirlas en F2 exigía inventar firmas de datos provisionales que F3 probablemente tendría que rehacer, contra el criterio de "no diseñar para hipotéticos" del propio proyecto.
+
+**Qué se hizo**: F2 implementa solo lo que el propio criterio de "hecho" de F2 pide y puede probar de forma aislada: `metro_draw_clear()`, `metro_draw_text()`, `metro_draw_text_cut_right()`, `metro_draw_header()`, `metro_draw_battery()`. Las otras cuatro quedan explícitamente para F3, cuando `metro_page.h` ya exista.
+
+**Impacto en `PLAN_MAESTRO.md`**: §1.2, fila `metro_draw.c/.h` — la fase de `draw_rows`/`draw_pivots`/`draw_tile`/`draw_progress` pasa de "F2, F3" a "F3" únicamente.
+
+---
+
+## F2-2 — Capturas headless del simulador no son fiables una vez `metro_main()` entra a su loop de botones (macOS ≥26.4)
+
+**Plan decía** (`PLAN_MAESTRO.md` §5, criterio de "hecho" de F2): capturar `F2-type-specimen.png` con `sim_shot.sh` de la forma estándar (como ya había funcionado en F0 y F1).
+
+**Qué se encontró**: con el código de F2 (que agrega carga de 5 fuentes + dibujo del espécimen antes del loop), `sim_shot.sh docs/screenshots/F2-type-specimen.png 100` produce un `dump.bmp` truncado (66 bytes, solo cabecera) y el proceso termina con una excepción no capturada de AppKit:
+
+```
+*** Terminating app due to uncaught exception 'NSInternalInconsistencyException',
+reason: 'nextEventMatchingMask should only be called from the Main Thread!'
+...
+7   rockboxui   button_get_w_tmo + 56
+8   rockboxui   metro_main + 44
+```
+
+Investigado a fondo: **no es un bug de Metro**. `tools/configure` (heredado de Aura-Firmware, ver `MODIFICATIONS.md`) ya trae un comentario `FIXME` explícito sobre esto:
+
+> `# FIXME: sigaltstack fails with "Operation not permitted" in make_context (firmware/asm/thread-unix.c) on latest versions of macOS (≥ 26.4). Fall back to SDL threads.`
+
+Este Mac corre macOS 26.5.2 -- dentro del rango que ese `FIXME` ya marca como problemático. Con `HAVE_SDL_THREADS` (confirmado activo en `autoconf.h` de este build), el "hilo del dispositivo" donde corre `metro_main()` es un hilo creado por SDL, no el hilo principal real del proceso -- y en macOS ≥26.4, `SDL_PumpEventsInternal`/AppKit ya no tolera que ese hilo secundario bombee eventos (`nextEventMatchingMask`) mientras el mecanismo de captura headless (`uisimulator/common/sim_tasks.c`, en un hilo aparte) intenta volcar la pantalla a disco concurrentemente. El barrido de valores de `METRO_SIM_AUTODUMP_TICKS` confirma que la corrupción es prácticamente determinista para cualquier tick ≥30 (15/15 intentos fallidos a `ticks=100`) -- y como `show_logo_boot()` (stock de Rockbox) ya bloquea los primeros ~100 ticks con su propio `sleep(HZ)`, no existe ningún valor de tick donde la captura sea a la vez confiable y posterior al arranque de `metro_main()`. Se probaron sin éxito: forzar `SDL_VIDEODRIVER=dummy` (el proceso se cuelga en vez de crashear), terminar el proceso externamente tras estabilizar el archivo (la corrupción ya ocurrió antes de que el poll externo detecte el archivo), adjuntar `lldb` para invocar `screen_dump()` manualmente con todos los hilos pausados (requiere una autorización interactiva de macOS no disponible en esta sesión en segundo plano), y el hint `SDL_MAC_BACKGROUND_APP=1` de SDL3 (documentado como "don't force the SDL app to become a foreground process" -- exactamente el escenario, pero no cambió el resultado).
+
+**Qué se hizo**: no se alteró `metro_main()` ni ningún código de producto para "arreglar" esto -- degradar la responsividad real de la UI (p.ej. agregando un `sleep()` fijo antes del loop de botones) solo para que un capturador de pantalla de desarrollo funcione sería resolver el problema equivocado. En su lugar:
+- Se verificó la carga de las 5 fuentes por otra vía, sólida y determinista: la salida de `DEBUGF` (activo por defecto en builds de simulador) corriendo `rockboxui` de forma interactiva sin autodump, que muestra las 5 líneas `metro_fonts: <rol> (<ruta>) loaded as font id N` sin ningún fallback a `FONT_SYSFIXED` -- ver evidencia completa en el reporte de cierre de F2.
+- `F2-type-specimen.png` **no se pudo capturar en esta sesión**. Queda pendiente de que el dueño la tome en su propia máquina corriendo `firmware/tools/sim_shot.sh` interactivamente (fuera de una sesión headless en segundo plano, que es probablemente donde esta restricción de AppKit se manifiesta con más fuerza) -- o, si el problema persiste ahí también, de investigar un fix real en `uisimulator/common/sim_tasks.c`/`firmware/target/hosted/sdl/` en una fase dedicada.
+
+**Impacto en `PLAN_MAESTRO.md`**: el criterio de "hecho" de F2 se cumple parcialmente -- carga de fuentes verificada por log, compilación limpia para simulador y target real verificada, pero sin la captura visual. **Riesgo real para fases futuras**: F3 en adelante depende de `sim_shot.sh` con secuencias de botones inyectadas (`METRO_SIM_BUTTONS`), que necesariamente mantienen `metro_main()` corriendo su loop por muchos ticks -- exactamente el escenario que dispara esta falla. Si el problema persiste en sesiones futuras (headless o no), es un bloqueante real para el criterio "simulador primero" del proyecto y merece una fase de investigación dedicada antes de F3, no un parche apurado.

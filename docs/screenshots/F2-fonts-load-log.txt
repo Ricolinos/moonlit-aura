@@ -1,0 +1,13 @@
+Salida real de `rockboxui` corriendo interactivamente en este Mac
+(macOS 26.5.2), sin captura headless (ver docs/DESVIACIONES.md F2-2
+sobre por qué no hay screenshot). Confirma que las 5 fuentes Selawik
+cargan como fuentes reales (no fallback a FONT_SYSFIXED) antes de que
+metro_main() llegue a su loop de botones.
+
+$ cd firmware/build-sim && ./rockboxui
+init_volume_names: vol<0> = <HDD0>
+metro_fonts: display (/.rockbox/fonts/metro-display-48.fnt) loaded as font id 1
+metro_fonts: title (/.rockbox/fonts/metro-title-28.fnt) loaded as font id 2
+metro_fonts: list (/.rockbox/fonts/metro-list-20.fnt) loaded as font id 3
+metro_fonts: list_sel (/.rockbox/fonts/metro-listsel-20.fnt) loaded as font id 4
+metro_fonts: caption (/.rockbox/fonts/metro-caption-14.fnt) loaded as font id 5
