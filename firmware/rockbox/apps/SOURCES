@@ -342,3 +342,4 @@ metro/metro_splash_lang.c
 metro/metro_fb.c
 metro/metro_motion.c
 metro/metro_transitions.c
+metro/metro_turnstile_table.c

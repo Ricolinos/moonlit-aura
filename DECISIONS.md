@@ -638,3 +638,100 @@ constantes provisionales de F8 (`animations=1`, `graphics=1`) a
 `METRO_ANIM_DEFAULT`=ALL/`METRO_GFX_DEFAULT`=FULL (M-015: "canon =
 máxima fidelidad") en `metro_settings.c` y en "restablecer ajustes"
 (`metro_screen_settings.c`).
+
+## M-046 — F12: geometría del turnstile (eje central, distancia focal, tabla offline) y el asentado final tras el último cuadro
+
+`metro_fb_present_turnstile()`/`metro_fb_draw_turnstile_layer()`
+modelan una rotación RÍGIDA de toda la pantalla alrededor de su propio
+centro vertical (`x = LCD_WIDTH/2`), bajo una cámara de perspectiva
+simple a distancia focal `D = LCD_WIDTH*1.2` — ni el eje ni `D` están
+confirmados contra una fuente primaria de WP7 (`INVESTIGACION.md` F.3
+solo documenta el rango de ángulo/duración del turnstile real, no su
+geometría de proyección exacta), así que ambos son **[ESTIMADO]**,
+elección de diseño propia. La tabla (32 ángulos × 320 columnas,
+`metro_turnstile_xs`/`metro_turnstile_step`) se resuelve hacia atrás
+(backward-mapping, sin huecos) con Python
+(`firmware/tools/gen_turnstile_table.py`, nunca trigonometría en el
+dispositivo — sin FPU, `INVESTIGACION.md` B.5/B.6) y se consume en
+tiempo real solo con lookup + acumulador de paso fijo por columna,
+técnica de PictureFlow (B.5). Cada cuadro se redondea al ÍNDICE de
+tabla más cercano en vez de interpolar entre dos filas — con solo 8
+cuadros de animación bajo `animations=all`, el error de precisión no
+es perceptible, y ahorra tener que mezclar 320 pares de valores por
+cuadro en el dispositivo.
+
+**Bug real encontrado y arreglado**: como la tabla solo tiene 32
+muestras discretas, el último cuadro de la animación (ángulo real
+exactamente 0°) nunca cae justo en una muestra de la tabla — el
+resultado proyectado es una aproximación cercana a la pantalla final,
+no un píxel a píxel exacto. Como `FEATHER` (M-047) redibuja SOLO el
+área de filas después, el encabezado/pivots se habrían quedado
+ligeramente deformados para siempre (nada los vuelve a dibujar).
+Encontrado visualmente comparando el estado asentado antes/después de
+agregar un blit final directo (`lcd_bitmap_part` sin proyección) al
+cierre de `run_turnstile()` — mismo patrón que
+`metro_fb_present_slide()` ya logra de forma exacta en su último
+cuadro (`dx == LCD_WIDTH`), pero que el turnstile no puede replicar
+por construcción (tabla discreta, no álgebra exacta).
+
+**Aliasing esperado, sin arreglar a propósito**: en ángulos cercanos a
+los extremos del rango (-80°/50°), columnas muy comprimidas (`step`
+grande) pueden mostrar texto con un patrón de rayas visible
+(sub-muestreo sin filtro) — exactamente la técnica que
+`INVESTIGACION.md` B.5 documenta de PictureFlow ("el único costo por
+píxel es un shift y una comparación", sin antialiasing). Visible solo
+durante los ~240-360ms de la animación, nunca en el resultado asentado
+(el blit final de arriba lo reemplaza por completo) — no vale la pena
+un filtro de resampleo para un efecto que dura una fracción de
+segundo. Ver `docs/screenshots/F12-turnstile-mid.png`.
+
+## M-047 — F12: FEATHER como cascada por fila en `metro_screen_list.c`, no como transición de framebuffer completo
+
+A diferencia de SLIDE/PUSH/POP/FADE (todas en `metro_transitions.c`,
+operando sobre framebuffers completos de 320×240), FEATHER anima FILAS
+INDIVIDUALES de una sola página de lista -- vive en
+`metro_screen_list.c` en su lugar, con su propio bucle bloqueante de 6
+cuadros que solo redibuja el área de filas
+(`metro_draw_clear_rows_area()` + `metro_draw_rows_ex()` con un
+arreglo de offsets Y, uno por fila visible). Escalonado de 1
+cuadro/fila (fila N no empieza a caer hasta el cuadro N), cada fila
+usando `metro_ease(OUT_QUAD, local_frame+1, local_total)` sobre los
+cuadros que le quedan en el presupuesto -- así la fila SIEMPRE llega
+exactamente a offset 0 en su propio último cuadro
+(`metro_ease()`'s `i==frames` → 256) sin importar cuán pocos cuadros
+le tocaron (incluso la última fila visible, con un solo cuadro
+asignado). Disparado por una bandera (`s_feather_pending`) que
+`metro_screen_list_push()` levanta en CADA push (incluido el del
+centinela de Now Playing, que nunca la consume porque esa rama
+siempre termina en FADE -- la siguiente vez que se empuje una lista de
+verdad, la bandera ya se volvió a levantar de todas formas, así que no
+hay arrastre real de estado viejo). Gate propio, más estricto que
+PUSH/POP/twist: solo corre bajo el nivel EFECTIVO `all`
+(`metro_transitions_effective_all()`, nueva función expuesta desde
+`metro_transitions.c` para no duplicar el estado de auto-degradación
+de sesión de M-015 en dos módulos) -- "off" bajo `minimal` y `off`,
+igual que dicta la tabla de `PLAN_MAESTRO.md` S3.3.
+
+## M-048 — F12: fondo de carátula atenuada en Now Playing -- buffer de ~300 KB, no 150 KB, misma razón que M-033
+
+`metro_albumart.c` gana un segundo par caché/buffer
+(`s_bg_scratch`/`s_bg_loaded_path`) independiente del tile pequeño ya
+existente, decodificando la MISMA carátula a `LCD_WIDTH x LCD_HEIGHT`
+en vez de `METRO_ALBUMART_SIZE`. `PLAN_MAESTRO.md` S3.3 estima este
+buffer en "150 KB" (el tamaño final `320*240*2` sin margen) pero M-033
+(F5) ya estableció, con un bug de corrupción de memoria real como
+prueba, que `FORMAT_RESIZE` necesita espacio para el decode NATIVO
+completo antes de reducir la imagen -- no solo el tamaño final. Este
+buffer usa la misma fórmula de margen `*2*2` que el buffer del tile
+pequeño (`METRO_ALBUMART_SCRATCH_SIZE`), dando ~300 KB reales, no 150.
+Trivial sobre 64 MB de RAM total (`INVESTIGACION.md` B.3 ya lo
+calificaba de "insignificante" incluso a 150 KB), así que la prioridad
+es la misma que en M-033: seguridad de memoria por encima de fidelidad
+al número exacto del plan. La composición en sí
+(`metro_fb_blend_over_color()`, mismo blend por píxel que
+`metro_fb_present_fade()`) NO llama `lcd_update()` -- a diferencia de
+toda otra función `present_*`/`blend_*` de `metro_fb.c`, esta es un
+fondo ESTÁTICO con más dibujo encima (tile pequeño, texto, controles)
+antes de un único `lcd_update()` al final de
+`metro_screen_nowplaying_show()`, no el único paso de una animación
+por cuadro.

@@ -23,6 +23,7 @@
 #include "viewport.h"
 
 #include "metro_fb.h"
+#include "metro_turnstile_table.h"
 
 /* The real LCD's own frame_buffer_t (firmware/drivers/lcd-color-common.c)
  * -- not declared in any header we can include, same local-extern
@@ -123,4 +124,73 @@ void metro_fb_present_fade(const fb_data *from, const fb_data *to, int alpha256)
     }
 
     lcd_update();
+}
+
+void metro_fb_blend_over_color(const fb_data *img, unsigned bg_color, int alpha256)
+{
+    int x, y;
+
+    if (alpha256 < 0)
+        alpha256 = 0;
+    if (alpha256 > 256)
+        alpha256 = 256;
+
+    for (y = 0; y < LCD_HEIGHT; y++)
+    {
+        fb_data *row = FBADDR(0, y);
+        const fb_data *img_row = img + y * LCD_WIDTH;
+
+        for (x = 0; x < LCD_WIDTH; x++)
+            row[x] = blend_pixel((fb_data)bg_color, img_row[x], alpha256);
+    }
+}
+
+/* F12: writes ONE column of `src` (stride LCD_WIDTH, like every
+ * other full-frame buffer in this file) into real LCD column x,
+ * walking `src`'s rows with a plain fixed-point accumulator --
+ * PictureFlow's own "no per-pixel division" technique
+ * (INVESTIGACION.md B.5). dst_stride is the REAL framebuffer's row
+ * stride (lcd_framebuffer_default.stride) -- may differ from
+ * LCD_WIDTH in principle, unlike metro_fb.c's own offscreen buffers,
+ * which are always built contiguous by metro_fb_render(). */
+static void draw_turnstile_column(const fb_data *src_col, fb_data *dst_col,
+                                   long dst_stride, unsigned step)
+{
+    unsigned p = 0;
+    int y;
+
+    for (y = 0; y < LCD_HEIGHT; y++)
+    {
+        int src_row = p >> METRO_TURNSTILE_STEP_SHIFT;
+
+        if (src_row >= LCD_HEIGHT)
+            src_row = LCD_HEIGHT - 1;
+        dst_col[y * dst_stride] = src_col[src_row * LCD_WIDTH];
+        p += step;
+    }
+}
+
+void metro_fb_draw_turnstile_layer(const fb_data *src, int angle_index)
+{
+    long dst_stride = lcd_framebuffer_default.stride;
+    int x;
+
+    if (angle_index < 0)
+        angle_index = 0;
+    if (angle_index >= METRO_TURNSTILE_ANGLES)
+        angle_index = METRO_TURNSTILE_ANGLES - 1;
+
+    for (x = 0; x < LCD_WIDTH; x++)
+    {
+        int xs = metro_turnstile_xs[angle_index][x];
+
+        /* xs == -1: this column has no valid projection at this
+         * angle (the rotated surface doesn't cover it) -- leave
+         * whatever the caller already painted here untouched. */
+        if (xs < 0)
+            continue;
+
+        draw_turnstile_column(src + xs, FBADDR(x, 0), dst_stride,
+                               metro_turnstile_step[angle_index][x]);
+    }
 }

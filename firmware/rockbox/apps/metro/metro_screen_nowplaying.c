@@ -40,6 +40,8 @@
 #include "metro_widgets.h"
 #include "metro_albumart.h"
 #include "metro_music.h"
+#include "metro_settings.h"
+#include "metro_fb.h"
 #include "metro_keymap.h"
 
 #define METRO_SEEK_STEP_MS      5000
@@ -245,13 +247,26 @@ static void draw_mode_indicators(void)
         metro_widgets_draw_shuffle_icon(x, y);
 }
 
+/* F12: 30% of the track's own art, scaled to fill the screen, behind
+ * everything else -- graphics=full only (PLAN_MAESTRO.md S3.3);
+ * static, redrawn plainly every metro_screen_nowplaying_show() call
+ * like the rest of this screen, never animated on its own. */
+#define METRO_NP_BG_ALPHA256 77 /* ~30% of 256 */
+
 void metro_screen_nowplaying_show(void)
 {
     struct mp3entry *id3;
     char elapsed_buf[16], remaining_buf[16];
     int w, h, pct;
+    bool has_bg = metro_settings.graphics == METRO_GFX_FULL &&
+                  metro_albumart_load_background();
 
-    metro_draw_clear();
+    if (has_bg)
+        metro_fb_blend_over_color(metro_albumart_background_bitmap(),
+                                   metro_color_bg(), METRO_NP_BG_ALPHA256);
+    else
+        metro_draw_clear();
+
     metro_draw_header(metro_lang_str(LANG_HUB_NOWPLAYING));
 
     if (!metro_music_is_playing() || !(id3 = audio_current_track()))

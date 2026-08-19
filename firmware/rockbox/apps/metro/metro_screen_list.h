@@ -70,4 +70,14 @@ bool metro_screen_list_has_pending_redraw(void);
  * NOT redraw -- the caller (metro_main.c) decides when to. */
 void metro_screen_list_handle(int action, int steps);
 
+/* F12: FEATHER (PLAN_MAESTRO.md S3.3) -- if the top-of-stack page was
+ * just pushed (metro_screen_list_push() sets a pending flag), runs
+ * the staggered row-entrance cascade over the CURRENT screen contents
+ * and clears the flag; a plain no-op otherwise (nothing was pushed,
+ * animations isn't effectively `all`, or the LCD is off). Blocking,
+ * like every other transition in F11/F12 -- metro_main.c calls this
+ * right after metro_transitions_push() settles, only when the result
+ * is a list page (never the hub, never Now Playing). */
+void metro_screen_list_run_feather_if_pending(void);
+
 #endif /* METRO_SCREEN_LIST_H */

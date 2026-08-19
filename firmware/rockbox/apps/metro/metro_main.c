@@ -336,11 +336,19 @@ void metro_main(void)
             if (depth_after > depth_before && player_after)
                 metro_transitions_fade(redraw_current);
             else if (depth_after > depth_before)
-                metro_transitions_slide(redraw_current, 1);
+            {
+                metro_transitions_push(redraw_current, 1);
+                /* F12: the cascade only makes sense on the list this
+                 * push landed on, never the hub (no rows, its own
+                 * *_show()) or Now Playing (handled by the fade
+                 * branch above, never reaches here). */
+                if (!root_after && !player_after)
+                    metro_screen_list_run_feather_if_pending();
+            }
             else if (depth_after < depth_before && player_before && !player_after)
                 metro_transitions_fade(redraw_current);
             else if (depth_after < depth_before)
-                metro_transitions_slide(redraw_current, -1);
+                metro_transitions_push(redraw_current, -1);
             else if (!root_after && pivot_after != pivot_before)
                 metro_transitions_slide(redraw_current, pivot_after > pivot_before ? 1 : -1);
             else

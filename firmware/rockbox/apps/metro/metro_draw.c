@@ -166,20 +166,37 @@ void metro_draw_pivots(const struct metro_page *page, int active_pivot,
     }
 }
 
-void metro_draw_rows(const struct metro_pivot *pivot, int first, int sel,
-                      int x_offset)
+void metro_draw_clear_rows_area(void)
+{
+    lcd_set_foreground(metro_color_bg());
+    lcd_fillrect(0, METRO_ROWS_FIRST_Y, LCD_WIDTH, LCD_HEIGHT - METRO_ROWS_FIRST_Y);
+}
+
+/* F12: y_offsets[] (one entry per VISIBLE row slot, same indexing as
+ * the loop below -- NULL for the plain, un-offset draw
+ * metro_draw_rows() still does) is metro_screen_list.c's FEATHER
+ * cascade (S3.3): each row's own y nudged down by a shrinking amount
+ * as its own entrance animates in, independent of every other row's
+ * offset. Never clears first -- metro_screen_list.c owns clearing the
+ * row area between frames (metro_draw_clear_rows_area()) since the
+ * feather loop redraws far more often than a single metro_draw_rows()
+ * call would otherwise need to. */
+void metro_draw_rows_ex(const struct metro_pivot *pivot, int first, int sel,
+                         int x_offset, const int *y_offsets)
 {
     int count = pivot->count(pivot->ctx);
     int i, y = METRO_ROWS_FIRST_Y;
     int x = METRO_ROWS_LEFT_X + x_offset;
+    int visible_index = 0;
 
     /* Draw one row past METRO_ROWS_VISIBLE on purpose -- it peeks,
      * naturally cut by the bottom of the 240px screen (A.6), same
      * "next thing asoma cortado" effect as the pivot header. */
-    for (i = first; i < count && i < first + METRO_ROWS_VISIBLE + 1; i++)
+    for (i = first; i < count && i < first + METRO_ROWS_VISIBLE + 1; i++, visible_index++)
     {
         struct metro_row row;
         bool selected = (i == sel);
+        int row_y = y + (y_offsets ? y_offsets[visible_index] : 0);
 
         pivot->get_row(pivot->ctx, i, &row);
 
@@ -195,18 +212,24 @@ void metro_draw_rows(const struct metro_pivot *pivot, int first, int sel,
             int sub_w, sub_h;
             lcd_setfont(metro_font_id(MFONT_CAPTION));
             lcd_getstringsize((const unsigned char *)row.subtitle, &sub_w, &sub_h);
-            metro_draw_text(MFONT_CAPTION, LCD_WIDTH - 12 - sub_w, y + 4,
+            metro_draw_text(MFONT_CAPTION, LCD_WIDTH - 12 - sub_w, row_y + 4,
                              row.subtitle, metro_color_tertiary());
             title_clip_w = LCD_WIDTH - 12 - sub_w - x - 8;
         }
 
-        metro_draw_text_cut_right(selected ? MFONT_LIST_SEL : MFONT_LIST, x, y,
+        metro_draw_text_cut_right(selected ? MFONT_LIST_SEL : MFONT_LIST, x, row_y,
                                    row.title,
                                    selected ? metro_color_fg() : metro_color_secondary(),
                                    title_clip_w);
 
         y += METRO_ROW_PITCH;
     }
+}
+
+void metro_draw_rows(const struct metro_pivot *pivot, int first, int sel,
+                      int x_offset)
+{
+    metro_draw_rows_ex(pivot, first, sel, x_offset, NULL);
 }
 
 void metro_draw_progress(int x, int y, int width, int height, int pct)

@@ -53,4 +53,25 @@ void metro_fb_present_slide(const fb_data *from, const fb_data *to, int dx);
  * doesn't check settings itself). */
 void metro_fb_present_fade(const fb_data *from, const fb_data *to, int alpha256);
 
+/* F12: draws ONE rotated surface (`src`, a full LCD_WIDTH*LCD_HEIGHT
+ * frame like `from`/`to` above) at metro_turnstile_table.h's angle
+ * index `angle_index`, directly into the real LCD -- does NOT clear
+ * first and does NOT call lcd_update(): the caller composes two of
+ * these per frame (the outgoing screen, then the incoming one on top)
+ * before updating once. A destination column with no valid
+ * projection at this angle (metro_turnstile_xs[i][x] == -1) is left
+ * untouched -- whatever the caller already painted there (the other
+ * layer, or the background) shows through. */
+void metro_fb_draw_turnstile_layer(const fb_data *src, int angle_index);
+
+/* Blends `img` (a full LCD_WIDTH*LCD_HEIGHT frame) over a SOLID
+ * `bg_color` at alpha256 directly into the real LCD -- same per-pixel
+ * blend as metro_fb_present_fade(), without needing a second full-size
+ * buffer just to hold a flat color (F12's dimmed album-art background
+ * in Now Playing). Unlike every other metro_fb_present_*()/blend
+ * function, does NOT call lcd_update(): this one is meant as a static
+ * BACKGROUND with more drawing on top of it before the caller updates
+ * once, not a transition's only compositing step per frame. */
+void metro_fb_blend_over_color(const fb_data *img, unsigned bg_color, int alpha256);
+
 #endif /* METRO_FB_H */

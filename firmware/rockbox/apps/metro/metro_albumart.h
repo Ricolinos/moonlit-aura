@@ -45,4 +45,18 @@ bool metro_albumart_load_current(void);
  * format (ready for lcd_bitmap()). */
 const fb_data *metro_albumart_bitmap(void);
 
+/* F12: same track as metro_albumart_load_current(), scaled to fill
+ * the whole screen (LCD_WIDTH x LCD_HEIGHT) instead of the small NP
+ * tile -- for the dimmed background behind Now Playing
+ * (PLAN_MAESTRO.md S3.3, graphics=full only -- the caller decides
+ * whether to call this at all, this module doesn't read
+ * metro_settings itself). Cached independently of
+ * metro_albumart_load_current()'s own tile-sized cache -- calling one
+ * has no effect on the other. */
+bool metro_albumart_load_background(void);
+
+/* Valid only right after metro_albumart_load_background() returned
+ * true -- LCD_WIDTH x LCD_HEIGHT, row-major, native LCD format. */
+const fb_data *metro_albumart_background_bitmap(void);
+
 #endif /* METRO_ALBUMART_H */

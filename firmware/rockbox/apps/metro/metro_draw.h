@@ -82,6 +82,21 @@ void metro_draw_pivots(const struct metro_page *page, int active_pivot,
 void metro_draw_rows(const struct metro_pivot *pivot, int first, int sel,
                       int x_offset);
 
+/* Same as metro_draw_rows(), plus y_offsets: NULL for the identical
+ * behaviour, or an array of METRO_DRAW_ROWS_VISIBLE+1 pixel offsets
+ * (one per visible row slot, added to that row's y) -- F12's FEATHER
+ * cascade (metro_screen_list.c) redraws with this every frame instead
+ * of duplicating metro_draw_rows()'s own loop. */
+void metro_draw_rows_ex(const struct metro_pivot *pivot, int first, int sel,
+                         int x_offset, const int *y_offsets);
+
+/* Clears just the row area (y >= METRO_ROWS_FIRST_Y) with
+ * metro_color_bg() -- FEATHER's per-frame redraw needs this between
+ * frames without paying for metro_draw_clear()'s full-screen fill
+ * (header/pivots above METRO_ROWS_FIRST_Y never change during the
+ * cascade). */
+void metro_draw_clear_rows_area(void);
+
 /* Flat bar: metro_color_tertiary() background, metro_color_accent()
  * fill for the first `pct` percent (0..100, clamped). Now Playing's
  * progress bar (PLAN_MAESTRO.md S1.4: 320x4 at y=214), reusable

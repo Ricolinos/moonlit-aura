@@ -28,18 +28,38 @@
 #ifndef METRO_TRANSITIONS_H
 #define METRO_TRANSITIONS_H
 
+#include <stdbool.h>
 #include "metro_fb.h"
 
 typedef metro_fb_draw_fn metro_transitions_draw_fn;
 
-/* SLIDE (pivot twist) and PUSH/POP (both v1: present_slide,
- * PLAN_MAESTRO.md S3.3) share this one entry point -- direction > 0:
- * draw_to enters from the right (pivot-next, push). direction < 0:
- * draw_to enters from the left (pivot-prev, pop). Falls straight
- * through to draw_to() with no animation at all when
- * animations=off, !lcd_active(), or after auto-degradation
- * (M-015) has dropped the effective level to off. */
+/* SLIDE (pivot twist, PLAN_MAESTRO.md S3.3): direction > 0 -- draw_to
+ * enters from the right (pivot-next). direction < 0: draw_to enters
+ * from the left (pivot-prev). Falls straight through to draw_to()
+ * with no animation at all when animations=off, !lcd_active(), or
+ * after auto-degradation (M-015) has dropped the effective level to
+ * off. Never uses turnstile -- that substitution is specific to
+ * PUSH/POP (metro_transitions_push() below), the plan's own catalog
+ * table keeps SLIDE and PUSH/POP as separate rows. */
 void metro_transitions_slide(metro_transitions_draw_fn draw_to, int direction);
+
+/* PUSH/POP (deepening into a page / going back, PLAN_MAESTRO.md S3.3):
+ * same direction convention as metro_transitions_slide() (> 0 push,
+ * < 0 pop). Under animations=all AND graphics=full, substitutes
+ * metro_transitions_slide()'s plain slide for a turnstile rotation
+ * (F12, present_turnstile) -- any other level/graphics combination
+ * falls back to the exact same slide metro_transitions_slide() uses. */
+void metro_transitions_push(metro_transitions_draw_fn draw_to, int direction);
+
+/* F12: true when the EFFECTIVE animations level (metro_settings.animations
+ * minus M-015's session auto-degradation, same value
+ * metro_transitions_slide()/_push()/_fade() already act on) is ALL --
+ * metro_screen_list.c's own FEATHER cascade has no framebuffer work
+ * of its own to gate through this module, but still needs to respect
+ * the same "off"/"minimal" -> no animation rule and the same
+ * degradation state instead of re-reading metro_settings.animations
+ * directly and duplicating the degradation logic. */
+bool metro_transitions_effective_all(void);
 
 /* FADE: entering/leaving Now Playing, returning from a plugin
  * (PLAN_MAESTRO.md S3.3). Only actually cross-fades (metro_fb.c's
