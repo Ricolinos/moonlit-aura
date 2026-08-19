@@ -446,3 +446,51 @@ ambos podrían competir por la base en el mismo arranque. Regla: mientras
 devuelve `tagcache_is_usable()` sin tocar tagcache -- mismo criterio
 que `aura_music_db_ready()` ya usa (`if (aura_sync_job_active()) return
 tagcache_is_usable();`).
+
+## M-037 — F9: gancho de una línea en `apps/gui/splash.c` para traducir mensajes que Metro no genera
+
+Puerto directo del mecanismo de Aura-Firmware (`aura_splash_lang.c`,
+D-055 en ese repo): `splash()`/`splashf()` del core de Rockbox son el
+único punto por el que pasan los mensajes de tagcache ("Committing
+database..."), de carga de playlist/plugin ("Loading..."), y de
+apagado por batería baja — ninguno de esos call sites vive en
+`apps/metro/`, así que traducirlos uno por uno significaría tocar
+varios archivos del core. En cambio, `metro_splash_translate()`
+(`apps/metro/metro_splash_lang.c`, código nuevo) reescribe el mensaje
+YA resuelto (con sus argumentos dinámicos ya sustituidos por
+`vsnprintf()`) contra una tabla de reglas conocidas, justo antes del
+ajuste de línea de `splash()` — un solo gancho en `apps/gui/splash.c`
+cubre los cuatro. Ver `MODIFICATIONS.md` F9.
+
+## M-038 — F9: la pantalla USB de Metro no llega a verse en el simulador; `gui_usb_screen_run()` sigue dueño de la pantalla mientras dura la conexión
+
+`default_event_handler()` (`apps/misc.c`) llama a `gui_usb_screen_run()`
+(la pantalla USB nativa de Rockbox, `apps/gui/usb_screen.c`) de forma
+bloqueante hasta que se desconecta el cable -- Metro no puede
+interceptar ese bloqueo sin reimplementar el propio manejo de
+almacenamiento masivo/HID, fuera de alcance y de riesgo real en
+hardware. `metro_screen_usb_show()` dibuja un cuadro con wordmark +
+"conectado" ANTES de llamar a `default_event_handler()` -- pero
+verificado con el token `USB_INSERT` (M-039), `gui_usb_screen_run()`
+hace su propio `lcd_update()` de inmediato, sin ceder el hilo, así que
+en el simulador el cuadro de Metro nunca llega a mostrarse ni un solo
+frame (`docs/screenshots/F9-usb.png` ya muestra el ícono nativo de
+Rockbox). Se conserva de todas formas por ser inofensivo y porque
+[ESTIMADO] podría verse brevemente en hardware real, donde el refresco
+del LCD físico no es instantáneo -- sin confirmar, requiere el
+dispositivo. Alcance más limitado que lo que Aura-Firmware documentó
+para la misma superficie (`docs/superficies-rockbox.md` de ese repo,
+fila "Pantalla USB": 🟡, con logo+wordmark SÍ visibles ahí porque
+Aura modificó `usb_screen.c` directamente en vez de dibujar antes de
+llamarlo). Ver `docs/DESVIACIONES.md` F9-1.
+
+## M-039 — F9: token `USB_INSERT` en `METRO_SIM_BUTTONS` (`sim_tasks.c`)
+
+Necesario para capturar `metro_screen_usb.c` de forma headless (mismo
+mecanismo que toda otra captura de F0-F8): `METRO_SIM_BUTTONS` ya
+soportaba botones reales y el token `WAIT`; agregar `USB_INSERT` que
+llama `sim_trigger_usb(true)` directamente (declarado en
+`sim_tasks.h`, ya usado por el menú interactivo del simulador) evita
+inventar una variable de entorno nueva (`PLAN_MAESTRO.md` F9 proponía
+`METRO_SIM_FORCE_USB=1`) cuando el mecanismo de inyección existente ya
+alcanzaba con un token más. Ver `MODIFICATIONS.md` F9.

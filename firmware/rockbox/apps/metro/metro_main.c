@@ -21,6 +21,9 @@
  *
  ****************************************************************************/
 #include <stdbool.h>
+/* config.h before tagcache.h -- see DECISIONS.md M-030. */
+#include "config.h"
+#include "tagcache.h"
 #include "kernel.h"
 #include "button.h"
 #include "misc.h"
@@ -29,6 +32,7 @@
 
 #include "metro_main.h"
 #include "metro_screen_splash.h"
+#include "metro_screen_usb.h"
 #include "metro_fonts.h"
 #include "metro_theme.h"
 #include "metro_lang.h"
@@ -107,6 +111,26 @@ static void draw_sync_screen(void)
     lcd_update();
 }
 
+/* F9: with show_shutdown_message=false (M-019), Rockbox's own
+ * "Shutting down..." splash never runs at all -- without this, the
+ * screen would just go dark with zero feedback on power-off. Drawn
+ * before default_event_handler(), which proceeds to actually power
+ * down right after -- unlike the USB case (metro_screen_usb_show(),
+ * DESVIACIONES.md F9-1), nothing else ever draws over this one, so it
+ * really is the last thing shown. */
+static void draw_shutdown_screen(void)
+{
+    const char *text = metro_lang_str(LANG_SHUTTING_DOWN);
+    int w, h;
+
+    metro_draw_clear();
+    lcd_setfont(metro_font_id(MFONT_TITLE));
+    lcd_getstringsize((const unsigned char *)text, &w, &h);
+    metro_draw_text(MFONT_TITLE, (LCD_WIDTH - w) / 2, (LCD_HEIGHT - h) / 2,
+                     text, metro_color_fg());
+    lcd_update();
+}
+
 void metro_run_sync_screen_if_needed(void)
 {
     if (!metro_sync_needs_screen())
@@ -149,6 +173,31 @@ static void metro_disk_handoff(void)
     metro_run_sync_screen_if_needed();
 }
 
+/* F9: the splash's progress bar (S1.4) covers tagcache's initial "is
+ * there already a usable database on disk" determination -- fast
+ * (~1s, D-206-class async check) regardless of library size, NOT a
+ * full rebuild/scan (that can take much longer for a real library and
+ * has its own screen, F6's metro_run_sync_screen_if_needed() -- the
+ * splash must never block boot on that). Capped so a wedged tagcache
+ * thread can never hang the splash forever. */
+#define METRO_SPLASH_MAX_WAIT_TICKS (HZ * 5)
+
+static void wait_for_tagcache_with_splash(void)
+{
+    long start = current_tick;
+
+    metro_screen_splash_progress(0);
+    while (!tagcache_is_fully_initialized())
+    {
+        long elapsed = current_tick - start;
+        if (elapsed >= METRO_SPLASH_MAX_WAIT_TICKS)
+            break;
+        metro_screen_splash_progress((int)(elapsed * 100 / METRO_SPLASH_MAX_WAIT_TICKS));
+        sleep(HZ / 10);
+    }
+    metro_screen_splash_progress(100);
+}
+
 void metro_main(void)
 {
     long last_player_tick = 0;
@@ -156,20 +205,24 @@ void metro_main(void)
     /* metro_apply_hygiene() already ran inside init() (apps/main.c) --
      * see metro_main.h for why it can't run here, after init() returns. */
     metro_settings_load();
-    metro_screen_splash_show();
-
     metro_fonts_init();
     metro_theme_init();
     /* metro_theme_init()/metro_lang.c's own module-level statics set
      * the compiled defaults; applying the loaded settings right after
      * is what makes them the actual starting values -- one place,
      * F8 does the same thing again whenever a Settings row changes one
-     * live. */
+     * live. Fonts/theme both have to be ready BEFORE the first splash
+     * draw (F9: the real splash uses MFONT_DISPLAY/metro_color_fg(),
+     * unlike F1's placeholder, which drew before either existed with
+     * raw FONT_SYSFIXED). */
     metro_theme_set(metro_settings.theme);
     metro_accent_set(metro_settings.accent);
     metro_lang_set(metro_settings.language);
-    metro_screen_list_init();
 
+    metro_screen_splash_show();
+    wait_for_tagcache_with_splash();
+
+    metro_screen_list_init();
     metro_disk_handoff();
 
     /* F3: the twist navigation core supersedes the F2 type/palette
@@ -193,7 +246,16 @@ void metro_main(void)
              * shutdown) and SYS_USB_CONNECTED (mounts as storage,
              * blocks until the cable is unplugged) -- see
              * PLAN_MAESTRO.md M-006/A.1. metro_input_next() never
-             * calls it itself, see metro_input.h. */
+             * calls it itself, see metro_input.h. F9: Metro's own
+             * "connected" screen draws first -- default_event_handler()
+             * hands the screen to the stock gui_usb_screen_run() for
+             * the actual mounted duration right after, see
+             * metro_screen_usb.h and DESVIACIONES.md F9-1. */
+            if (action == SYS_USB_CONNECTED)
+                metro_screen_usb_show();
+            else if (action == SYS_POWEROFF || action == SYS_REBOOT)
+                draw_shutdown_screen();
+
             if (default_event_handler(action) == SYS_USB_CONNECTED)
             {
                 metro_disk_handoff();

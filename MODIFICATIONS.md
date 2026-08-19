@@ -67,6 +67,12 @@ prefijo `AURA_SIM_*` se renombraron a `METRO_SIM_*`
 aviso de modificación GPL. El mecanismo (inyección de botones +
 autodump headless) es idéntico.
 
+**F9 (2026-08-20, M-039):** agrega el token `USB_INSERT` a
+`METRO_SIM_BUTTONS` — llama `sim_trigger_usb(true)` (la misma función
+que ya dispara el menú interactivo del simulador) en vez de postear un
+botón, para poder capturar `metro_screen_usb.c` de forma headless. No
+existía en el mecanismo original de Aura-Firmware.
+
 ## `apps/metro/` — código nuevo, no una modificación
 
 Todo el árbol `firmware/rockbox/apps/metro/` es código **nuevo**,
@@ -100,3 +106,18 @@ vivo en `DECISIONS.md`.
   `bmp2rb` no necesitó ningún cambio. Generado por
   `firmware/tools/gen_logo.py` desde
   `firmware/assets/fonts-src/Selawik-Light.ttf` (M-020).
+
+### F9 (2026-08-20)
+
+- `apps/gui/splash.c` (M-037): un solo gancho de una línea —
+  `metro_splash_translate(splash_buf, sizeof(splash_buf))`, corre
+  justo después de que `vsnprintf()` resuelve el mensaje (con
+  cualquier argumento dinámico ya sustituido) y antes del ajuste de
+  línea, que no se toca. Reescribe al wording de Metro (ES/EN) los
+  mensajes conocidos que vienen del árbol de Rockbox que Metro no
+  controla (tagcache, carga de playlist/plugin, apagado por batería
+  baja) — mismo mecanismo que `aura_splash_translate()` de
+  Aura-Firmware (D-055 en ese repo), sin copiar su código: la tabla de
+  mensajes vive en `apps/metro/metro_splash_lang.c`, código nuevo de
+  Metro. Un mensaje sin regla conocida se muestra tal cual, nunca se
+  reemplaza por un genérico que esconda información de diagnóstico.

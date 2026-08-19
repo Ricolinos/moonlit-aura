@@ -34,6 +34,7 @@
 #include "font.h"
 #ifndef BOOTLOADER
 #include "misc.h" /* get_current_activity */
+#include "metro/metro_splash_lang.h" /* Metro (M-037) */
 #endif
 
 static long progress_next_tick, talked_tick;
@@ -134,6 +135,15 @@ static bool splash_internal(struct screen * screen, const char *fmt, va_list ap,
 
     int res = vsnprintf(splash_buf, sizeof(splash_buf), fmt, ap);
     va_end(ap);
+
+#ifndef BOOTLOADER
+    /* Metro (M-037): rewrites the already-resolved message (fmt may
+     * come from a Rockbox LANG_* with its arguments already substituted
+     * by vsnprintf above) to Metro's own wording if it's one of the
+     * known ones. Runs before the word-wrap below, which is untouched. */
+    if (res > 0)
+        metro_splash_translate(splash_buf, sizeof(splash_buf));
+#endif
 
     if (res <= 0 || width < space_w || height < chr_h)
     {

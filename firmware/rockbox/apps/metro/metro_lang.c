@@ -102,6 +102,9 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_ABOUT_DEVICE_DEFAULT] = "mi ipod",
     [LANG_ABOUT_SONGS]          = "canciones",
     [LANG_ABOUT_NOT_SYNCED]     = "sin sincronizar todavia",
+
+    [LANG_USB_CONNECTED] = "conectado",
+    [LANG_SHUTTING_DOWN] = "apagando...",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -185,6 +188,9 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_ABOUT_DEVICE_DEFAULT] = "my ipod",
     [LANG_ABOUT_SONGS]          = "songs",
     [LANG_ABOUT_NOT_SYNCED]     = "not synced yet",
+
+    [LANG_USB_CONNECTED] = "connected",
+    [LANG_SHUTTING_DOWN] = "shutting down...",
 };
 
 void metro_lang_set(enum metro_language lang)

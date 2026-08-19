@@ -19,45 +19,28 @@
  ****************************************************************************/
 #include "lcd.h"
 
-#include "metro_screen_splash.h"
-#include "metro_fonts.h"
-#include "metro_theme.h"
+#include "metro_screen_usb.h"
 #include "metro_draw.h"
+#include "metro_theme.h"
+#include "metro_lang.h"
 
-#define METRO_SPLASH_BAR_WIDTH  120
-#define METRO_SPLASH_BAR_HEIGHT 2
-#define METRO_SPLASH_BAR_GAP    16 /* below the wordmark's baseline */
-
-static void draw_wordmark(void)
+void metro_screen_usb_show(void)
 {
     const char *text = "metro";
+    const char *sub = metro_lang_str(LANG_USB_CONNECTED);
     int w, h;
 
     metro_draw_clear();
+
     lcd_setfont(metro_font_id(MFONT_DISPLAY));
     lcd_getstringsize((const unsigned char *)text, &w, &h);
-    metro_draw_text(MFONT_DISPLAY, (LCD_WIDTH - w) / 2, (LCD_HEIGHT - h) / 2,
+    metro_draw_text(MFONT_DISPLAY, (LCD_WIDTH - w) / 2, LCD_HEIGHT / 2 - h,
                      text, metro_color_fg());
-}
 
-void metro_screen_splash_show(void)
-{
-    draw_wordmark();
-    lcd_update();
-}
+    lcd_setfont(metro_font_id(MFONT_LIST));
+    lcd_getstringsize((const unsigned char *)sub, &w, &h);
+    metro_draw_text(MFONT_LIST, (LCD_WIDTH - w) / 2, LCD_HEIGHT / 2 + 8,
+                     sub, metro_color_secondary());
 
-void metro_screen_splash_progress(int pct)
-{
-    int w, h;
-    int bar_x = (LCD_WIDTH - METRO_SPLASH_BAR_WIDTH) / 2;
-    int bar_y;
-
-    draw_wordmark();
-
-    lcd_setfont(metro_font_id(MFONT_DISPLAY));
-    lcd_getstringsize((const unsigned char *)"metro", &w, &h);
-    bar_y = (LCD_HEIGHT + h) / 2 + METRO_SPLASH_BAR_GAP;
-
-    metro_draw_progress(bar_x, bar_y, METRO_SPLASH_BAR_WIDTH, METRO_SPLASH_BAR_HEIGHT, pct);
     lcd_update();
 }

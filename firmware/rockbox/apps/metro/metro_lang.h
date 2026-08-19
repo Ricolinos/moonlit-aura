@@ -112,6 +112,9 @@ enum metro_lang_id {
     LANG_ABOUT_SONGS,
     LANG_ABOUT_NOT_SYNCED,
 
+    LANG_USB_CONNECTED,
+    LANG_SHUTTING_DOWN,
+
     LANG_COUNT
 };
 

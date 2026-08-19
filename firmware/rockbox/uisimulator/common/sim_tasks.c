@@ -29,6 +29,8 @@
 #include "usb.h"
 #include "mv.h"
 #include "ata_idle_notify.h"
+#include "sim_tasks.h" /* Metro (M-039): sim_trigger_usb() prototype for
+                           the USB_INSERT injection token below */
 
 #ifdef WIN32
 #include <windows.h>
@@ -46,7 +48,10 @@
  *                                   de botones (uno de: SELECT, MENU,
  *                                   SCROLL_FWD, SCROLL_BACK, PLAY, LEFT,
  *                                   RIGHT) directamente en la cola de
- *                                   botones antes de tomar el dump
+ *                                   botones antes de tomar el dump.
+ *                                   WAIT pausa ~1s sin postear boton;
+ *                                   USB_INSERT llama sim_trigger_usb(true)
+ *                                   (M-039, F9) en vez de un boton
  * Ver firmware/tools/sim_screenshot.sh */
 #include <stdlib.h>
 #include <string.h>
@@ -76,6 +81,23 @@ static long autodump_settle_ticks = 0;
  * drain_button_queue_if_full() de forma aleatoria. */
 #define METRO_INJECT_WAIT_CODE  (-1L)
 #define METRO_INJECT_WAIT_TICKS (HZ)
+/* Token "USB_INSERT" en METRO_SIM_BUTTONS (Metro M-039, F9): simula
+ * conectar el cable llamando sim_trigger_usb(true) directamente (el
+ * mismo camino que dispara el menu interactivo del simulador) en vez
+ * de postear un boton -- METRO_SIM_FORCE_USB de PLAN_MAESTRO.md F9 se
+ * volvio innecesario una vez que quedo claro que reusar el mecanismo
+ * de inyeccion existente alcanzaba. Util para F9-usb.png y cualquier
+ * verificacion futura de metro_screen_usb.c sin depender de hardware
+ * ni de la ventana SDL interactiva. */
+#define METRO_INJECT_USB_CODE   (-2L)
+/* Token "POWEROFF" (Metro M-039, F9): broadcasts SYS_POWEROFF directly
+ * -- POWEROFF_BUTTON/POWEROFF_COUNT poweroff-by-held-button detection
+ * lives in the button DRIVER (a sustained press the injector, which
+ * only does press-then-release, has no way to simulate), so this
+ * skips that and posts the event the driver would have posted, for
+ * F9-shutdown.png and any future verification of code that reacts to
+ * SYS_POWEROFF. */
+#define METRO_INJECT_POWEROFF_CODE (-3L)
 
 static long inject_codes[METRO_MAX_INJECT_BUTTONS];
 static int inject_count = 0;
@@ -93,6 +115,8 @@ static long aura_button_name_to_code(const char *name)
     if (!strcmp(name, "LEFT"))        return BUTTON_LEFT;
     if (!strcmp(name, "RIGHT"))       return BUTTON_RIGHT;
     if (!strcmp(name, "WAIT"))        return METRO_INJECT_WAIT_CODE;
+    if (!strcmp(name, "USB_INSERT"))  return METRO_INJECT_USB_CODE;
+    if (!strcmp(name, "POWEROFF"))    return METRO_INJECT_POWEROFF_CODE;
     return BUTTON_NONE;
 }
 
@@ -148,6 +172,28 @@ void sim_thread(void)
         {
             if (inject_codes[inject_pos] == METRO_INJECT_WAIT_CODE)
             {
+                inject_pos++;
+                inject_next_tick = current_tick + METRO_INJECT_WAIT_TICKS;
+                if (inject_pos == inject_count && autodump_settle_ticks >= 0)
+                {
+                    autodump_pending = true;
+                    autodump_tick = current_tick + METRO_INJECT_WAIT_TICKS + autodump_settle_ticks;
+                }
+            }
+            else if (inject_codes[inject_pos] == METRO_INJECT_USB_CODE)
+            {
+                sim_trigger_usb(true);
+                inject_pos++;
+                inject_next_tick = current_tick + METRO_INJECT_WAIT_TICKS;
+                if (inject_pos == inject_count && autodump_settle_ticks >= 0)
+                {
+                    autodump_pending = true;
+                    autodump_tick = current_tick + METRO_INJECT_WAIT_TICKS + autodump_settle_ticks;
+                }
+            }
+            else if (inject_codes[inject_pos] == METRO_INJECT_POWEROFF_CODE)
+            {
+                queue_broadcast(SYS_POWEROFF, 0);
                 inject_pos++;
                 inject_next_tick = current_tick + METRO_INJECT_WAIT_TICKS;
                 if (inject_pos == inject_count && autodump_settle_ticks >= 0)
