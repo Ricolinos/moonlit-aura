@@ -24,6 +24,12 @@ else
     MPEGCFLAGS = $(PLUGINFLAGS)
 endif
 
+# R2-F4/DD-11 (M-059): metro_palette.h is a pure #define header (no
+# metro_palette.c, nothing to link) -- safe to include directly from a
+# plugin. Zero new RGB literals in this plugin; every color still comes
+# from that single file (CLAUDE.md's palette rule).
+MPEGCFLAGS += -I$(APPSDIR)/metro
+
 $(MPEGBUILDDIR)/mpegplayer.rock: $(MPEG_OBJ) $(CODECDIR)/libmad-mpeg.a
 
 $(MPEGBUILDDIR)/%.o: $(MPEGSRCDIR)/%.c $(MPEGSRCDIR)/mpegplayer.make

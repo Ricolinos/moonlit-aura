@@ -1,7 +1,14 @@
 
 #include "plugin.h"
 
-#define SETTINGS_VERSION 5
+/* Metro (M-059): version 6 -- see mpeg_scale_mode_id/settings.scale_mode
+ * below, ported from Aura-Firmware's mpeg_settings.h (D-304, consulted
+ * read-only). SETTINGS_MIN_VERSION stays 1 -- an old .cfg without the
+ * new field just gets settings.scale_mode's compiled default from
+ * init_settings() below (same "missing key -> default" pattern the
+ * rest of this struct already relies on, not a new compatibility
+ * mechanism). */
+#define SETTINGS_VERSION 6
 #define SETTINGS_MIN_VERSION 1
 #define SETTINGS_FILENAME "mpegplayer.cfg"
 
@@ -24,9 +31,20 @@ enum mpeg_option_id
     MPEG_OPTION_DISPLAY_FPS,
     MPEG_OPTION_LIMIT_FPS,
     MPEG_OPTION_SKIP_FRAMES,
+    MPEG_OPTION_SCALE_MODE,
 #ifdef HAVE_BACKLIGHT_BRIGHTNESS
     MPEG_OPTION_BACKLIGHT_BRIGHTNESS,
 #endif
+};
+
+/* Metro (M-059): "ajustar" (con franjas, sin recortar) vs "cubrir"
+ * (llena la pantalla, recorta el sobrante) -- mismo concepto que el
+ * visor de fotos (R2-F3/DD-10), alternable con SELECT durante la
+ * reproduccion o desde este menu. */
+enum mpeg_scale_mode_id
+{
+    MPEG_SCALE_MODE_FIT = 0,
+    MPEG_SCALE_MODE_COVER,
 };
 
 enum mpeg_audio_option_id
@@ -61,7 +79,6 @@ enum mpeg_setting_id
 {
     MPEG_SETTING_DISPLAY_SETTINGS,
     MPEG_SETTING_AUDIO_SETTINGS,
-    MPEG_SETTING_ENABLE_START_MENU,
     MPEG_SETTING_PLAY_MODE,
     MPEG_SETTING_CLEAR_RESUMES,
 };
@@ -69,7 +86,6 @@ enum mpeg_setting_id
 enum mpeg_menu_id
 {
     MPEG_MENU_SETTINGS,
-    MPEG_MENU_RESUME,
     MPEG_MENU_QUIT,
 };
 
@@ -77,6 +93,7 @@ struct mpeg_settings {
     int showfps;               /* flag to display fps */
     int limitfps;              /* flag to limit fps */
     int skipframes;            /* flag to skip frames */
+    int scale_mode;            /* Metro (M-059): fit vs cover, enum mpeg_scale_mode_id */
     int resume_options;        /* type of resume action at start */
     int resume_count;          /* total # of resumes in config file */
     int resume_time;           /* resume time for current mpeg (in half minutes) */
@@ -108,3 +125,58 @@ void save_settings(void);
 #ifdef HAVE_BACKLIGHT_BRIGHTNESS
 void mpeg_backlight_update_brightness(int value);
 #endif
+
+/* R2-F4/DD-11 (M-059): Metro's own bilingual mini string table --
+ * strings live in mpeg_settings.c, IDs here so mpegplayer.c/
+ * stream_mgr.c can reference them by name for their own splash
+ * strings too. metro_str()/metro_language() are the two boundary
+ * points a plugin has into Metro's real personalization (which lives
+ * in apps/metro/, a separate build/link unit this plugin can't
+ * include) -- see metro_load_personalization() in mpegplayer.c. */
+enum metro_str_id
+{
+    MSTR_SETTINGS = 0,
+    MSTR_EXIT,
+    MSTR_VIDEO_PLAYER,
+    MSTR_DISPLAY_OPTIONS,
+    MSTR_AUDIO_OPTIONS,
+    MSTR_PLAY_MODE,
+    MSTR_CLEAR_RESUMES,
+    MSTR_SHOW_FPS,
+    MSTR_LIMIT_FPS,
+    MSTR_SKIP_FRAMES,
+    MSTR_SCALE_MODE,
+    MSTR_BACKLIGHT_BRIGHTNESS,
+    MSTR_DITHERING,
+    MSTR_TONE_CONTROLS,
+    MSTR_CHANNEL_MODES,
+    MSTR_CROSSFEED,
+    MSTR_EQUALIZER,
+    MSTR_NO,
+    MSTR_YES,
+    MSTR_OFF,
+    MSTR_USE_SOUND_SETTING,
+    MSTR_FIT,
+    MSTR_COVER,
+    MSTR_SINGLE,
+    MSTR_ALL,
+    MSTR_USE_COMMON_SETTING,
+    MSTR_GREYLIB_FAILED,
+    MSTR_STREAM_THREAD_FAILED,
+    MSTR_OUT_OF_MEMORY,
+    MSTR_PCM_FAILED,
+    MSTR_AUDIO_THREAD_FAILED,
+    MSTR_VIDEO_THREAD_FAILED,
+    MSTR_BUFFER_THREAD_FAILED,
+    MSTR_PARSER_FAILED,
+    MSTR_PLAYBACK_FAILED,
+    MSTR_NO_FILE,
+    MSTR_UNSUPPORTED_FORMAT,
+    MSTR_ERROR_OPENING_FILE,
+    MSTR_COUNT
+};
+
+const char *metro_str(int id);
+int metro_language(void);
+void metro_osd_colors(unsigned *bgcolor, unsigned *fgcolor, unsigned *secondary,
+                      unsigned *tertiary, unsigned *accent);

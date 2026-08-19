@@ -1222,3 +1222,112 @@ dueño), `R2-F3-music-keeps-playing.png` (hub sigue mostrando una pista
 en reproducción después de pasar por el visor), `R2-F3-fade-mid.png`
 (fundido de entrada a mitad de transición). Builds limpios (sim +
 target ipod6g), 271 checks host-side, 0 fallos.
+
+## M-059 — R2-F4/DD-11: `mpegplayer` (video) con estilo Metro -- port mecánico + restilado, sin menú de inicio
+
+**Metodología**: se generó primero el `diff -u` de los 7 archivos
+(Metro upstream, intacto, vs. Aura-Firmware) en un directorio de
+scratch, como pide DD-11 -- nunca se copió un archivo entero de Aura.
+El diff mismo separa con claridad "mecanismo" (se porta) de "diseño
+Aura" (se reemplaza por el de Metro): `video_out_rockbox.c` resultó
+ser 100% mecanismo puro, cero branding, portado casi verbatim; los dos
+archivos con UI propia (`mpegplayer.c`, `mpeg_settings.c`) sí
+necesitaron restilado real. Ver `MODIFICATIONS.md` R2-F4 para el
+listado archivo por archivo.
+
+**Lo que se portó tal cual (mecanismo)**: modo "cubrir" en
+`video_out_rockbox.c` (`vo_draw_frame_cover()`, recorte+escalado
+nearest-neighbor sobre la memoria sobrante del arena de libmpeg2,
+`stretch_image_plane()` ya existente reutilizada con un segundo
+llamador real) -- incluye el guard `scale_mode_locked` contra
+codificadores MPEG-2 de GOP corto que repiten la cabecera de secuencia
+en reproducción normal, un bug real que Aura-Firmware encontró y
+documentó primero (D-308, consultado en solo lectura). `SETTINGS_VERSION`
+5→6, `MPEG_TOGGLE_SCALE = BUTTON_SELECT`, y la eliminación completa del
+menú de inicio interactivo (`get_start_time()`/`show_start_menu()`/
+`draw_slider()`/`display_thumb_image()`/`show_loading()`/
+`increment_time()`/`resume_options()`, ~400 líneas de `#define
+MPEG_START_TIME_*` por target) -- `mpeg_start_menu()` ahora resuelve
+directo a `MPEG_START_SEEK`, ignorando `settings.resume_options` a
+propósito (correcto incluso si un `.rockbox/mpegplayer.cfg` viejo
+todavía tiene `MPEG_RESUME_MENU_ALWAYS` guardado).
+
+**Lo que se restiló para Metro, no copiado de Aura**:
+- Widget de menú propio (`metro_menu_draw()`/`metro_menu_pick()`,
+  reemplaza `rb->do_menu()`/`rb->set_option()`/`rb->set_int_ex()`)
+  -- geometría de `metro_draw_rows()` (pitch 28px, x=12, encabezado
+  caption y=4, seleccionado en fg, resto en secundario), **sin** la
+  píldora redondeada de selección que Aura dibuja (su propio lenguaje
+  Apple2026) -- rectángulos planos, como pide DD-11.
+- Barra de progreso del OSD: dos colores planos (pista terciaria +
+  relleno acento), sin borde -- reemplaza tanto el rectángulo con
+  borde de Rockbox stock como la píldora de Aura.
+- `metro_load_personalization()` (`mpegplayer.c`, en `osd_init()`, una
+  sola vez -- no en cada redibujado del menú, ver
+  `metro_osd_colors()`/`metro_language()` como accesores baratos hacia
+  ese estado ya cargado) lee el esquema de **Metro** (`theme:0/1`,
+  `accent:0..9`, `language:0/1`) de `/.rockbox/aura/aura.cfg`, no el de
+  Aura (`theme`/`theme_id`/`accent_rgb24` + un `theme.cfg` por estilo
+  custom) -- Metro no tiene temas instalables (M-012), así que solo
+  elige entre los 10 acentos compilados de `metro_palette.h` y los
+  tonos base oscuro/claro, exactamente lo mismo que `metro_theme.c`
+  usa para el resto de la app. Tabla de 10 colores de acento duplicada
+  localmente (`metro_accent_colors[]`, mismo orden que
+  `metro_theme.c`'s `accent_colors[]`) porque un plugin no puede
+  enlazar contra `apps/metro/metro_theme.c`, solo incluir el header
+  puro del que ambos leen.
+- Tabla bilingüe ES/EN propia (`metro_str()`/`enum metro_str_id`,
+  `mpeg_settings.h`) para los ~35 textos que este plugin muestra
+  (menús + 12 splashes de error) -- no incluye `metro_lang.c` (build
+  separado), elige idioma vía el mismo `aura.cfg` ya leído.
+- Ícono de estado (play/pausa/stop): se mantuvo el bitmap compilado de
+  Rockbox stock (`osd.icons`), solo recoloreado al acento del usuario
+  -- DD-11 pedía un ícono 100% geométrico (triángulo/dos barras, como
+  F10) pero reemplazar el bitmap por dibujo vectorial es trabajo de
+  diseño adicional fuera del alcance razonable de esta fase; el
+  recoloreo (mecanismo que Aura ya portó) es un compromiso fiel de
+  bajo riesgo. Ver `docs/DESVIACIONES.md` R2-3.
+
+**Bug real encontrado y corregido, no en el port mecánico de Aura**:
+al toggle a "cubrir" con un fixture 640×300, `read_jpeg_file()` no
+aplica aquí (ese es el visor de fotos) -- el equivalente de video es
+puramente aritmético (`stretch_image_plane()`, sin decodificador de
+por medio), así que este archivo no repite el bug de memoria de
+`metro_screen_photo_viewer.c` (M-058). No se encontraron bugs nuevos
+en el port de video -- el mecanismo de Aura para "cubrir" en video
+(a diferencia del de fotos) no depende de un decodificador JPEG con
+sus propios límites de DCT, por eso no hereda ese problema.
+
+**Verificado en vivo** (simulador): `docs/screenshots/R2-F4-video-play.png`
+(video entra directo, sin menú de inicio -- confirmado con los 3
+fixtures de video existentes, todos con entradas de reanudación en un
+`mpegplayer.cfg` **versión 5** preexistente en el simdisk que sigue
+cargando sin error en cada corrida, D.8 verificado de forma natural,
+sin necesidad de fabricar el escenario), `R2-F4-video-settings.png`
+(menú "Reproductor de video" → Ajustes/Salir, estilo Metro),
+`R2-F4-display-options.png` (submenú completo: Mostrar FPS/Limitar
+FPS/Omitir fotogramas/Modo de ajuste/Brillo de la luz de fondo),
+`R2-F4-scale-mode.png` (Ajustar/Cubrir), `R2-F4-light-red-accent.png`
+(mismo menú con `aura.cfg` puesto a tema claro + acento rojo a mano --
+confirma que el plugin lee el esquema en vivo, no algo hardcodeado).
+Colores verificados por inspección directa de valores en tiempo de
+ejecución (no solo visual): `metro_accent_colors[]`/`osd.accent`
+calculan exactamente el RGB565 esperado para cada acento (verificado
+con `DEBUGF` temporal, revertido antes del commit).
+
+**No verificado visualmente**: el contenido del panel OSD (barra de
+progreso + tiempos) no se pudo distinguir con claridad en las capturas
+headless -- el área donde debería estar aparece negra en todas las
+capturas probadas (40, 80, 150 ticks), independiente del tema/acento
+usado, lo que descarta que sea el propio panel OSD mal coloreado
+(confirmado por los valores de color correctos vía `DEBUGF`) y apunta
+a un artefacto de decodificación MPEG-2 en progreso (franjas aún no
+decodificadas en negro) o a una limitación de temporización similar a
+las ya documentadas en este proyecto (`docs/DESVIACIONES.md` F2-2/F2-3,
+D-307 de Aura-Firmware para el propio frame YUV). El código del OSD en
+sí (`draw_scrollbar_draw()`, `osd_refresh_status()`) es una adaptación
+mínima y fiel del mecanismo ya probado de Aura, y los valores de color
+que usa están verificados correctos por inspección directa -- el
+riesgo real aquí es bajo, pero la confirmación visual queda pendiente
+para cuando el dueño lo revise en el simulador interactivo o en
+hardware real.

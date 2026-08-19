@@ -1078,7 +1078,7 @@ int stream_init(void)
     if (!grey_init(mem, memsize, GREY_BUFFERED|GREY_ON_COP,
                    LCD_WIDTH, LCD_HEIGHT, &greysize))
     {
-        rb->splash(HZ, "greylib init failed!");
+        rb->splash(HZ, metro_str(MSTR_GREYLIB_FAILED));
         return STREAM_ERROR;
     }
 
@@ -1097,7 +1097,7 @@ int stream_init(void)
 
     if (stream_mgr.thread == 0)
     {
-        rb->splash(HZ, "Could not create stream manager thread!");
+        rb->splash(HZ, metro_str(MSTR_STREAM_THREAD_FAILED));
         return STREAM_ERROR;
     }
 
@@ -1107,29 +1107,29 @@ int stream_init(void)
     /* Initialise our malloc buffer */
     if (!mpeg_alloc_init(mem, memsize))
     {
-        rb->splash(HZ, "Out of memory in stream_init");
+        rb->splash(HZ, metro_str(MSTR_OUT_OF_MEMORY));
     }
     /* These inits use the allocator */
     else if (!pcm_output_init())
     {
-        rb->splash(HZ, "Could not initialize PCM!");
+        rb->splash(HZ, metro_str(MSTR_PCM_FAILED));
     }
     else if (!audio_thread_init())
     {
-        rb->splash(HZ, "Cannot create audio thread!");
+        rb->splash(HZ, metro_str(MSTR_AUDIO_THREAD_FAILED));
     }
     else if (!video_thread_init())
     {
-        rb->splash(HZ, "Cannot create video thread!");
+        rb->splash(HZ, metro_str(MSTR_VIDEO_THREAD_FAILED));
     }
     /* Disk buffer takes max allotment of what's left so it must be last */
     else if (!disk_buf_init())
     {
-        rb->splash(HZ, "Cannot create buffering thread!");
+        rb->splash(HZ, metro_str(MSTR_BUFFER_THREAD_FAILED));
     }
     else if (!parser_init())
     {
-        rb->splash(HZ, "Parser init failed!");
+        rb->splash(HZ, metro_str(MSTR_PARSER_FAILED));
     }
     else
     {

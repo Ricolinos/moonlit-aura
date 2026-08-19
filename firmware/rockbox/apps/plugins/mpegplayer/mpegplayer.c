@@ -105,6 +105,7 @@
 #include "video_out.h"
 #include "stream_thread.h"
 #include "stream_mgr.h"
+#include "metro_palette.h"
 
 
 /* button definitions */
@@ -126,6 +127,10 @@
 #define MPEG_VOLUP      BUTTON_SCROLL_FWD
 #define MPEG_RW         BUTTON_LEFT
 #define MPEG_FF         BUTTON_RIGHT
+/* R2-F4/DD-11 (M-059): SELECT no tenia ninguna funcion asignada durante
+ * la reproduccion en este keypad -- se usa para alternar ajustar/cubrir,
+ * el mismo gesto que el visor de fotos (R2-F3). */
+#define MPEG_TOGGLE_SCALE BUTTON_SELECT
 
 #elif CONFIG_KEYPAD == IAUDIO_X5M5_PAD
 #define MPEG_MENU       (BUTTON_REC | BUTTON_REL)
@@ -618,6 +623,12 @@ struct osd
     unsigned fgcolor;
     unsigned bgcolor;
     unsigned prog_fillcolor;
+    /* R2-F4/DD-11 (M-059): prog_trackcolor is the bar's unplayed track
+     * (tertiary); prog_fillcolor is repurposed to the user's accent
+     * (was a hardcoded black/white) for the played portion; accent is
+     * kept separately too, for the status icon (see osd_refresh_status()). */
+    unsigned prog_trackcolor;
+    unsigned accent;
     struct vo_rect update_rect;
     struct vo_rect prog_rect;
     struct vo_rect time_rect;
@@ -729,35 +740,35 @@ static void draw_hline(int x1, int x2, int y)
 #endif
 }
 
-static void draw_vline(int x, int y1, int y2)
-{
-#ifdef LCD_LANDSCAPE
-    mylcd_vline(x + osd.x, y1 + osd.y, y2 + osd.y);
-#else
-    y1 = LCD_WIDTH - (y1 + osd.y) - 1;
-    y2 = LCD_WIDTH - (y2 + osd.y) - 1;
-    mylcd_hline(y1, y2, x + osd.x);
-#endif
-}
+/* R2-F4/DD-11 (M-059): draw_vline() (the progress bar border's left/
+ * right edges) is gone -- the flat bar below has no border, only
+ * draw_hline() (still used elsewhere, osd_refresh_background()) survives. */
 
+/* R2-F4/DD-11 (M-059): flat two-color bar -- track (osd.prog_trackcolor)
+ * then accent fill over the played portion, full height, no border, no
+ * rounding. Exactly metro_draw_progress()'s own pattern
+ * (apps/metro/metro_draw.c, a plugin can't include it directly, so this
+ * is a from-scratch equivalent, not a call to it) -- Metro's flat
+ * design replaces the bordered/inset bar Rockbox stock draws here
+ * (Aura-Firmware's own restyle instead used a rounded "pill", its own
+ * Apple2026 language -- consulted read-only as mechanism reference,
+ * not copied for the shape). */
 static void draw_scrollbar_draw(int x, int y, int width, int height,
                                 uint32_t min, uint32_t max, uint32_t val)
 {
     unsigned oldfg = mylcd_get_foreground();
 
-    draw_hline(x + 1, x + width - 2, y);
-    draw_hline(x + 1, x + width - 2, y + height - 1);
-    draw_vline(x, y + 1, y + height - 2);
-    draw_vline(x + width - 1, y + 1, y + height - 2);
+    val = muldiv_uint32((uint32_t)width, val, max - min);
+    val = MIN(val, (uint32_t)width);
 
-    val = muldiv_uint32(width - 2, val, max - min);
-    val = MIN(val, (uint32_t)(width - 2));
+    mylcd_set_foreground(osd.prog_trackcolor);
+    draw_fillrect(x, y, width, height);
 
-    draw_fillrect(x + 1, y + 1, val, height - 2);
-
-    mylcd_set_foreground(osd.prog_fillcolor);
-
-    draw_fillrect(x + 1 + val, y + 1, width - 2 - val, height - 2);
+    if (val > 0)
+    {
+        mylcd_set_foreground(osd.prog_fillcolor);
+        draw_fillrect(x, y, val, height);
+    }
 
     mylcd_set_foreground(oldfg);
 }
@@ -1306,6 +1317,106 @@ static void osd_text_init(void)
     draw_setfont(FONT_SYSFIXED);
 }
 
+/* R2-F4/DD-11 (M-059): reads Metro's own personalization once, at
+ * osd_init() time -- ported from Aura-Firmware's aura_load_personalization()
+ * (consulted read-only as mechanism reference), but reading METRO's
+ * schema (theme:0/1, accent:0..9, language:0/1 -- apps/metro/metro_settings.c)
+ * instead of Aura's (theme/theme_id/accent_rgb24, plus a whole
+ * per-style theme.cfg file for custom themes). Metro has no installable
+ * themes (M-012) -- colors only ever come from the 10 compiled accents
+ * in metro_palette.h plus the compiled dark/light base tones, same
+ * source metro_theme.c itself draws from; a plugin can't include or
+ * link against that module, only the pure-header palette it reads. */
+#define METRO_CFG_PATH "/.rockbox/aura/aura.cfg"
+
+static unsigned s_metro_secondary;
+static unsigned s_metro_tertiary;
+static int s_metro_language; /* 0=ES, 1=EN -- METRO_LANG_ES/EN */
+
+/* Same order as apps/metro/metro_theme.c's accent_colors[] -- index
+ * must match enum metro_accent there (0=blue .. 9=teal). */
+static const unsigned metro_accent_colors[10] = {
+    METRO_ACCENT_COLOR_BLUE,
+    METRO_ACCENT_COLOR_BROWN,
+    METRO_ACCENT_COLOR_GREEN,
+    METRO_ACCENT_COLOR_LIME,
+    METRO_ACCENT_COLOR_MAGENTA,
+    METRO_ACCENT_COLOR_MANGO,
+    METRO_ACCENT_COLOR_PINK,
+    METRO_ACCENT_COLOR_PURPLE,
+    METRO_ACCENT_COLOR_RED,
+    METRO_ACCENT_COLOR_TEAL,
+};
+
+/* Always leaves every osd.* color field valid -- falls back to the
+ * compiled dark/magenta defaults on any missing file, missing key, or
+ * malformed value (same "fallback de seguridad" criterion metro_theme.c
+ * itself follows). */
+static void metro_load_personalization(void)
+{
+    int fd;
+    char line[64];
+    char *name, *value;
+    int theme_mode = 0; /* METRO_THEME_DARK, metro_theme.h's own default */
+    int accent = 4;     /* METRO_ACCENT_MAGENTA, metro_theme.h's own default */
+
+    osd.bgcolor        = METRO_DARK_BG;
+    osd.fgcolor        = METRO_DARK_FG;
+    s_metro_secondary  = METRO_DARK_SECONDARY;
+    s_metro_tertiary   = METRO_DARK_TERTIARY;
+    osd.accent         = metro_accent_colors[4];
+    s_metro_language   = 0;
+
+    fd = rb->open(METRO_CFG_PATH, O_RDONLY);
+    if (fd < 0)
+        return;
+
+    while (rb->read_line(fd, line, sizeof(line)) > 0)
+    {
+        if (!rb->settings_parseline(line, &name, &value))
+            continue;
+
+        if (!rb->strcmp(name, "theme"))
+            theme_mode = rb->atoi(value);
+        else if (!rb->strcmp(name, "accent"))
+            accent = rb->atoi(value);
+        else if (!rb->strcmp(name, "language"))
+            s_metro_language = rb->atoi(value);
+    }
+
+    rb->close(fd);
+
+    if (theme_mode == 1) /* METRO_THEME_LIGHT */
+    {
+        osd.bgcolor       = METRO_LIGHT_BG;
+        osd.fgcolor       = METRO_LIGHT_FG;
+        s_metro_secondary = METRO_LIGHT_SECONDARY;
+        s_metro_tertiary  = METRO_LIGHT_TERTIARY;
+    }
+
+    if (accent >= 0 && accent < 10)
+        osd.accent = metro_accent_colors[accent];
+}
+
+/* Cheap accessors into the state metro_load_personalization() already
+ * computed once -- mpeg_settings.c's menu widget redraws on every
+ * button press and calls these, not the loader itself (would mean
+ * re-opening and re-parsing aura.cfg on every redraw for no reason). */
+void metro_osd_colors(unsigned *bgcolor, unsigned *fgcolor, unsigned *secondary,
+                      unsigned *tertiary, unsigned *accent)
+{
+    *bgcolor = osd.bgcolor;
+    *fgcolor = osd.fgcolor;
+    *secondary = s_metro_secondary;
+    *tertiary = s_metro_tertiary;
+    *accent = osd.accent;
+}
+
+int metro_language(void)
+{
+    return s_metro_language;
+}
+
 static void osd_init(void)
 {
     osd.flags = 0;
@@ -1313,13 +1424,18 @@ static void osd_init(void)
     osd.print_delay = 75*HZ/100;
     osd.resume_delay = HZ/2;
 #ifdef HAVE_LCD_COLOR
-    osd.bgcolor = LCD_RGBPACK(0x73, 0x75, 0xbd);
-    osd.fgcolor = LCD_WHITE;
-    osd.prog_fillcolor = LCD_BLACK;
+    metro_load_personalization();
+    osd.prog_trackcolor = s_metro_tertiary;
+    osd.prog_fillcolor = osd.accent;
 #else
     osd.bgcolor = GREY_LIGHTGRAY;
     osd.fgcolor = GREY_BLACK;
     osd.prog_fillcolor = GREY_WHITE;
+    osd.prog_trackcolor = GREY_DARKGRAY;
+    osd.accent = GREY_WHITE;
+    s_metro_secondary = GREY_BLACK;
+    s_metro_tertiary = GREY_DARKGRAY;
+    s_metro_language = 0;
 #endif
     osd.curr_time = 0;
     osd.status = OSD_STATUS_STOPPED;
@@ -1478,8 +1594,19 @@ static void osd_refresh_status(void)
         if (--i < 0)
             break;
 
-        mylcd_set_foreground(oldfg);
+        /* R2-F4/DD-11 (M-059): the main stroke (not the shadow) uses
+         * the user's accent instead of the default fgcolor -- the one
+         * place in the OSD where the accent has a natural spot, since
+         * the progress bar deliberately doesn't use it for the track
+         * (draw_scrollbar_draw() above already reserves accent for the
+         * played portion specifically). */
+        mylcd_set_foreground(osd.accent);
     }
+
+    /* Restores the color this function was entered with -- same rule
+     * draw_scrollbar_draw() follows: every drawing function leaves the
+     * color as it found it, osd_refresh() doesn't do that for them. */
+    mylcd_set_foreground(oldfg);
 
     vo_rect_union(&osd.update_rect, &osd.update_rect, &osd.stat_rect);
 #else
@@ -2164,7 +2291,7 @@ static int button_loop(void)
 
     /* Start playback at the specified starting time */
     if (osd_play(settings.resume_time) < STREAM_OK) {
-        rb->splash(HZ*2, "Playback failed");
+        rb->splash(HZ*2, metro_str(MSTR_PLAYBACK_FAILED));
         return VIDEO_STOP;
     }
 
@@ -2286,6 +2413,18 @@ static int button_loop(void)
             /* Make sure it refreshes */
             osd_refresh(OSD_REFRESH_DEFAULT);
             break;
+#endif
+
+#ifdef MPEG_TOGGLE_SCALE
+        case MPEG_TOGGLE_SCALE:
+        {
+            /* R2-F4/DD-11 (M-059): same gesture as the photo viewer
+             * (R2-F3) -- toggles fit/cover for this playback session
+             * only, without persisting the change. */
+            vo_toggle_scale_mode();
+            stream_draw_frame(true);
+            break;
+            } /* MPEG_TOGGLE_SCALE: */
 #endif
 
         case MPEG_STOP:
@@ -2431,7 +2570,7 @@ enum plugin_status plugin_start(const void* parameter)
 
     if (parameter == NULL) {
         /* No file = GTFO */
-        rb->splash(HZ*2, "No File");
+        rb->splash(HZ*2, metro_str(MSTR_NO_FILE));
         return PLUGIN_ERROR;
     }
 
@@ -2491,10 +2630,10 @@ enum plugin_status plugin_start(const void* parameter)
                 switch (result)
                 {
                 case STREAM_UNSUPPORTED:
-                    errstring = "Unsupported format";
+                    errstring = metro_str(MSTR_UNSUPPORTED_FORMAT);
                     break;
                 default:
-                    errstring = "Error opening file: %d";
+                    errstring = metro_str(MSTR_ERROR_OPENING_FILE);
                 }
 
                 tick = *rb->current_tick + HZ*2;

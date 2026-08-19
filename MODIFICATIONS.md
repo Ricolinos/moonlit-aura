@@ -121,3 +121,62 @@ vivo en `DECISIONS.md`.
   mensajes vive en `apps/metro/metro_splash_lang.c`, código nuevo de
   Metro. Un mensaje sin regla conocida se muestra tal cual, nunca se
   reemplaza por un genérico que esconda información de diagnóstico.
+
+### R2-F4 (2026-08-19, M-059)
+
+Puerto + restilado del plugin `mpegplayer` (video) al estilo Metro,
+siguiendo el mismo mecanismo que Aura-Firmware ya probó primero
+(D-304..D-309 de ese repositorio, consultado en solo lectura como guía
+de mecanismo — nunca copiado archivo por archivo; el diseño propio de
+Aura, como su barra "píldora" redondeada, no se portó, ver
+`docs/DESVIACIONES.md` R2-3). Los 7 archivos, cada uno con su propio
+comentario inline `Metro (M-059)` en el punto exacto del cambio:
+
+- `apps/plugins/mpegplayer/mpeg_settings.h`: `SETTINGS_VERSION` 5→6;
+  `enum mpeg_scale_mode_id` (ajustar/cubrir) y el campo
+  `settings.scale_mode` nuevos; `MPEG_SETTING_ENABLE_START_MENU`/
+  `MPEG_MENU_RESUME` eliminados (el menú de inicio interactivo ya no
+  existe, ver `mpeg_settings.c`).
+- `apps/plugins/mpegplayer/mpeg_settings.c`: reescritura completa del
+  menú de ajustes — el bloque de `#define MPEG_START_TIME_*` por
+  target (~400 líneas) y `get_start_time()`/`show_start_menu()`/
+  `draw_slider()`/`display_thumb_image()`/`show_loading()`/
+  `increment_time()`/`resume_options()` se eliminan (código muerto una
+  vez removido el menú de inicio); `rb->do_menu()`/`rb->set_option()`/
+  `rb->set_int_ex()` (widgets 100% nativos de Rockbox) reemplazados por
+  `metro_menu_draw()`/`metro_menu_pick()`/`metro_menu_adjust_int()`
+  (widget propio, geometría de `metro_draw_rows()`: pitch 28px, x=12,
+  seleccionado en fg, resto en secundario, sin píldora); tabla
+  bilingüe ES/EN propia del plugin (`metro_str()`, no puede incluir
+  `metro_lang.c`); `mpeg_start_menu()` ahora resuelve directo
+  (`MPEG_START_SEEK`), sin mostrar nunca el menú "Play from
+  beginning/Resume/Set time/Settings/Quit".
+- `apps/plugins/mpegplayer/mpegplayer.c`: `MPEG_TOGGLE_SCALE` (SELECT)
+  nuevo en el keypad del iPod; `struct osd` gana
+  `prog_trackcolor`/`accent`; `metro_load_personalization()` (nuevo)
+  lee `/.rockbox/aura/aura.cfg` una vez en `osd_init()` (esquema de
+  Metro: `theme`/`accent`/`language`, colores solo vía
+  `metro_palette.h`); `draw_scrollbar_draw()` reescrita a barra plana
+  de dos colores (pista terciaria + relleno acento), sin borde;
+  `osd_refresh_status()` recolorea el ícono de estado al acento; 4
+  strings de splash traducidos vía `metro_str()`.
+- `apps/plugins/mpegplayer/stream_mgr.c`: 8 strings de splash de error
+  (fallos de inicialización de hilos/memoria) traducidos vía
+  `metro_str()` en vez de texto en inglés fijo.
+- `apps/plugins/mpegplayer/video_out.h`: 2 declaraciones nuevas,
+  `vo_update_scale_mode()`/`vo_toggle_scale_mode()`.
+- `apps/plugins/mpegplayer/video_out_rockbox.c`: modo "cubrir" —
+  `vo_draw_frame_cover()` (recorta+escala por muestreo nearest-neighbor
+  sobre la memoria sobrante del arena de libmpeg2, reutilizando
+  `stretch_image_plane()` ya existente) y `vo_recalc_rect()`; guarda
+  `scale_mode_locked` en `vo_setup()` contra codificadores MPEG-2 de
+  GOP corto que repiten la cabecera de secuencia durante la
+  reproducción normal (bug real encontrado y documentado primero por
+  Aura-Firmware, D-308).
+- `apps/plugins/mpegplayer/mpegplayer.make`: agrega
+  `-I$(APPSDIR)/metro` a `MPEGCFLAGS` para incluir `metro_palette.h`
+  directo (header puro, sin `.c`, nada que enlazar).
+
+Ver `DECISIONS.md` M-059 para el detalle completo de cada decisión de
+diseño y el bug de memoria encontrado y corregido durante la
+verificación (no presente en el port mecánico inicial de Aura).
