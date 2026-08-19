@@ -211,3 +211,16 @@ llegaron a Metro-Aura por copia vive en `MODIFICATIONS.md`, no en el
 código. Única excepción: `uisimulator/common/sim_tasks.c` sí se
 modificó (variables de entorno `AURA_SIM_*` → `METRO_SIM_*`, son
 identificadores de proyecto, no aviso legal).
+
+### M-023 — F1: la higiene M-019 corre dentro de `init()` (apps/main.c), no al principio de `metro_main()`
+
+Ver `docs/DESVIACIONES.md` F1-1. El backdrop Cabbie v2 stock se pinta
+sobre el LCD en `settings_apply_skins()`, llamado dentro de `init()`
+**antes** de que `metro_main()` corra — esperar a `metro_main()` para
+desactivar `global_settings.backdrop_file` es demasiado tarde, el
+backdrop ya quedó activo y `lcd_clear_display()` lo redibuja en cada
+limpieza de pantalla (comportamiento nativo de
+`lcd_clear_viewport()`, no un bug). `metro_apply_hygiene()` (declarada
+en `metro_main.h`, ya no `static`) se llama ahora desde ambos cuerpos
+de `init()` en `apps/main.c`, justo después de `settings_load()` —
+mismo punto exacto que usa Aura-Firmware.

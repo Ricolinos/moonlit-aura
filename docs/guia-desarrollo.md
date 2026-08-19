@@ -13,6 +13,26 @@ brew install sdl2 gcc
 disponible (no el `clang` que Xcode expone como `gcc`) — fix heredado
 de Aura-Firmware, ver `DECISIONS.md` M-021.
 
+## Assets generados (logo de arranque, fuentes)
+
+Requiere Pillow en un venv propio (no se comparte con Aura-Firmware —
+regla de contención de la carpeta padre):
+
+```bash
+python3 -m venv firmware/tools/.venv
+firmware/tools/.venv/bin/pip install pillow
+```
+
+```bash
+firmware/tools/.venv/bin/python3 firmware/tools/gen_logo.py
+```
+
+Regenera `apps/bitmaps/native/rockboxlogo.320x98x16.bmp` (wordmark
+"metro" en Selawik Light) desde
+`firmware/assets/fonts-src/Selawik-Light.ttf`. Correr después de
+cualquier cambio a ese TTF o al propio `gen_logo.py`, antes de
+recompilar.
+
 ## Firmware — simulador SDL (día a día)
 
 El simulador es el banco de pruebas principal — no hace falta el iPod

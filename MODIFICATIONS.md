@@ -79,9 +79,24 @@ Rockbox — ver `DECISIONS.md` M-006.
 ## Otros archivos de Rockbox modificados
 
 Esta sección se actualiza en cada fase de `PLAN_MAESTRO.md` §5 que
-toque un archivo de Rockbox fuera de `apps/metro/` (F1: `apps/main.c`,
-`apps/SOURCES`, bitmaps de logo; F9: `apps/gui/splash.c`,
-`apps/gui/usb_screen.c`, etc.) — ver el registro vivo en
-`DECISIONS.md`.
+toque un archivo de Rockbox fuera de `apps/metro/` — ver el registro
+vivo en `DECISIONS.md`.
 
-*(Sin entradas todavía — se completa en F1.)*
+### F1 (2026-08-20)
+
+- `apps/main.c`: `root_menu()` → `metro_main()` como único punto de
+  entrada de la UI (M-006, no retorna). `metro_apply_hygiene()`
+  (M-019) se llama en los dos cuerpos de `init()` (simulador y target
+  real), justo después de `settings_load()` y antes de
+  `settings_apply(true)`/`settings_apply_skins()` — es el único punto
+  donde puede correr sin que el backdrop Cabbie v2 stock ya se haya
+  pintado sobre el LCD (ver `docs/DESVIACIONES.md` F1-1).
+- `apps/SOURCES`: bloque agregado al final listando
+  `metro/metro_main.c` y `metro/metro_screen_splash.c`.
+- `apps/bitmaps/native/rockboxlogo.320x98x16.bmp`: reemplazado por el
+  wordmark "metro" (Selawik Light, blanco sobre negro), mismo nombre
+  de archivo y dimensiones exactas (320×98) que el original — la regla
+  de `apps/bitmaps/bitmaps.make` que lo compila a `bm_rockboxlogo` vía
+  `bmp2rb` no necesitó ningún cambio. Generado por
+  `firmware/tools/gen_logo.py` desde
+  `firmware/assets/fonts-src/Selawik-Light.ttf` (M-020).

@@ -36,6 +36,7 @@
 #include "filetypes.h"
 #include "panic.h"
 #include "menu.h"
+#include "metro/metro_main.h" /* Metro (M-006) */
 #include "usb.h"
 #include "wifi.h"
 #include "powermgmt.h"
@@ -243,8 +244,12 @@ int main(void)
     validate_start_directory_init();
     /* no calls INIT_ATTR functions after this point anymore!
      * see definition of INIT_ATTR in config.h */
-    CHART(">root_menu");
-    root_menu();
+    /* Metro (M-006): Metro replaces the stock Rockbox UI entirely --
+     * root_menu() is never called. root_menu.c stays compiled (other
+     * core settings still reference it) but is unreachable. See
+     * MODIFICATIONS.md, DECISIONS.md M-006. */
+    CHART(">metro_main");
+    metro_main();
 }
 
 /* The disk isn't ready at boot, rblogo is stored in bin and erased after boot */
@@ -447,6 +452,13 @@ static void init(void)
     dsp_init();
     settings_reset();
     settings_load();
+    /* Metro (M-019): must run here, before settings_apply(true) and
+     * settings_apply_skins() -- the latter is what actually paints
+     * the stock backdrop onto the LCD by reading
+     * global_settings.backdrop_file, so overriding it any later (e.g.
+     * inside metro_main(), which runs after init() returns) is too
+     * late. See MODIFICATIONS.md, DECISIONS.md M-019. */
+    metro_apply_hygiene();
     settings_apply(true);
     init_battery_tables();
 #ifdef HAVE_DIRCACHE
@@ -711,6 +723,16 @@ static void init(void)
     CHART(">settings_load");
     settings_load();
     CHART("<settings_load");
+
+    /* Metro (M-019): must run here, before settings_apply(true) and
+     * settings_apply_skins() -- the latter is what actually paints
+     * the stock backdrop onto the LCD by reading
+     * global_settings.backdrop_file, so overriding it any later (e.g.
+     * inside metro_main(), which runs after init() returns) is too
+     * late. Also intentionally before the clear_settings_on_hold
+     * check below -- forcing that setting to false here is exactly
+     * what M-019 wants. See MODIFICATIONS.md, DECISIONS.md M-019. */
+    metro_apply_hygiene();
 
 #if defined(BUTTON_REC) || \
     (CONFIG_KEYPAD == GIGABEAT_PAD) || \

@@ -305,3 +305,9 @@ keymaps/keymap-ctru.c
 #elif CONFIG_KEYPAD == HIBY_R3PROII_PAD
 keymaps/keymap-hibyr3proii.c
 #endif
+
+/* Metro UI: replaces the stock Rockbox UI (see apps/main.c and
+ * DECISIONS.md M-006). root_menu.c stays compiled because other
+ * settings still reference it, but it is never invoked. */
+metro/metro_main.c
+metro/metro_screen_splash.c
