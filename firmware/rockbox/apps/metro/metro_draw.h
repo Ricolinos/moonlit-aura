@@ -83,4 +83,16 @@ void metro_draw_pivots(const struct metro_page *page, int active_pivot,
 void metro_draw_rows(const struct metro_pivot *pivot, int first, int sel,
                       int x_offset);
 
+/* Flat bar: metro_color_tertiary() background, metro_color_accent()
+ * fill for the first `pct` percent (0..100, clamped). Now Playing's
+ * progress bar (PLAN_MAESTRO.md S1.4: 320x4 at y=214), reusable
+ * anywhere else a determinate progress needs showing. */
+void metro_draw_progress(int x, int y, int width, int height, int pct);
+
+/* metro_color_accent() square with a single big uppercase initial
+ * (first byte of `label`, ASCII only) centered in MFONT_DISPLAY/bg --
+ * the no-album-art fallback (PLAN_MAESTRO.md S1.4 "tile acento con
+ * inicial del album"). */
+void metro_draw_tile(int x, int y, int size, const char *label);
+
 #endif /* METRO_DRAW_H */

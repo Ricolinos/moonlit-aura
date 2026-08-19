@@ -33,6 +33,7 @@
 #include "metro_theme.h"
 #include "metro_screen_list.h"
 #include "metro_screen_hub.h"
+#include "metro_screen_nowplaying.h"
 #include "metro_input.h"
 #include "metro_keymap.h"
 
@@ -60,12 +61,16 @@ static void redraw_current(void)
 {
     if (metro_nav_is_root(metro_screen_nav()))
         metro_screen_hub_show();
+    else if (metro_screen_nowplaying_is_current())
+        metro_screen_nowplaying_show();
     else
         metro_screen_list_show();
 }
 
 void metro_main(void)
 {
+    long last_player_tick = 0;
+
     /* metro_apply_hygiene() already ran inside init() (apps/main.c) --
      * see metro_main.h for why it can't run here, after init() returns. */
     metro_screen_splash_show();
@@ -83,9 +88,11 @@ void metro_main(void)
     while (1)
     {
         bool at_root = metro_nav_is_root(metro_screen_nav());
+        bool at_player = !at_root && metro_screen_nowplaying_is_current();
+        enum metro_context ctx = at_root ? MCTX_HUB
+                                          : (at_player ? MCTX_PLAYER : MCTX_LIST);
         int steps = 1;
-        int action = metro_input_next(at_root ? MCTX_HUB : MCTX_LIST,
-                                       HZ / 10, &steps);
+        int action = metro_input_next(ctx, HZ / 10, &steps);
 
         if (action & SYS_EVENT)
         {
@@ -100,10 +107,24 @@ void metro_main(void)
         }
 
         if (action == MACT_NONE)
+        {
+            /* Now Playing has no input of its own most of the time
+             * (elapsed time, the progress bar, and the volume overlay's
+             * 1.5s countdown all need to update on their own) -- redraw
+             * it about once a second even without a button, instead of
+             * only reacting to input like every other screen. */
+            if (at_player && current_tick - last_player_tick >= HZ)
+            {
+                last_player_tick = current_tick;
+                redraw_current();
+            }
             continue;
+        }
 
         if (at_root)
             metro_screen_hub_handle(action, steps);
+        else if (at_player)
+            metro_screen_nowplaying_handle(action, steps);
         else
             metro_screen_list_handle(action, steps);
 

@@ -58,6 +58,29 @@ static const struct button_mapping dialog_mapping[] = {
     LAST_ITEM_IN_LIST
 };
 
+/* PLAYER (Now Playing, F5): wheel is volume, not selection -- there is
+ * nothing to scroll on this screen. LEFT/RIGHT short = track skip,
+ * held = seek. SELECT short pushes the options page; held toggles
+ * shuffle in place, no page change. PLAY is play/pause -- MENU|REPEAT
+ * (home) falls through to hub_mapping's absence here on purpose, same
+ * "not mapped -> ACTION_NONE" rule as HUB's LEFT/RIGHT (S2.3 doesn't
+ * give Now Playing a "jump to hub" gesture of its own). */
+static const struct button_mapping player_mapping[] = {
+    { MACT_VOL_DOWN,    BUTTON_SCROLL_BACK,                BUTTON_NONE },
+    { MACT_VOL_DOWN,    BUTTON_SCROLL_BACK | BUTTON_REPEAT, BUTTON_NONE },
+    { MACT_VOL_UP,      BUTTON_SCROLL_FWD,                  BUTTON_NONE },
+    { MACT_VOL_UP,      BUTTON_SCROLL_FWD | BUTTON_REPEAT,  BUTTON_NONE },
+    { MACT_TRACK_PREV,  BUTTON_LEFT  | BUTTON_REL,          BUTTON_LEFT  },
+    { MACT_TRACK_NEXT,  BUTTON_RIGHT | BUTTON_REL,          BUTTON_RIGHT },
+    { MACT_SEEK_BACK,   BUTTON_LEFT  | BUTTON_REPEAT,       BUTTON_NONE },
+    { MACT_SEEK_FWD,    BUTTON_RIGHT | BUTTON_REPEAT,       BUTTON_NONE },
+    { MACT_OPTIONS,     BUTTON_SELECT | BUTTON_REL,         BUTTON_SELECT },
+    { MACT_TOGGLE_SHUFFLE, BUTTON_SELECT | BUTTON_REPEAT,   BUTTON_NONE },
+    { MACT_BACK,        BUTTON_MENU | BUTTON_REL,           BUTTON_MENU },
+    { MACT_PLAYPAUSE,   BUTTON_PLAY | BUTTON_REL,           BUTTON_PLAY },
+    LAST_ITEM_IN_LIST
+};
+
 const struct button_mapping *metro_keymap_get_context_map(int context)
 {
     switch (context & ~CONTEXT_PLUGIN)
@@ -65,6 +88,7 @@ const struct button_mapping *metro_keymap_get_context_map(int context)
         case MCTX_HUB:    return hub_mapping;
         case MCTX_LIST:   return list_mapping;
         case MCTX_DIALOG: return dialog_mapping;
+        case MCTX_PLAYER: return player_mapping;
         default:          return NULL;
     }
 }

@@ -71,6 +71,11 @@ static const struct metro_page *current_page(void)
     return page_stack[depth - 1];
 }
 
+const struct metro_page *metro_screen_list_current_page(void)
+{
+    return current_page();
+}
+
 void metro_screen_list_show(void)
 {
     const struct metro_page *page = current_page();

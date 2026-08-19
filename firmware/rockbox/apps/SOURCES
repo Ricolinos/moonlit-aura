@@ -324,3 +324,5 @@ metro/metro_screen_list.c
 metro/metro_screen_hub.c
 metro/metro_screen_settings.c
 metro/metro_music.c
+metro/metro_albumart.c
+metro/metro_screen_nowplaying.c

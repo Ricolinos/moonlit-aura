@@ -38,6 +38,29 @@ gen alac.m4a -c:a alac
 gen wav  -c:a pcm_s16le
 gen aiff -c:a pcm_s16be
 
+# F5: solid-color cover art, via ffmpeg PNG -> sips JPEG, not ffmpeg's
+# own mjpeg encoder straight to .jpg. -pix_fmt yuvj420p alone (D-030,
+# DECISIONS.md) fixes the *chroma sampling factor* mismatch that used
+# to corrupt these images outright; it does NOT fix a second, subtler
+# ffmpeg-mjpeg-specific issue found verifying F5's Now Playing screen:
+# Rockbox's JPEG decoder reads such a file "successfully" (ret>0,
+# right dimensions) but drops chroma silently, rendering the album art
+# tile as flat gray (RGB565 ~= the source color's luma) instead of the
+# real color -- confirmed by decoding the exact same pixels through
+# both PIL and sips instead of ffmpeg's mjpeg encoder, both correct.
+# ffmpeg still generates the flat-color PNG (no chroma subsampling
+# concern for a lossless format); sips does the actual JPEG encode.
+gen_cover_jpg() {
+  local color="$1" size="$2" out="$3"
+  local tmp_dir tmp_png
+  tmp_dir="$(mktemp -d)"
+  tmp_png="$tmp_dir/cover.png"
+  ffmpeg -y -loglevel error -f lavfi -i "color=c=${color}:s=${size}" \
+    -frames:v 1 "$tmp_png"
+  sips -s format jpeg "$tmp_png" --out "$out" > /dev/null
+  rm -rf "$tmp_dir"
+}
+
 cat > "$OUT_DIR/metro-test.lrc" <<'EOF'
 [ar:Metro QA]
 [ti:Metro Test Tone]
@@ -59,15 +82,7 @@ ffmpeg -y -loglevel error \
   -c:a libmp3lame -b:a 128k "$OUT_DIR/SinArte/metro-test-noart.mp3"
 
 echo "==> Generando $OUT_DIR/cover.jpg"
-# -pix_fmt yuvj420p fuerza submuestreo de croma 4:2:0 estandar con tablas
-# de cuantizacion separadas por componente. Sin este flag, el encoder
-# mjpeg de ffmpeg a veces emite un muestreo no estandar (mismo factor de
-# muestreo en los 3 componentes + una sola tabla de cuantizacion
-# compartida) que el decoder JPEG de Rockbox no interpreta bien: decodifica
-# "con exito" (ret>0, dimensiones correctas) pero el resultado sale
-# corrupto/desordenado. Ver D-030 en DECISIONS.md.
-ffmpeg -y -loglevel error -f lavfi -i "color=c=0x3366CC:s=200x200" \
-  -pix_fmt yuvj420p -frames:v 1 "$OUT_DIR/cover.jpg"
+gen_cover_jpg "0x3366CC" "200x200" "$OUT_DIR/cover.jpg"
 
 echo "==> Generando fixtures de Fotos (test-media/Photos)"
 mkdir -p "$OUT_DIR/Photos"
@@ -119,6 +134,11 @@ gen_track "Aura Test Combo" "First Light" "Electronic" 1 "Sunrise" 220
 gen_track "Aura Test Combo" "First Light" "Electronic" 2 "Horizon" 247
 gen_track "Aura Test Combo" "First Light" "Electronic" 3 "Glow" 262
 gen_track "Aura Test Combo" "First Light" "Electronic" 4 "Daybreak" 294
+
+# F5: cover.jpg de carpeta para el album que SI debe mostrar caratula
+# real en Now Playing (find_albumart()); "Night Drive" se deja sin
+# arte a proposito -- ejercita metro_draw_tile() (F5-nowplaying-noart.png).
+gen_cover_jpg "0xCC7733" "300x300" "$MUSIC_DIR/Aura Test Combo/First Light/cover.jpg"
 
 gen_track "Aura Test Combo" "Night Drive" "Synthwave" 1 "Overpass" 330
 gen_track "Aura Test Combo" "Night Drive" "Synthwave" 2 "Neon Mile" 349

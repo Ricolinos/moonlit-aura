@@ -29,7 +29,8 @@ int metro_input_next(enum metro_context ctx, int timeout_ticks, int *out_steps)
     if (action & SYS_EVENT)
         return action;
 
-    if ((action == MACT_PREV || action == MACT_NEXT) && out_steps)
+    if ((action == MACT_PREV || action == MACT_NEXT ||
+         action == MACT_VOL_UP || action == MACT_VOL_DOWN) && out_steps)
     {
 #ifdef HAVE_WHEEL_ACCELERATION
         int steps = button_apply_acceleration(get_action_data());

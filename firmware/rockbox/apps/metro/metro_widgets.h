@@ -29,4 +29,11 @@
  * redraw whatever was behind it afterwards. */
 bool metro_widgets_confirm(const char *title, const char *question);
 
+/* Volume overlay (PLAN_MAESTRO.md S1.4): a 320x6 bar at y=232 plus a
+ * "volume NN%" caption -- pure draw, no input loop of its own.
+ * metro_screen_nowplaying.c calls this for ~1.5s after a wheel move on
+ * the Now Playing screen and decides on its own when to stop calling
+ * it (this widget has no timer state, it just draws one frame). */
+void metro_widgets_draw_volume_overlay(int pct);
+
 #endif /* METRO_WIDGETS_H */

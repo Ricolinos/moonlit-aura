@@ -26,6 +26,7 @@
 #include "metro_screen_hub.h"
 #include "metro_screen_list.h"
 #include "metro_screen_settings.h"
+#include "metro_screen_nowplaying.h"
 #include "metro_music.h"
 #include "metro_draw.h"
 #include "metro_theme.h"
@@ -38,7 +39,6 @@
 
 static void open_album_songs(int32_t album_seek, const char *album_label);
 static void open_genre_songs(int32_t genre_seek, const char *genre_label);
-static void push_now_playing_placeholder(void);
 
 /* --- dummy row provider, shared by every videos/photos pivot -- F4
  * replaced music's own dummy_* usage with metro_music (below); F7
@@ -217,7 +217,7 @@ static void songs_on_select(void *ctx, int index)
 {
     (void)ctx;
     if (metro_music_play_all_songs(index))
-        push_now_playing_placeholder();
+        metro_screen_nowplaying_push();
 }
 
 /* pivot: genres -> on_select drills into that genre's songs */
@@ -254,7 +254,7 @@ static void playlists_on_select(void *ctx, int index)
 {
     (void)ctx;
     if (metro_music_play_playlist(index))
-        push_now_playing_placeholder();
+        metro_screen_nowplaying_push();
 }
 
 static const struct metro_pivot music_pivots[] = {
@@ -289,7 +289,7 @@ static void album_songs_on_select(void *ctx, int index)
 {
     (void)ctx;
     if (metro_music_play_songs_of_album(s_album_songs_seek, index))
-        push_now_playing_placeholder();
+        metro_screen_nowplaying_push();
 }
 
 static const struct metro_pivot album_songs_pivots[] = {
@@ -327,7 +327,7 @@ static void genre_songs_on_select(void *ctx, int index)
 {
     (void)ctx;
     if (metro_music_play_songs_of_genre(s_genre_songs_seek, index))
-        push_now_playing_placeholder();
+        metro_screen_nowplaying_push();
 }
 
 static const struct metro_pivot genre_songs_pivots[] = {
@@ -365,41 +365,6 @@ static const struct metro_pivot updating_pivots[] = {
 };
 static const struct metro_page updating_page = { LANG_HUB_MUSIC, updating_pivots, 1, NULL };
 
-/* Now playing placeholder -- one static row filled from
- * metro_music_now_playing() right before each push (F5 replaces this
- * whole page with the real metro_screen_nowplaying). BACK just pops,
- * same as any other page -- no special-casing needed. */
-
-static char s_np_title[METRO_MUSIC_ITEM_LEN];
-static char s_np_sub[METRO_MUSIC_ITEM_LEN];
-
-static int np_count(void *ctx) { (void)ctx; return 1; }
-
-static void np_get_row(void *ctx, int index, struct metro_row *out)
-{
-    (void)ctx;
-    (void)index;
-    out->title = s_np_title;
-    out->subtitle = s_np_sub[0] ? s_np_sub : NULL;
-    out->kind = METRO_ROW_ACTION;
-}
-
-static void np_on_select(void *ctx, int index) { (void)ctx; (void)index; }
-
-static const struct metro_pivot np_pivots[] = {
-    { LANG_HUB_NOWPLAYING, np_count, np_get_row, np_on_select, NULL },
-};
-static const struct metro_page np_page = { LANG_HUB_NOWPLAYING, np_pivots, 1, NULL };
-
-static void push_now_playing_placeholder(void)
-{
-    if (!metro_music_now_playing(s_np_title, sizeof(s_np_title), s_np_sub, sizeof(s_np_sub)))
-    {
-        s_np_title[0] = '\0';
-        s_np_sub[0] = '\0';
-    }
-    metro_screen_list_push(&np_page);
-}
 
 /* --- the hub's own rows: [now playing] | music | videos | photos | settings */
 
@@ -445,7 +410,7 @@ static void hub_on_select(void *ctx, int index)
 
     if (playing && index == 0)
     {
-        push_now_playing_placeholder();
+        metro_screen_nowplaying_push();
         return;
     }
 

@@ -50,6 +50,15 @@ void metro_screen_list_pop_to_root(void);
  * is showing -- metro_main.c decides which screen to draw). */
 void metro_screen_list_show(void);
 
+/* NULL at the hub (depth 1); otherwise the page passed to the most
+ * recent metro_screen_list_push() still on the stack. F5:
+ * metro_screen_nowplaying.c compares this against its own sentinel
+ * page pointer so metro_main.c can tell "a page is on top" (draw with
+ * this module) from "specifically Now Playing is on top" (draw with
+ * metro_screen_nowplaying instead) without this module knowing
+ * anything about Now Playing itself. */
+const struct metro_page *metro_screen_list_current_page(void);
+
 /* Reacts to one MACT_* action against the top-of-stack page: PIVOT_*
  * switches pivots, PREV/NEXT moves the selection, SELECT calls the
  * current row's on_select(), BACK pops, HOME pops to the root. Does

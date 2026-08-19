@@ -43,6 +43,17 @@ enum metro_action {
     MACT_SELECT,                              /* SELECT (short): enter/activate */
     MACT_BACK,                                /* MENU (short): go back one level */
     MACT_HOME,                                /* MENU (held): go straight to the hub */
+
+    /* F5: PLAYER context only (Now Playing) -- PLAN_MAESTRO.md S2.3. */
+    MACT_VOL_UP,                               /* wheel fwd: volume up */
+    MACT_VOL_DOWN,                             /* wheel back: volume down */
+    MACT_TRACK_PREV,                           /* LEFT (short): previous track */
+    MACT_TRACK_NEXT,                           /* RIGHT (short): next track */
+    MACT_SEEK_BACK,                            /* LEFT (held): rewind */
+    MACT_SEEK_FWD,                             /* RIGHT (held): fast-forward */
+    MACT_OPTIONS,                              /* SELECT (short): push the options page */
+    MACT_TOGGLE_SHUFFLE,                       /* SELECT (held): toggle shuffle */
+    MACT_PLAYPAUSE,                            /* PLAY (short): audio_pause()/audio_resume() */
 };
 
 #define MACT_NONE ACTION_NONE
@@ -56,6 +67,7 @@ enum metro_context {
     MCTX_HUB = 0,
     MCTX_LIST,
     MCTX_DIALOG,
+    MCTX_PLAYER,
 };
 
 /* get_context_map callback for get_custom_action() -- pass this

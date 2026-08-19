@@ -32,11 +32,11 @@
  *   - MACT_NONE if nothing happened within the timeout;
  *   - one of enum metro_action otherwise.
  *
- * For MACT_PREV/MACT_NEXT, *out_steps receives how many rows to move
- * (always >= 1, already through button_apply_acceleration() --
- * INVESTIGACION.md C.2 -- direction is implied by which action it
- * was, not by the sign of *out_steps). Untouched for any other
- * return value. */
+ * For MACT_PREV/MACT_NEXT/MACT_VOL_UP/MACT_VOL_DOWN, *out_steps
+ * receives how many rows/volume steps to move (always >= 1, already
+ * through button_apply_acceleration() -- INVESTIGACION.md C.2 --
+ * direction is implied by which action it was, not by the sign of
+ * *out_steps). Untouched for any other return value. */
 int metro_input_next(enum metro_context ctx, int timeout_ticks, int *out_steps);
 
 #endif /* METRO_INPUT_H */

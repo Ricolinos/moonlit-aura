@@ -156,3 +156,49 @@ Durante la captura de las evidencias de F4 (`docs/screenshots/F4-*.png`), UNA co
 **Diagnóstico**: no hay evidencia de un bug determinístico en `metro_nav`/`metro_keymap`/`metro_input` (la máquina de pila resetea pivot/selección en cada `push`, comprobado por lectura de `metro_nav.c`; el conteo de acciones despachadas fue el esperado en cada corrida instrumentada). Todo apunta a una fluctuación de scheduling del host (macOS, hilo del simulador vs. hilo de tagcache en segundo plano) durante una corrida aislada de un lote de siete capturas consecutivas — no a código de Metro.
 
 **Mitigación usada**: cada captura de F4 usa su propia corrida limpia del simulador (proceso `rockboxui` nuevo) con un margen amplio de espera (`WAIT` ×10, ~10 s) antes del primer `SELECT` hacia música, dando tiempo de sobra a que `tagcache_rebuild()` termine antes de que se inyecte cualquier botón. Cualquier captura futura cuyo contenido no corresponda al esperado debe simplemente repetirse (proceso nuevo) antes de darla por buena — no se investiga más a fondo dado que no hay mecanismo determinístico identificado y el costo de una repetición es bajo.
+
+---
+
+## F5-1 — Sin íconos compilados; batería/aleatorio/repetir en texto, no bitmaps
+
+**Plan decía** (`PLAN_MAESTRO.md` §5 F5, "Archivos"): `apps/bitmaps/native/{metro_*.bmp,SOURCES}` como entregable de esta fase — íconos compilados para batería, play/pausa, aleatorio, repetir.
+
+**Qué se hizo en su lugar**: exactamente el mismo criterio que F2 ya adoptó para la batería (`metro_draw_battery()`, texto "NN%", comentario propio "no bitmap icon yet ... lands in F5") — F5 extiende ese MISMO criterio a aleatorio/repetir en vez de romperlo a medias: `metro_screen_nowplaying.c` dibuja "aleatorio"/"repetir todo"/"repetir uno" en `MFONT_CAPTION` acento, solo cuando están activos, en la esquina inferior derecha (mismo lugar que el plan reserva para los íconos de 16px). Play/pausa no tiene ícono visible en ningún lado porque no hay un control en pantalla que lo represente (es un botón físico del clickwheel).
+
+**Por qué**: montar un pipeline real de íconos (diseñar los BMP, `apps/bitmaps/native/SOURCES`, conversión `bmp2rb`, manejo de máscara/alpha para LCD_DEPTH>1) es trabajo de asset design + tooling, no de lógica de pantalla — encaja mejor en F10 ("Pulido estético") junto con el resto del pulido visual que esa fase ya tiene reservado, que partirlo a medias aquí. Texto en acento cumple la misma función (visibilidad + color = estado activo) sin bloquear el resto de F5 en un pipeline de assets nuevo.
+
+**Impacto en `PLAN_MAESTRO.md`**: F10 hereda la tarea de reemplazar estos tres textos (batería, aleatorio, repetir) por íconos reales — no es trabajo nuevo, es el mismo pendiente que F2 ya dejó abierto para la batería, ahora con dos casos más.
+
+## F5-2 — Página "options" sin teclas de transporte de PLAYER (solo LIST)
+
+**Plan decía** (`PLAN_MAESTRO.md` §2.3, contextos): "`OPTIONS` (página de opciones de NP, es una `LIST` con teclas de transporte activas)" — sugiere que PLAY/LEFT/RIGHT deberían seguir funcionando como controles de reproducción incluso dentro de la página de opciones.
+
+**Qué se hizo**: la página `options` es una `metro_page` normal, empujada con `metro_screen_list_push()` igual que cualquier otra lista — usa el contexto `MCTX_LIST` completo (SELECT activa/cicla la fila, MENU vuelve), sin ninguna tecla de transporte extra.
+
+**Por qué**: darle a `options` un contexto híbrido real exige que `metro_main.c` sepa distinguir "estoy en LIST" de "estoy en LIST-pero-con-transporte-activo" — un tercer camino de resolución de contexto además de HUB/LIST/PLAYER, solo para esta única página. El usuario puede volver con MENU y usar las teclas de transporte reales en Now Playing; el costo de esa vuelta es un botón, la complejidad de no pagarlo era mucho mayor. [ESTIMADO: no hay una captura que dependa de esto, ninguno de los "hecho" de F5 lo pide explícitamente.]
+
+**Impacto en `PLAN_MAESTRO.md`**: ninguno funcional; si en una fase futura el dueño del diseño pide específicamente poder pausar/saltar pista sin salir de "próximas", se revisita como una desviación de diseño nueva, no silenciosa.
+
+## F5-3 — Título de Now Playing en una sola línea con recorte, no 2 líneas con wrap
+
+**Plan decía** (`PLAN_MAESTRO.md` §1.4): "título en `title` (28) blanco, 2 líneas máx. con recorte".
+
+**Qué se hizo**: `metro_draw_text_cut_right()` en una sola línea — el título se recorta en el borde derecho igual que cualquier otro texto largo de Metro (A.6), nunca pasa a una segunda línea.
+
+**Por qué**: el wrap real de texto (encontrar el punto de corte entre palabras, medir cada línea, decidir cuándo el título CABE en 2 líneas vs. cuándo hay que recortar la segunda) no existe todavía en `metro_draw.c` — ninguna otra pantalla de Metro lo necesita hasta ahora. Construirlo para este único caso, bien, es trabajo de pulido de texto más que de la pantalla de Now Playing en sí. [ESTIMADO: la mayoría de títulos reales caben en una línea a 28px; el caso de 2 líneas es la excepción, no la regla.]
+
+**Impacto en `PLAN_MAESTRO.md`**: un título muy largo se ve recortado en vez de partido en 2 líneas. F10 es el lugar natural para agregar wrap real a `metro_draw.c` si hace falta, reutilizable por cualquier pantalla, no solo Now Playing.
+
+## F5-4 — `MACT_PLAY_ITEM`/`MACT_SHUFFLE_ALL` (PLAY y SELECT sostenido sobre una fila reproducible en LIST) no implementados
+
+**Plan decía** (`PLAN_MAESTRO.md` §2.3): filas reproducibles en cualquier `LIST` deberían responder a `BUTTON_PLAY|BUTTON_REL` (reproducir esa fila) y `BUTTON_SELECT|BUTTON_REPEAT` (reproducir todo el contenido de la fila en aleatorio), además del `SELECT` corto ya implementado desde F4.
+
+**Qué se hizo**: `SELECT` corto sigue siendo la única forma de reproducir una fila desde una lista — ya cubierto desde F4 (`on_select` de cada pivot reproducible). `PLAY`/`SELECT` sostenido no están mapeados en `list_mapping` (`metro_keymap.c`), quedan como `ACTION_NONE`.
+
+**Por qué**: son gestos alternativos que llegan al MISMO resultado que `SELECT` ya cubre (reproducir la fila) o a una variante (aleatorio) que `metro_music_shuffle_all()` ya expone como capacidad de infra pero sin ningún disparador de UI todavía (ver el comentario de esa función en `metro_music.h`, deuda ya reconocida desde F4). Agregarlos ahora significa ampliar `list_mapping` con una fila nueva por cada pivot reproducible y decidir, por primera vez, qué distingue una fila "reproducible" de una que no lo es a nivel de tabla de botones — no solo de comportamiento de `on_select`. Fuera del alcance de lo que F5 necesitaba entregar (la pantalla de Now Playing en sí).
+
+**Impacto en `PLAN_MAESTRO.md`**: ninguna captura de F5 depende de esto. `metro_music_shuffle_all()` sigue esperando su primer disparador de UI real — candidato natural: una fila "aleatorio" en el propio hub o en el nivel superior de música, a decidir cuando se retome.
+
+## F5-5 — Aleatorio real solo al activarlo; no hay "desordenar" limpio al desactivarlo
+
+**No es una desviación del plan** (el plan no especifica el mecanismo interno), pero es una limitación real de Rockbox documentada explícitamente en el código (`metro_screen_nowplaying.c`, `toggle_shuffle()`) para que quede visible en el historial y no se lea como un bug de Metro: activar "aleatorio" llama a `playlist_shuffle()` de verdad (reordena la cola restante); desactivarlo solo dejar de tratar la bandera como activa, no restaura el orden original — Rockbox no tiene una operación de "desordenar" inversa. Mismo comportamiento que el Rockbox original.

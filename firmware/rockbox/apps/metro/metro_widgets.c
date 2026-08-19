@@ -17,6 +17,7 @@
  * KIND, either express or implied.
  *
  ****************************************************************************/
+#include <stdio.h>
 #include "kernel.h"
 #include "misc.h"
 #include "lcd.h"
@@ -26,6 +27,8 @@
 #include "metro_theme.h"
 #include "metro_input.h"
 #include "metro_lang.h"
+
+#define METRO_VOLUME_OVERLAY_Y 232
 
 bool metro_widgets_confirm(const char *title, const char *question)
 {
@@ -68,4 +71,14 @@ bool metro_widgets_confirm(const char *title, const char *question)
                 break;
         }
     }
+}
+
+void metro_widgets_draw_volume_overlay(int pct)
+{
+    char label[24];
+
+    metro_draw_progress(0, METRO_VOLUME_OVERLAY_Y, LCD_WIDTH, 6, pct);
+    snprintf(label, sizeof(label), "%s %d%%", metro_lang_str(LANG_NP_VOLUME), pct);
+    metro_draw_text(MFONT_CAPTION, 12, METRO_VOLUME_OVERLAY_Y - 14, label,
+                     metro_color_secondary());
 }

@@ -175,3 +175,42 @@ void metro_draw_rows(const struct metro_pivot *pivot, int first, int sel,
         y += METRO_ROW_PITCH;
     }
 }
+
+void metro_draw_progress(int x, int y, int width, int height, int pct)
+{
+    int fill_w;
+
+    if (pct < 0)
+        pct = 0;
+    if (pct > 100)
+        pct = 100;
+    fill_w = width * pct / 100;
+
+    lcd_set_foreground(metro_color_tertiary());
+    lcd_fillrect(x, y, width, height);
+
+    if (fill_w > 0)
+    {
+        lcd_set_foreground(metro_color_accent());
+        lcd_fillrect(x, y, fill_w, height);
+    }
+}
+
+void metro_draw_tile(int x, int y, int size, const char *label)
+{
+    char initial[2] = { ' ', '\0' };
+    int w, h;
+
+    if (label && label[0] >= 'a' && label[0] <= 'z')
+        initial[0] = label[0] - 32;
+    else if (label && label[0])
+        initial[0] = label[0];
+
+    lcd_set_foreground(metro_color_accent());
+    lcd_fillrect(x, y, size, size);
+
+    lcd_setfont(metro_font_id(MFONT_DISPLAY));
+    lcd_getstringsize((const unsigned char *)initial, &w, &h);
+    lcd_set_foreground(metro_color_bg());
+    lcd_putsxy(x + (size - w) / 2, y + (size - h) / 2, (const unsigned char *)initial);
+}

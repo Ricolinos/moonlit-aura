@@ -380,3 +380,56 @@ que `aura_music_db_ready()`, con el mismo cuidado de esperar a
 `tagcache_is_fully_initialized()` antes de decidir (D-206: `is_usable()`
 puede volverse verdadero antes de que la determinación de fondo
 termine).
+
+## M-033 — F5: el buffer de decodificación JPEG necesita margen real sobre el tamaño final, no solo `width*height*sizeof(fb_data)`
+
+Bug real encontrado verificando la carátula de Now Playing: con
+`s_scratch` dimensionado exactamente a `METRO_ALBUMART_SIZE^2 *
+sizeof(fb_data)` (136×136×2 = 36 992 bytes), `read_jpeg_file()` con
+`FORMAT_RESIZE` escribía **fuera de los límites** de `s_scratch` antes
+de que su propio chequeo de tamaño lo detectara, corrompiendo la
+siguiente variable estática del binario (`s_vol_overlay_until` en
+`metro_screen_nowplaying.c`, un `long` de 8 bytes, terminó con un
+valor de 51 539 607 555 — ni cero ni nada relacionado con volumen).
+`JPEG_DECODE_OVERHEAD` (`apps/recorder/jpeg_load.h`) es ~39 KB por sí
+solo, sin contar el espacio real que pide el downscale intermedio
+antes de reducir a 136×136. Mismo hallazgo y misma fórmula que
+Aura-Firmware ya documentó en `aura_albumart.c` (margen `x2` sobre el
+tamaño final en bytes) tras un bug parecido (imagen fallando en
+silencio, no corrompiendo memoria — la variante de Metro fue peor
+porque el buffer nunca antes se había ejercitado con una carátula
+real). `metro_albumart.c` reserva `METRO_ALBUMART_SIZE^2 * 2 * 2`
+bytes ahora. Cualquier decodificador de imagen nuevo en `apps/metro/`
+reserva scratch con el mismo margen, nunca el tamaño final a secas.
+
+## M-034 — `firmware/tools/gen_test_media.sh`: las carátulas de prueba se generan vía PNG + `sips`, nunca `ffmpeg` directo a `.jpg`
+
+Bug real encontrado en la misma verificación: incluso con `-pix_fmt
+yuvj420p` (D-030, ya documentado), el encoder `mjpeg` de `ffmpeg`
+produce archivos que el decodificador JPEG de Rockbox lee "con éxito"
+(`read_jpeg_file()` devuelve `>0`, dimensiones correctas) pero **sin
+color** — la crominancia se pierde y el resultado sale gris plano (el
+nivel de gris coincide con la luminancia real del color pedido,
+confirmado a mano: `RGB(202,119,51)` esperado, `RGB(139,137,139)`
+decodificado — casi exactamente el luma de ese naranja). Verificado
+que el archivo fuente SÍ tiene el color correcto (`sips -g all`,
+Pillow) — el defecto está específicamente en cómo Rockbox interpreta
+el JPEG que produce el encoder `mjpeg` de `ffmpeg`, no en el color de
+origen. La misma imagen recodificada con Pillow o con `sips -s format
+jpeg` decodifica perfecto. `gen_test_media.sh` genera ahora toda
+carátula de prueba como PNG (sin subsampling, formato sin pérdida) y
+la convierte a `.jpg` con `sips` — nunca `ffmpeg -f lavfi ... .jpg`
+directo. `firmware/tools/gen_fonts.sh`/`gen_logo.py` no generan JPEG,
+no les aplica.
+
+## M-035 — `playlist_get_track_info()` devuelve 0 en éxito / -1 en error, no un booleano
+
+Bug real encontrado armando la cola de "próximas" de Now Playing:
+`if (!playlist_get_track_info(...))` se salta silenciosamente **cada
+pista resuelta con éxito** (que devuelve `0`, falsy en C) y solo
+"acierta" en el caso de error (`-1`, truthy) — exactamente al revés de
+la intención. A diferencia de `tagcache_search()`/`find_albumart()`
+(booleanos de verdad, `true`=éxito), esta función usa una convención
+estilo `errno`: comparar explícitamente contra `!= 0`, nunca negar el
+resultado directamente. Cualquier código nuevo en `apps/metro/` que
+llame `playlist_get_track_info()` sigue esta misma comparación.
