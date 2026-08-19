@@ -20,8 +20,9 @@
 /* /Photos browsing (PLAN_MAESTRO.md S1.2, Aura-Firmware's contract
  * S D.1): flat JPEG list (D-192-class contract: /Photos never gets
  * subfolders) plus the OPTIONAL category index
- * (metro_media_categories.h) -- viewing is entirely delegated to the
- * fork's own imageviewer plugin, no image decoder of Metro's own. */
+ * (metro_media_categories.h). Viewing is Metro's own
+ * metro_screen_photo_viewer.c as of R2-F3 (DD-10) -- this module no
+ * longer launches imageviewer.rock itself. */
 #ifndef METRO_PHOTOS_H
 #define METRO_PHOTOS_H
 
@@ -45,9 +46,5 @@ typedef struct {
  * metro_video_list() / metro_music.c's own lists (DESVIACIONES.md
  * F6-1). Call once when the photos page is entered. */
 int metro_photos_list(metro_photo_item_t *out, int max);
-
-/* Launches /Photos/<filename> in the fork's imageviewer plugin, open
- * errors silenced (same reasoning as metro_video_play()). */
-void metro_photos_view(const char *filename);
 
 #endif /* METRO_PHOTOS_H */

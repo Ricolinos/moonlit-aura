@@ -319,3 +319,20 @@ Durante la captura de las evidencias de F4 (`docs/screenshots/F4-*.png`), UNA co
 **DA-1, decisión abierta (no cerrada en esta fase)**: si tras la revisión visual de la PARADA de R2-F2 el dueño prefiere 5×64 (más tiles visibles, cuadrícula más densa), es un cambio de únicamente `METRO_TILE_SIZE`/`METRO_TILE_COLS` en `metro_draw.h` — ningún otro archivo asume el valor 80 o 4 directamente (`metro_photo_thumbs.c` decodifica al tamaño de `METRO_TILE_SIZE`, no a un literal propio).
 
 **Impacto en `PLAN-metro-r2-maestro.md`**: ninguno — el propio DD-8 preveía esta comparación explícitamente y dejó la puerta abierta a cambiarla sin que sea una desviación real del plan, solo una decisión de diseño que el dueño puede revisar en la PARADA.
+
+---
+
+## R2-1 — Visor propio de fotos: qué se pierde de `imageviewer.rock`
+
+**Plan decía** (`PLAN-metro-r2-maestro.md` DD-10): reemplazar `imageviewer.rock` por un visor propio con ajustar/cubrir "lo que se pierde (zoom/paneo/slideshow/PNG) va a `DESVIACIONES.md` R2-1 -- misma pérdida que Aura aceptó (C.3)".
+
+**Qué pierde Metro al dejar de usar `imageviewer.rock`** (`apps/plugins/imageviewer/`, plugin nativo sin modificar, sigue en el árbol):
+
+- **Zoom**: `imageviewer.rock` permite acercar/alejar con el scroll wheel en su propio modo; `metro_screen_photo_viewer.c` solo tiene ajustar/cubrir, sin nivel de zoom intermedio ni panning libre dentro de una imagen acercada.
+- **Paneo**: ligado al zoom -- sin zoom, no hay nada que panear. En modo cubrir, el recorte siempre queda centrado, no ajustable por el usuario.
+- **Slideshow**: `imageviewer.rock` tiene un modo de avance automático por tiempo; el visor de Metro solo avanza con SCROLL_FWD/BACK explícito.
+- **Formatos**: `imageviewer.rock` decodifica JPEG, PNG, BMP y GIF (con sus propios decoders, `apps/plugins/imageviewer/{png,bmp,gif}/`); `metro_screen_photo_viewer.c` solo decodifica JPEG -- consistente con el contrato de Metro (`/Photos/*.jpg`/`.jpeg` únicamente, `metro_photos.c`'s `k_exts`), así que en la práctica ningún archivo real del contrato pierde soporte, pero un `.bmp`/`.png` colado a mano en `/Photos/` (fuera de contrato, ya filtrado por `metro_fsutil_list_by_ext()` desde F7) tampoco se vería si de algún modo llegara a listarse.
+
+**Por qué se acepta esta pérdida**: mismo criterio que Aura-Firmware ya adoptó para su propio visor (C.3, citado por el plan) -- un visor Metro-styled con controles descubribles (MENU = volver, consistente con el resto de la app) vale más que un plugin correcto pero visualmente ajeno, con su propio esquema de botones no obvio (ver `DECISIONS.md` M-058: `SELECT` para salir en el pad clickwheel, no `MENU` -- la causa real detrás del reporte de "se traba" del dueño verificando R2-F1/R2-F2). Zoom/paneo/slideshow no están en el alcance de ninguna fase de la ronda 2; si se piden en el futuro, es trabajo nuevo sobre `metro_screen_photo_viewer.c`, no una regresión a recuperar.
+
+**Impacto en `PLAN-metro-r2-maestro.md`**: ninguno -- DD-10 preveía exactamente esta pérdida y pedía documentarla aquí, no evitarla.

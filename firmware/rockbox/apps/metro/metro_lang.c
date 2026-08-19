@@ -122,6 +122,9 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_ANIM_OFF]     = "apagada",
     [LANG_GFX_FULL] = "completos",
     [LANG_GFX_LITE] = "ligeros",
+
+    [LANG_PHOTO_LOADING]     = "cargando...",
+    [LANG_PHOTO_UNSUPPORTED] = "formato no soportado",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -225,6 +228,9 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_ANIM_OFF]     = "off",
     [LANG_GFX_FULL] = "full",
     [LANG_GFX_LITE] = "lite",
+
+    [LANG_PHOTO_LOADING]     = "loading...",
+    [LANG_PHOTO_UNSUPPORTED] = "unsupported format",
 };
 
 void metro_lang_set(enum metro_language lang)

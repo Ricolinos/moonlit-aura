@@ -1120,3 +1120,105 @@ alineación de `first_visible` a filas, clamp en ambos extremos, `count`
 no múltiplo de `cols` (21/4, caso real de biblioteca), lista vacía. 89
 checks totales, 0 fallos (`metro_nav_move_sel()` intacto, cero
 regresión en los casos ya existentes).
+
+## M-058 — R2-F3/DD-10: visor propio de fotos (`metro_screen_photo_viewer.c`), reemplaza `imageviewer.rock`
+
+**Motivación real, no solo la del plan**: verificando R2-F1/R2-F2 en
+sesión interactiva, el dueño reportó que el simulador "se traba" al
+abrir una foto desde la cuadrícula, sin poder salir. Investigado antes
+de escribir código nuevo: no es un cuelgue -- `imageviewer.rock`
+(plugin nativo, sin tocar) usa un esquema de botones propio para el
+pad clickwheel del iPod (`apps/plugins/imageviewer/imageviewer_button.h`,
+`IPOD_4G_PAD`/`IPOD_3G_PAD`/`IPOD_1G2G_PAD`): `IMGVIEW_QUIT = (BUTTON_SELECT
+| BUTTON_REL)`, no MENU -- `MENU` está remapeado dentro del plugin a
+`IMGVIEW_UP` (paneo). El plugin seguía vivo y esperando el botón
+correcto; solo era indistinguible de un cuelgue real para quien espera
+la convención de Metro (MENU = volver). El cuadro "Cargando..." que
+también se reportó es UI nativa de Rockbox dentro de ese mismo plugin,
+no de Metro. R2-F3 ya estaba planeado como la fase siguiente -- resulta
+ser también el fix.
+
+**Qué se hizo** (patrón centinela, igual que Now Playing F5):
+- `metro_screen_photo_viewer.c/.h` (nuevos): página centinela en la
+  pila (`metro_screen_photo_viewer_is_current()`), dibujo/input
+  propios. `metro_screen_hub.c`'s `photo_pivot_on_select()` empuja el
+  visor pasándole el MISMO array/`count` que ese pivot ya usa para
+  `get_row()`/`get_tile()` -- SCROLL_FWD/BACK dentro del visor navegan
+  la categoría exacta desde la que se entró, no "todos" sin importar
+  el pivot de origen.
+- `MCTX_VIEWER` nuevo en `metro_keymap.c/.h`: SCROLL_FWD/BACK reutilizan
+  `MACT_PREV`/`MACT_NEXT` (mismo significado que en cualquier lista);
+  SELECT es la única acción nueva, `MACT_TOGGLE_VIEW_MODE` (ajustar
+  ↔ cubrir); MENU/MENU-sostenido/PLAY reutilizan `MACT_BACK`/`MACT_HOME`/
+  `MACT_PLAYPAUSE` sin cambios.
+- `metro_main.c`: `at_viewer` se suma a `at_root`/`at_player` en el
+  bucle principal y en el diff de `metro_nav_t` que elige la transición
+  (M-043) -- entrar/salir del visor siempre usa FADE, igual que Now
+  Playing; ambos centinelas son mutuamente excluyentes así que
+  `player_x || viewer_x` nunca es ambiguo. El motor de miniaturas
+  (R2-F2/DD-9) y el redibujado del índice flotante (F10) se excluyen
+  también mientras `at_viewer` -- ninguno tiene nada que hacer sobre
+  una foto a pantalla completa.
+- **Ajustar**: `FORMAT_NATIVE|FORMAT_RESIZE|FORMAT_KEEP_ASPECT` directo
+  a una caja de 320×240, centrado, franjas del `metro_color_bg()` del
+  tema activo.
+- **Cubrir**: se leyó `aura_photos.c:943-1063` de Aura-Firmware como
+  referencia de algoritmo (solo lectura, código propio escrito para
+  Metro) -- `probe_jpeg_dimensions()` (parseo de marcadores JPEG hasta
+  SOFn, sin decodificar un solo píxel, portado con nombres/comentarios
+  de Metro) da el tamaño real de origen; `compute_decode_and_display_size()`
+  calcula en Q16.16 (sin FPU) el factor `max(320/w, 240/h)` -- cubrir,
+  no ajustar -- y decide si decodificar directo al tamaño final o al
+  tamaño de origen (según si haría falta agrandar); `draw_scaled_centered()`
+  hace el recorte centrado final por muestreo nearest-neighbor cuando
+  el tamaño decodificado no coincide exactamente con el de pantalla.
+  Al alternar modo se re-decodifica siempre (`s_loaded_index = -1`),
+  nunca se re-muestrea un buffer viejo.
+- Buffer propio `METRO_PHOTO_VIEW_SCRATCH_SIZE = LCD_WIDTH*LCD_HEIGHT*2*2`
+  (~300KB, margen ×2 de M-033), no compartido con el de Now Playing
+  (`metro_albumart.c`) -- ambos pueden ser el buffer más grande de su
+  propia pantalla, pero Now Playing y el visor son mutuamente
+  excluyentes, nunca compiten al mismo tiempo.
+- `imageviewer.rock` sigue en el árbol sin tocar (`apps/plugins/imageviewer.make`
+  sigue compilando el `.rock`) -- Metro solo dejó de lanzarlo.
+  `metro_photos_view()` (la función que lo hacía, `metro_photos.c`) se
+  eliminó por completo, sin llamadores.
+
+**Bug real encontrado y corregido verificando esto mismo, no un puerto
+directo de Aura**: `compute_decode_and_display_size()` (el cálculo de
+memoria de Aura, portado primero tal cual) solo comparaba
+`decode_w*decode_h*sizeof(fb_data)` contra el tamaño del scratch --
+probado en vivo contra un fixture 640×300 en modo cubrir,
+`read_jpeg_file()` devolvió error (`ret <= 0`, "formato no soportado"
+en pantalla -- fallo correctamente detectado, no corrupción de memoria,
+la lección de M-033 sí se sostuvo). Causa real: el tamaño de
+decodificación pedido (512×240) caía **entre** dos pasos de escala DCT
+del propio decodificador JPEG (1/1 = 640×300, 1/2 = 320×150) -- para
+llegar a un tamaño intermedio, el decodificador necesita el buffer de
+resolución NATIVA completa como paso intermedio antes de su propio
+re-escalado, no solo el tamaño final pedido. Fix: el chequeo de
+memoria ahora presupuesta contra `max(decode_w*decode_h, src_w*src_h)`
+en vez de solo `decode_w*decode_h`, y resta `JPEG_DECODE_OVERHEAD`
+(`apps/recorder/jpeg_load.h`, ~38-39KB) del presupuesto en vez de
+asumir que sobra espacio para el overhead del decodificador. Verificado
+tras el fix: mismo fixture 640×300 en cubrir decodifica y se ve
+correctamente recortado (`docs/screenshots/R2-F3-viewer-cover.png`).
+Este hallazgo no se reportó de vuelta a Aura-Firmware (regla de
+contención de la carpeta padre, y ese repo está fuera de alcance de
+esta ronda) -- queda documentado aquí por si aplica también allá.
+
+**`docs/DESVIACIONES.md` R2-1**: qué se pierde de `imageviewer.rock`
+(zoom, paneo, slideshow, soporte PNG/GIF/BMP) -- misma pérdida que
+Aura-Firmware ya aceptó para su propio visor (C.3).
+
+**Verificado** (simulador): `docs/screenshots/R2-F3-viewer-fit.png`
+(640×300, franjas arriba/abajo), `R2-F3-viewer-cover.png` (mismo
+fixture, cubierto sin franjas), `R2-F3-viewer-small-cover.png`
+(200×200, más chica que la pantalla, agrandada por muestreo sin
+franjas), `R2-F3-viewer-next.png` (SCROLL_FWD a la siguiente foto del
+mismo pivot), `R2-F3-menu-back-to-grid.png` (MENU vuelve a la
+cuadrícula con la misma selección -- el fix real del reporte del
+dueño), `R2-F3-music-keeps-playing.png` (hub sigue mostrando una pista
+en reproducción después de pasar por el visor), `R2-F3-fade-mid.png`
+(fundido de entrada a mitad de transición). Builds limpios (sim +
+target ipod6g), 271 checks host-side, 0 fallos.

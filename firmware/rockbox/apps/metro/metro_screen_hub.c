@@ -31,6 +31,7 @@
 #include "metro_video.h"
 #include "metro_photos.h"
 #include "metro_photo_thumbs.h"
+#include "metro_screen_photo_viewer.h"
 #include "metro_draw.h"
 #include "metro_theme.h"
 #include "metro_lang.h"
@@ -162,8 +163,12 @@ static void photo_pivot_get_row(void *ctx, int index, struct metro_row *out)
 
 static void photo_pivot_on_select(void *ctx, int index)
 {
+    /* R2-F3/DD-10 (M-058): Metro's own viewer, not imageviewer.rock
+     * anymore -- browses the SAME array this pivot draws from, so
+     * SCROLL_FWD/BACK inside the viewer moves through this exact
+     * category, not the unfiltered "todos" list. */
     struct photo_pivot_ctx *c = ctx;
-    metro_photos_view(c->items[index].filename);
+    metro_screen_photo_viewer_push(c->items, *c->count, index);
 }
 
 /* R2-F2/DD-7/DD-9: bitmap for the grid's get_tile() -- delegates

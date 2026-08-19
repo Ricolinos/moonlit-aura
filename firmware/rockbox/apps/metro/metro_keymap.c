@@ -81,6 +81,22 @@ static const struct button_mapping player_mapping[] = {
     LAST_ITEM_IN_LIST
 };
 
+/* VIEWER (R2-F3, DD-10): wheel moves through the same pivot/category
+ * the user entered from (prev/next photo, reusing MACT_PREV/MACT_NEXT
+ * -- same meaning as everywhere else). SELECT toggles fit<->cover.
+ * MENU/MENU-held behave exactly like LIST (back to the grid / home).
+ * PLAY still controls global playback -- music keeps playing while
+ * viewing a photo. */
+static const struct button_mapping viewer_mapping[] = {
+    { MACT_PREV,             BUTTON_SCROLL_BACK,        BUTTON_NONE },
+    { MACT_NEXT,             BUTTON_SCROLL_FWD,          BUTTON_NONE },
+    { MACT_TOGGLE_VIEW_MODE, BUTTON_SELECT | BUTTON_REL, BUTTON_SELECT },
+    { MACT_BACK,             BUTTON_MENU | BUTTON_REL,   BUTTON_MENU },
+    { MACT_HOME,             BUTTON_MENU | BUTTON_REPEAT, BUTTON_NONE },
+    { MACT_PLAYPAUSE,        BUTTON_PLAY | BUTTON_REL,   BUTTON_PLAY },
+    LAST_ITEM_IN_LIST
+};
+
 const struct button_mapping *metro_keymap_get_context_map(int context)
 {
     switch (context & ~CONTEXT_PLUGIN)
@@ -89,6 +105,7 @@ const struct button_mapping *metro_keymap_get_context_map(int context)
         case MCTX_LIST:   return list_mapping;
         case MCTX_DIALOG: return dialog_mapping;
         case MCTX_PLAYER: return player_mapping;
+        case MCTX_VIEWER: return viewer_mapping;
         default:          return NULL;
     }
 }

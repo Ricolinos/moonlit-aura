@@ -48,6 +48,7 @@
 #include "metro_device.h"
 #include "metro_transitions.h"
 #include "metro_photo_thumbs.h"
+#include "metro_screen_photo_viewer.h"
 
 /* See metro_main.h for why this must be called from apps/main.c's
  * init(), not from here. None of these settings are exposed anywhere
@@ -75,6 +76,8 @@ static void redraw_current(void)
         metro_screen_hub_show();
     else if (metro_screen_nowplaying_is_current())
         metro_screen_nowplaying_show();
+    else if (metro_screen_photo_viewer_is_current())
+        metro_screen_photo_viewer_show();
     else
         metro_screen_list_show();
 }
@@ -254,8 +257,12 @@ void metro_main(void)
     {
         bool at_root = metro_nav_is_root(metro_screen_nav());
         bool at_player = !at_root && metro_screen_nowplaying_is_current();
+        /* R2-F3: mutually exclusive with at_player -- only one sentinel
+         * page can be current at a time (metro_screen_photo_viewer.h). */
+        bool at_viewer = !at_root && metro_screen_photo_viewer_is_current();
         enum metro_context ctx = at_root ? MCTX_HUB
-                                          : (at_player ? MCTX_PLAYER : MCTX_LIST);
+                                          : (at_player ? MCTX_PLAYER
+                                                        : (at_viewer ? MCTX_VIEWER : MCTX_LIST));
         int steps = 1;
         int action = metro_input_next(ctx, HZ / 10, &steps);
 
@@ -306,8 +313,10 @@ void metro_main(void)
             /* F10: the floating index letter (metro_screen_list.c)
              * needs one more redraw right after it expires to clear
              * itself -- nothing else about the list changed to
-             * trigger that on its own otherwise. */
-            if (!at_root && !at_player)
+             * trigger that on its own otherwise. R2-F3: excluded while
+             * in the photo viewer too -- neither this nor the thumb
+             * engine below has anything to do on a full-screen photo. */
+            if (!at_root && !at_player && !at_viewer)
             {
                 bool pending = metro_screen_list_has_pending_redraw();
                 if (pending || index_letter_was_pending)
@@ -335,24 +344,31 @@ void metro_main(void)
              * announcing "I just pushed" -- one place knows the nav
              * stack shape, metro_screen_hub/list/nowplaying.c stay
              * exactly as they were before this phase. Order matters:
-             * entering/leaving the sentinel Now Playing page also
-             * changes depth (it's pushed like any other page, F5), so
-             * the player-specific checks must win over the generic
-             * push/pop ones, or "push(NP)" would slide instead of
-             * fade. A push that lands on a LIST page while ALREADY
-             * on NP (MACT_OPTIONS) falls through to the generic push
-             * case on purpose -- see metro_transitions.h. */
+             * entering/leaving a sentinel page (Now Playing, F5; the
+             * photo viewer, R2-F3) also changes depth (pushed like any
+             * other page), so the sentinel-specific checks must win
+             * over the generic push/pop ones, or "push(sentinel)"
+             * would slide instead of fade. A push that lands on a LIST
+             * page while ALREADY on a sentinel (e.g. MACT_OPTIONS from
+             * Now Playing) falls through to the generic push case on
+             * purpose -- see metro_transitions.h. Now Playing and the
+             * viewer are mutually exclusive (metro_screen_photo_viewer.h),
+             * so "either sentinel" is just player_x || viewer_x below,
+             * never both true at once. */
             metro_nav_t *nav = metro_screen_nav();
             int depth_before = metro_nav_depth(nav);
             int pivot_before = metro_nav_pivot(nav);
             bool player_before = at_player;
+            bool viewer_before = at_viewer;
             int depth_after, pivot_after;
-            bool root_after, player_after;
+            bool root_after, player_after, viewer_after;
 
             if (at_root)
                 metro_screen_hub_handle(action, steps);
             else if (at_player)
                 metro_screen_nowplaying_handle(action, steps);
+            else if (at_viewer)
+                metro_screen_photo_viewer_handle(action, steps);
             else
                 metro_screen_list_handle(action, steps);
 
@@ -360,20 +376,22 @@ void metro_main(void)
             pivot_after = metro_nav_pivot(nav);
             root_after = metro_nav_is_root(nav);
             player_after = !root_after && metro_screen_nowplaying_is_current();
+            viewer_after = !root_after && metro_screen_photo_viewer_is_current();
 
-            if (depth_after > depth_before && player_after)
+            if (depth_after > depth_before && (player_after || viewer_after))
                 metro_transitions_fade(redraw_current);
             else if (depth_after > depth_before)
             {
                 metro_transitions_push(redraw_current, 1);
                 /* F12: the cascade only makes sense on the list this
                  * push landed on, never the hub (no rows, its own
-                 * *_show()) or Now Playing (handled by the fade
-                 * branch above, never reaches here). */
-                if (!root_after && !player_after)
+                 * *_show()) or a sentinel (handled by the fade branch
+                 * above, never reaches here). */
+                if (!root_after && !player_after && !viewer_after)
                     metro_screen_list_run_feather_if_pending();
             }
-            else if (depth_after < depth_before && player_before && !player_after)
+            else if (depth_after < depth_before && (player_before || viewer_before) &&
+                     !player_after && !viewer_after)
                 metro_transitions_fade(redraw_current);
             else if (depth_after < depth_before)
                 metro_transitions_push(redraw_current, -1);

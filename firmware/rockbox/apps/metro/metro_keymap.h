@@ -54,6 +54,14 @@ enum metro_action {
     MACT_OPTIONS,                              /* SELECT (short): push the options page */
     MACT_TOGGLE_SHUFFLE,                       /* SELECT (held): toggle shuffle */
     MACT_PLAYPAUSE,                            /* PLAY (short): audio_pause()/audio_resume() */
+
+    /* R2-F3: VIEWER context only (photo viewer) -- PLAN-metro-r2-maestro.md
+     * DD-10. MACT_PREV/MACT_NEXT (already declared above) are reused
+     * for previous/next photo -- same "wheel moves through a
+     * collection" meaning they already have everywhere else; MACT_BACK/
+     * MACT_HOME/MACT_PLAYPAUSE are reused too (back to the grid, home,
+     * play/pause). Only the fit/cover toggle needs a new action. */
+    MACT_TOGGLE_VIEW_MODE,                     /* SELECT (short): fit <-> cover */
 };
 
 #define MACT_NONE ACTION_NONE
@@ -68,6 +76,7 @@ enum metro_context {
     MCTX_LIST,
     MCTX_DIALOG,
     MCTX_PLAYER,
+    MCTX_VIEWER, /* R2-F3: photo viewer (DD-10) */
 };
 
 /* get_context_map callback for get_custom_action() -- pass this

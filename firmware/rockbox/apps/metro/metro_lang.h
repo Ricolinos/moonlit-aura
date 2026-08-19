@@ -132,6 +132,9 @@ enum metro_lang_id {
     LANG_GFX_FULL,
     LANG_GFX_LITE,
 
+    LANG_PHOTO_LOADING,
+    LANG_PHOTO_UNSUPPORTED,
+
     LANG_COUNT
 };
 

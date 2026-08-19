@@ -118,6 +118,20 @@ gen_cover_jpg "0xF15BB5" "320x240" "$OUT_DIR/Photos/landscape-ai.jpg"
 gen_cover_jpg "0x00BBF9" "320x240" "$OUT_DIR/Photos/beach.jpg"
 gen_cover_jpg "0xFEE440" "320x240" "$OUT_DIR/Photos/forest.jpg"
 
+# R2-F3 "hecho": el visor propio (ajustar/cubrir) necesita fixtures con
+# proporcion DISTINTA de 4:3 (320x240 y 640x480 son ambas 4:3 -- ajustar
+# no dejaria franjas visibles en ninguna). 640x300 (mas ancha que 4:3)
+# para ajustar con franjas arriba/abajo + cubrir recortando los lados;
+# 200x200 (cuadrada, mas chica que la pantalla en las dos dimensiones)
+# para ajustar con franjas a los lados + cubrir agrandando sin franjas.
+# Con patron real (testsrc), no color plano, para que el recorte de
+# "cubrir" sea visible a simple vista.
+echo "==> Generando fixtures de proporcion para el visor (fit/cover, R2-F3)"
+ffmpeg -y -loglevel error -f lavfi -i "testsrc=size=640x300:rate=1" \
+  -pix_fmt yuvj420p -frames:v 1 "$OUT_DIR/Photos/landscape-large.jpg"
+ffmpeg -y -loglevel error -f lavfi -i "testsrc=size=200x200:rate=1" \
+  -pix_fmt yuvj420p -frames:v 1 "$OUT_DIR/Photos/small-photo.jpg"
+
 echo "==> Generando fixtures de Video (test-media/Videos)"
 mkdir -p "$OUT_DIR/Videos"
 gen_video() {
