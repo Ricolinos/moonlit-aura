@@ -1,0 +1,66 @@
+/***************************************************************************
+ *             __________               __   ___.
+ *   Open      \______   \ ____   ____ |  | _\_ |__   _______  ___
+ *   Source     |       _//  _ \_/ ___\|  |/ /| __ \ /  _ \  \/  /
+ *   Jukebox    |    |   (  <_> )  \___|    < | \_\ (  <_> > <  <
+ *   Firmware   |____|_  /\____/ \___  >__|_ \|___  /\____/__/\_ \
+ *                     \/            \/     \/    \/            \/
+ *
+ * Copyright (C) 2026 Ricardo Gomez
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
+ ****************************************************************************/
+/* Reads/writes /.rockbox/aura/aura.cfg (settings_parseline()/read_line(),
+ * regenerates the whole file on every save -- PLAN_MAESTRO.md S1.2, M-017).
+ * Aura Studio's AuraDeviceProbe reads this file to decide whether the
+ * device has ever booted Metro; the file existing with the right keys IS
+ * the contract, regardless of what those values are (E.2: it must exist
+ * from the very first boot). */
+#ifndef METRO_SETTINGS_H
+#define METRO_SETTINGS_H
+
+#include <stdbool.h>
+#include "metro_theme.h"
+#include "metro_lang.h"
+
+typedef struct {
+    enum metro_theme_kind theme;
+    enum metro_accent accent;
+    enum metro_language language;
+    int animations;  /* persisted only -- no visual effect until F11+ */
+    int graphics;     /* persisted only -- no visual effect until F11+ */
+    int tz_local_quarters; /* quarter-hours from UTC, D.4 of the contract */
+    bool first_boot_done;
+} metro_settings_t;
+
+extern metro_settings_t metro_settings;
+
+/* Loads from disk into metro_settings, falling back to defaults for
+ * any key that's missing or the file doesn't exist at all -- in which
+ * case this also creates it (E.2, first-boot guarantee). Does NOT
+ * apply theme/accent/language anywhere; the caller (metro_main.c)
+ * does that right after, in one place. */
+void metro_settings_load(void);
+
+/* Regenerates aura.cfg entirely from metro_settings -- never edits
+ * the file in place. Call after changing any field. */
+void metro_settings_save(void);
+
+/* D.4 of the contract: reads the six transient rtc_sync_* keys (and
+ * the persistent tz_local_quarters) straight from disk -- NOT from
+ * metro_settings, which may be stale relative to a marker Aura Studio
+ * just wrote. If all six are present, sets the real RTC and calls
+ * metro_settings_save() (which drops the transient keys on its own,
+ * they were never part of metro_settings_t). No-op otherwise. Call at
+ * the same two moments as the sync marker: boot and after returning
+ * from the USB screen. */
+void metro_settings_apply_pending_clock(void);
+
+#endif /* METRO_SETTINGS_H */

@@ -31,11 +31,16 @@
 #include "metro_screen_splash.h"
 #include "metro_fonts.h"
 #include "metro_theme.h"
+#include "metro_lang.h"
+#include "metro_draw.h"
 #include "metro_screen_list.h"
 #include "metro_screen_hub.h"
 #include "metro_screen_nowplaying.h"
 #include "metro_input.h"
 #include "metro_keymap.h"
+#include "metro_settings.h"
+#include "metro_sync.h"
+#include "metro_device.h"
 
 /* See metro_main.h for why this must be called from apps/main.c's
  * init(), not from here. None of these settings are exposed anywhere
@@ -67,17 +72,105 @@ static void redraw_current(void)
         metro_screen_list_show();
 }
 
+/* F6: the one full-screen wait state in Metro (PLAN_MAESTRO.md S4.3) --
+ * drawn straight from metro_main.c, not a metro_screen_* module, same
+ * as the plan's own file list for this phase (no new screen file).
+ * MENU postpones a running job (metro_sync_postpone(), the job keeps
+ * going in the background) or dismisses an error (metro_sync_dismiss()) --
+ * either way the loop below exits as soon as metro_sync_needs_screen()
+ * goes false. */
+static void draw_sync_screen(void)
+{
+    enum metro_lang_id msg = LANG_MUSIC_DB_UPDATING;
+    bool is_error = false;
+
+    switch (metro_sync_state())
+    {
+        case METRO_SYNC_ERROR_VERSION:
+            msg = LANG_SYNC_ERROR_VERSION;
+            is_error = true;
+            break;
+        case METRO_SYNC_ERROR_ATTEMPTS:
+            msg = LANG_SYNC_ERROR_ATTEMPTS;
+            is_error = true;
+            break;
+        default:
+            break;
+    }
+
+    metro_draw_clear();
+    metro_draw_header("");
+    metro_draw_text(MFONT_TITLE, 12, 100, metro_lang_str(msg), metro_color_fg());
+    if (is_error)
+        metro_draw_text(MFONT_CAPTION, 12, 140, metro_lang_str(LANG_SYNC_DISMISS_HINT),
+                         metro_color_secondary());
+    lcd_update();
+}
+
+static void run_sync_screen_if_needed(void)
+{
+    if (!metro_sync_needs_screen())
+        return;
+
+    draw_sync_screen();
+
+    while (metro_sync_needs_screen())
+    {
+        int action = metro_input_next(MCTX_DIALOG, HZ / 10, NULL);
+
+        if (action & SYS_EVENT)
+        {
+            default_event_handler(action);
+            continue;
+        }
+
+        if (action == MACT_BACK)
+        {
+            if (metro_sync_state() == METRO_SYNC_ERROR_VERSION ||
+                metro_sync_state() == METRO_SYNC_ERROR_ATTEMPTS)
+                metro_sync_dismiss();
+            else
+                metro_sync_postpone();
+            continue;
+        }
+
+        if (metro_sync_tick())
+            draw_sync_screen();
+    }
+}
+
+/* Boot, and every return from the USB screen -- the only two moments
+ * the firmware ever recovers the disk (PLAN_MAESTRO.md S1.2). */
+static void metro_disk_handoff(void)
+{
+    metro_settings_apply_pending_clock();
+    metro_device_reload();
+    metro_sync_check_pending();
+    run_sync_screen_if_needed();
+}
+
 void metro_main(void)
 {
     long last_player_tick = 0;
 
     /* metro_apply_hygiene() already ran inside init() (apps/main.c) --
      * see metro_main.h for why it can't run here, after init() returns. */
+    metro_settings_load();
     metro_screen_splash_show();
 
     metro_fonts_init();
     metro_theme_init();
+    /* metro_theme_init()/metro_lang.c's own module-level statics set
+     * the compiled defaults; applying the loaded settings right after
+     * is what makes them the actual starting values -- one place,
+     * F8 does the same thing again whenever a Settings row changes one
+     * live. */
+    metro_theme_set(metro_settings.theme);
+    metro_accent_set(metro_settings.accent);
+    metro_lang_set(metro_settings.language);
     metro_screen_list_init();
+
+    metro_disk_handoff();
 
     /* F3: the twist navigation core supersedes the F2 type/palette
      * specimen as the running UI (metro_screen_specimen.c stays in
@@ -102,12 +195,22 @@ void metro_main(void)
              * PLAN_MAESTRO.md M-006/A.1. metro_input_next() never
              * calls it itself, see metro_input.h. */
             if (default_event_handler(action) == SYS_USB_CONNECTED)
+            {
+                metro_disk_handoff();
                 redraw_current();
+            }
             continue;
         }
 
         if (action == MACT_NONE)
         {
+            /* A postponed sync job keeps running in the background
+             * with no screen showing -- still needs polling so it
+             * actually finishes (marker cleared) instead of sitting
+             * forever in METRO_SYNC_POSTPONED. */
+            if (metro_sync_job_active())
+                metro_sync_tick();
+
             /* Now Playing has no input of its own most of the time
              * (elapsed time, the progress bar, and the volume overlay's
              * 1.5s countdown all need to update on their own) -- redraw

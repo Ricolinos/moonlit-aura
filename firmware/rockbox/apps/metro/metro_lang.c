@@ -87,6 +87,10 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_VALUE_OFF]        = "desactivado",
     [LANG_REPEAT_ALL]       = "todo",
     [LANG_REPEAT_ONE]       = "uno",
+
+    [LANG_SYNC_ERROR_VERSION]  = "esta version de metro es mas vieja que aura studio",
+    [LANG_SYNC_ERROR_ATTEMPTS] = "no se pudo actualizar la biblioteca",
+    [LANG_SYNC_DISMISS_HINT]   = "menu para continuar",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -155,6 +159,10 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_VALUE_OFF]        = "off",
     [LANG_REPEAT_ALL]       = "all",
     [LANG_REPEAT_ONE]       = "one",
+
+    [LANG_SYNC_ERROR_VERSION]  = "this metro version is older than aura studio",
+    [LANG_SYNC_ERROR_ATTEMPTS] = "could not update the library",
+    [LANG_SYNC_DISMISS_HINT]   = "menu to continue",
 };
 
 void metro_lang_set(enum metro_language lang)

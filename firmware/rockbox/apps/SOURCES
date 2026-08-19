@@ -326,3 +326,8 @@ metro/metro_screen_settings.c
 metro/metro_music.c
 metro/metro_albumart.c
 metro/metro_screen_nowplaying.c
+metro/metro_settings.c
+metro/metro_sync.c
+metro/metro_sync_marker.c
+metro/metro_device.c
+metro/metro_device_name.c

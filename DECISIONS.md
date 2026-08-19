@@ -433,3 +433,16 @@ la intención. A diferencia de `tagcache_search()`/`find_albumart()`
 estilo `errno`: comparar explícitamente contra `!= 0`, nunca negar el
 resultado directamente. Cualquier código nuevo en `apps/metro/` que
 llame `playlist_get_track_info()` sigue esta misma comparación.
+
+## M-036 — F6: `metro_music_db_ready()` cede mientras `metro_sync_job_active()`
+
+Con `metro_sync.c` existiendo desde F6, hay dos caminos que podrían
+llamar `tagcache_rebuild()`/`tagcache_update()` sobre la misma base:
+el disparado por un marcador real de Aura Studio (`metro_sync.c`) y el
+disparo de emergencia de `metro_music_db_ready()` (M-032, para cuando
+nunca hubo marcador -- música copiada a mano por USB). Sin la guarda,
+ambos podrían competir por la base en el mismo arranque. Regla: mientras
+`metro_sync_job_active()` es verdadero, `metro_music_db_ready()` solo
+devuelve `tagcache_is_usable()` sin tocar tagcache -- mismo criterio
+que `aura_music_db_ready()` ya usa (`if (aura_sync_job_active()) return
+tagcache_is_usable();`).

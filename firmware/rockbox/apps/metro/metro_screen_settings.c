@@ -23,6 +23,7 @@
 #include "metro_lang.h"
 #include "metro_theme.h"
 #include "metro_widgets.h"
+#include "metro_settings.h"
 
 /* --- general: language, reset settings ------------------------------- */
 
@@ -61,6 +62,8 @@ static void general_on_select(void *ctx, int index)
     {
         metro_lang_set(metro_lang_get() == METRO_LANG_ES
                             ? METRO_LANG_EN : METRO_LANG_ES);
+        metro_settings.language = metro_lang_get();
+        metro_settings_save();
     }
     else
     {
@@ -112,12 +115,15 @@ static void display_on_select(void *ctx, int index)
     {
         metro_theme_set(metro_theme_get() == METRO_THEME_DARK
                              ? METRO_THEME_LIGHT : METRO_THEME_DARK);
+        metro_settings.theme = metro_theme_get();
     }
     else
     {
         int next = (metro_accent_get() + 1) % METRO_ACCENT_COUNT;
         metro_accent_set((enum metro_accent)next);
+        metro_settings.accent = metro_accent_get();
     }
+    metro_settings_save();
 }
 
 /* --- about: static placeholder, real one lands in F8 -------------------- */

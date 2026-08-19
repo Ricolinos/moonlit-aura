@@ -36,6 +36,7 @@
 
 #include "metro_music.h"
 #include "metro_lang.h"
+#include "metro_sync.h"
 
 /* Enough unique values for a few thousand artists/albums/genres --
  * same size Aura-Firmware settled on for the same purpose (D-021).
@@ -86,6 +87,15 @@ bool metro_music_now_playing(char *title_out, size_t title_sz,
 
 bool metro_music_db_ready(void)
 {
+    /* F6: metro_sync.c owns every tagcache_update()/tagcache_rebuild()
+     * driven by an actual Aura Studio sync -- calling either one here
+     * too while that job is in flight would race over the same
+     * database. This keeps only the "no database at all" bootstrap
+     * below, for the case nothing has ever written a sync marker
+     * (music copied by hand over USB, no Studio involved). */
+    if (metro_sync_job_active())
+        return tagcache_is_usable();
+
     /* Same reasoning as aura_music_db_ready() (D-021): Rockbox only
      * scans the library on its own from the folder-browser "Database >
      * Initialize now" screen, which Metro doesn't have. tagcache_init()

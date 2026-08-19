@@ -202,3 +202,18 @@ Durante la captura de las evidencias de F4 (`docs/screenshots/F4-*.png`), UNA co
 ## F5-5 — Aleatorio real solo al activarlo; no hay "desordenar" limpio al desactivarlo
 
 **No es una desviación del plan** (el plan no especifica el mecanismo interno), pero es una limitación real de Rockbox documentada explícitamente en el código (`metro_screen_nowplaying.c`, `toggle_shuffle()`) para que quede visible en el historial y no se lea como un bug de Metro: activar "aleatorio" llama a `playlist_shuffle()` de verdad (reordena la cola restante); desactivarlo solo dejar de tratar la bandera como activa, no restaura el orden original — Rockbox no tiene una operación de "desordenar" inversa. Mismo comportamiento que el Rockbox original.
+
+---
+
+## F6-1 — `metro_sync.c` simplificado respecto a `aura_sync.c`: sin pantalla por sección, sin invalidación de video/fotos, sin disparo manual
+
+**Plan decía** (`PLAN_MAESTRO.md` §5 F6, implícito por el nombre del módulo y su relación con `aura_sync.c` de Aura-Firmware, la referencia de puerto explícita en el proyecto): un orquestador de sincronización con el mismo nivel de detalle que `aura_sync.c` (~480 líneas: pantalla con una fila de estado por sección, invalidación de `metro_video`/`metro_photos`, limpieza de caché de carátulas, disparo manual de "reconstruir biblioteca").
+
+**Qué se hizo**: `metro_sync.c` porta la máquina de estados central (lectura del marcador, `tagcache_update()`/`tagcache_rebuild()`, contador de intentos, posponer/reintentar, recuperación tras una base corrupta) pero recorta tres cosas:
+1. **Sin pantalla por sección**: una sola pantalla de texto ("actualizando biblioteca...") en vez de una fila con estado por sección — en v1 de Metro solo `music` hace trabajo real (ver punto 2), así que una fila por sección sería UI para un solo dato.
+2. **`video`/`images` se marcan `DONE` de inmediato, sin invalidar nada**: a diferencia de Aura (que cachea listados y carátulas de video/fotos en disco), F7's `metro_video.c`/`metro_photos.c` van a re-escanear su carpeta cada vez que se entra a la página — mismo patrón que ya usa `metro_music_lists_refresh()` desde F4. Sin caché, no hay nada que invalidar.
+3. **Sin disparo manual todavía**: `aura_sync_request_manual()` (el "Reconstruir biblioteca" de Ajustes) no tiene equivalente en `metro_sync.h` — F8 es quien conecta Ajustes a `metro_sync`, y ahí se agrega si hace falta.
+
+**Por qué**: los tres recortes reflejan que Metro v1 es deliberadamente más chico que Aura (§1.2 del plan, "Metro es deliberadamente más chico") — replicar la UI de progreso por sección o la invalidación de caché de Aura sería construir infraestructura para un caché que Metro no tiene.
+
+**Impacto en `PLAN_MAESTRO.md`**: ninguno en las claves del contrato ni en el comportamiento observable de C1-C7 (todas verificadas). Si F7 termina necesitando un caché real de video/fotos (por ejemplo, para miniaturas), `metro_sync.c` gana ahí las llamadas de invalidación que le faltan — no es un cambio de diseño, es la costura ya prevista (`metro_sync.h` documenta esto en su comentario de módulo).
