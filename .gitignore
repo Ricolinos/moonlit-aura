@@ -18,3 +18,6 @@ firmware/tools/.venv/
 
 # Fuentes fuente vendoreadas (TTF de Selawik) — SÍ se versionan, no ignorar
 !firmware/assets/fonts-src/
+
+# Binarios de los tests host-side (make -C firmware/rockbox/apps/metro/test)
+firmware/rockbox/apps/metro/test/build/

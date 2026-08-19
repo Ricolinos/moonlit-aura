@@ -20,6 +20,7 @@
  * KIND, either express or implied.
  *
  ****************************************************************************/
+#include <stdbool.h>
 #include "kernel.h"
 #include "button.h"
 #include "misc.h"
@@ -28,9 +29,12 @@
 
 #include "metro_main.h"
 #include "metro_screen_splash.h"
-#include "metro_screen_specimen.h"
 #include "metro_fonts.h"
 #include "metro_theme.h"
+#include "metro_screen_list.h"
+#include "metro_screen_hub.h"
+#include "metro_input.h"
+#include "metro_keymap.h"
 
 /* See metro_main.h for why this must be called from apps/main.c's
  * init(), not from here. None of these settings are exposed anywhere
@@ -52,6 +56,14 @@ void metro_apply_hygiene(void)
 #endif
 }
 
+static void redraw_current(void)
+{
+    if (metro_nav_is_root(metro_screen_nav()))
+        metro_screen_hub_show();
+    else
+        metro_screen_list_show();
+}
+
 void metro_main(void)
 {
     /* metro_apply_hygiene() already ran inside init() (apps/main.c) --
@@ -60,21 +72,41 @@ void metro_main(void)
 
     metro_fonts_init();
     metro_theme_init();
+    metro_screen_list_init();
 
-    /* F2: the type/palette specimen stands in for a real screen until
-     * F3 lands the twist navigation core and metro_screen_hub. See
-     * PLAN_MAESTRO.md F2, docs/DESVIACIONES.md F2-1. */
-    metro_screen_specimen_show();
+    /* F3: the twist navigation core supersedes the F2 type/palette
+     * specimen as the running UI (metro_screen_specimen.c stays in
+     * the tree as a visual regression reference, just unused here --
+     * see docs/DESVIACIONES.md F2-1). */
+    redraw_current();
 
     while (1)
     {
-        int button = button_get_w_tmo(HZ);
+        bool at_root = metro_nav_is_root(metro_screen_nav());
+        int steps = 1;
+        int action = metro_input_next(at_root ? MCTX_HUB : MCTX_LIST,
+                                       HZ / 10, &steps);
 
-        /* default_event_handler() handles SYS_POWEROFF (clean shutdown)
-         * and SYS_USB_CONNECTED (mounts as storage, blocks until the
-         * cable is unplugged) -- see PLAN_MAESTRO.md M-006/A.1. Redraw
-         * after returning from USB in case anything on screen changed. */
-        if (default_event_handler(button) == SYS_USB_CONNECTED)
-            metro_screen_specimen_show();
+        if (action & SYS_EVENT)
+        {
+            /* default_event_handler() handles SYS_POWEROFF (clean
+             * shutdown) and SYS_USB_CONNECTED (mounts as storage,
+             * blocks until the cable is unplugged) -- see
+             * PLAN_MAESTRO.md M-006/A.1. metro_input_next() never
+             * calls it itself, see metro_input.h. */
+            if (default_event_handler(action) == SYS_USB_CONNECTED)
+                redraw_current();
+            continue;
+        }
+
+        if (action == MACT_NONE)
+            continue;
+
+        if (at_root)
+            metro_screen_hub_handle(action, steps);
+        else
+            metro_screen_list_handle(action, steps);
+
+        redraw_current();
     }
 }

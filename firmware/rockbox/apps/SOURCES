@@ -315,3 +315,11 @@ metro/metro_fonts.c
 metro/metro_theme.c
 metro/metro_draw.c
 metro/metro_screen_specimen.c
+metro/metro_nav.c
+metro/metro_keymap.c
+metro/metro_input.c
+metro/metro_lang.c
+metro/metro_widgets.c
+metro/metro_screen_list.c
+metro/metro_screen_hub.c
+metro/metro_screen_settings.c

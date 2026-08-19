@@ -322,3 +322,19 @@ todo glifo "casi vacío", incluido el espacio (0x20): a 20 px pasa de
 ~5 px a ~1 px. Aura-Firmware no usa `-x` (`design-system/generate.py`
 invoca solo `-p <size>`). Quitado; las 5 fuentes se regeneraron y se
 versionaron de nuevo. M-010 sigue vigente en todo lo demás.
+
+## M-029 — F3: `get_custom_action()` con contexto propio exige el bit `CONTEXT_PLUGIN`
+
+Detalle load-bearing de M-007, no obvio por la documentación de
+`apps/action.h`: `action_code_lookup()` (`apps/action.c`) solo llama al
+callback `get_context_map` que se le pasa a `get_custom_action()`
+**si** `context & CONTEXT_PLUGIN` es cierto — si no, usa
+`get_context_mapping(context)` (la tabla interna del core, que no
+conoce `MCTX_HUB`/`MCTX_LIST`/`MCTX_DIALOG` y devolvería `NULL`).
+`metro_input_next()` siempre llama
+`get_custom_action((int)ctx | CONTEXT_PLUGIN, ...)`; las tablas de
+`metro_keymap.c` terminan con `LAST_ITEM_IN_LIST` (no la variante
+`__NEXTLIST`) para que un botón sin mapear resuelva a `ACTION_NONE` en
+vez de caer a `CONTEXT_STD` — el espacio de acciones de Metro
+(`MACT_*`, arrancando en `LAST_ACTION_PLACEHOLDER+1`) es disjunto del
+del core, no hay nada útil a lo que encadenar.

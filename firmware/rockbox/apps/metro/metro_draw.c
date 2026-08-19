@@ -18,6 +18,7 @@
  *
  ****************************************************************************/
 #include <stdio.h>
+#include <stdbool.h>
 #include "lcd.h"
 #include "viewport.h"
 #include "powermgmt.h"
@@ -25,6 +26,7 @@
 
 #include "metro_draw.h"
 #include "metro_theme.h"
+#include "metro_lang.h"
 
 #define METRO_HEADER_HEIGHT 24
 
@@ -112,4 +114,64 @@ void metro_draw_header(const char *page_title)
     }
 
     metro_draw_battery(LCD_WIDTH - 4, 4);
+}
+
+#define METRO_PIVOT_Y      28
+#define METRO_PIVOT_GAP    24
+#define METRO_ROWS_FIRST_Y 84
+#define METRO_ROW_PITCH    28
+#define METRO_ROWS_VISIBLE METRO_DRAW_ROWS_VISIBLE
+#define METRO_ROWS_LEFT_X  12
+
+void metro_draw_pivots(const struct metro_page *page, int active_pivot,
+                        int x_offset)
+{
+    int i, x = METRO_ROWS_LEFT_X + x_offset;
+
+    lcd_setfont(metro_font_id(MFONT_DISPLAY));
+
+    for (i = active_pivot; i < page->npivots && x < LCD_WIDTH; i++)
+    {
+        int w, h;
+        const char *name = metro_lang_str(page->pivots[i].name);
+
+        lcd_set_foreground(i == active_pivot ? metro_color_fg()
+                                              : metro_color_tertiary());
+        lcd_getstringsize((const unsigned char *)name, &w, &h);
+        lcd_putsxy(x, METRO_PIVOT_Y, (const unsigned char *)name);
+        x += w + METRO_PIVOT_GAP;
+    }
+}
+
+void metro_draw_rows(const struct metro_pivot *pivot, int first, int sel,
+                      int x_offset)
+{
+    int count = pivot->count(pivot->ctx);
+    int i, y = METRO_ROWS_FIRST_Y;
+    int x = METRO_ROWS_LEFT_X + x_offset;
+
+    /* Draw one row past METRO_ROWS_VISIBLE on purpose -- it peeks,
+     * naturally cut by the bottom of the 240px screen (A.6), same
+     * "next thing asoma cortado" effect as the pivot header. */
+    for (i = first; i < count && i < first + METRO_ROWS_VISIBLE + 1; i++)
+    {
+        struct metro_row row;
+        bool selected = (i == sel);
+
+        pivot->get_row(pivot->ctx, i, &row);
+        metro_draw_text(selected ? MFONT_LIST_SEL : MFONT_LIST, x, y,
+                         row.title,
+                         selected ? metro_color_fg() : metro_color_secondary());
+
+        if (row.subtitle)
+        {
+            int w, h;
+            lcd_setfont(metro_font_id(MFONT_CAPTION));
+            lcd_getstringsize((const unsigned char *)row.subtitle, &w, &h);
+            metro_draw_text(MFONT_CAPTION, LCD_WIDTH - 12 - w, y + 4,
+                             row.subtitle, metro_color_tertiary());
+        }
+
+        y += METRO_ROW_PITCH;
+    }
 }

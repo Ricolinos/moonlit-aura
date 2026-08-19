@@ -1,0 +1,59 @@
+/***************************************************************************
+ *             __________               __   ___.
+ *   Open      \______   \ ____   ____ |  | _\_ |__   _______  ___
+ *   Source     |       _//  _ \_/ ___\|  |/ /| __ \ /  _ \  \/  /
+ *   Jukebox    |    |   (  <_> )  \___|    < | \_\ (  <_> > <  <
+ *   Firmware   |____|_  /\____/ \___  >__|_ \|___  /\____/__/\_ \
+ *                     \/            \/     \/    \/            \/
+ *
+ * Copyright (C) 2026 Ricardo Gomez
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
+ ****************************************************************************/
+#ifndef METRO_SCREEN_LIST_H
+#define METRO_SCREEN_LIST_H
+
+#include "metro_nav.h"
+#include "metro_page.h"
+#include "metro_keymap.h"
+
+/* Owns the app's single metro_nav_t instance (PLAN_MAESTRO.md S1.1:
+ * "la pantalla genérica dibuja cualquier proveedor") and the stack of
+ * pages pushed on top of it -- depth 1 is always the hub, which does
+ * NOT go through this screen (metro_screen_hub.c draws it directly)
+ * but DOES share this same nav_t for its own selection/windowing,
+ * via metro_screen_nav(). Depths 2+ are pages pushed with
+ * metro_screen_list_push(); each pushed depth corresponds 1:1 to a
+ * metro_nav_t frame, both stacks always move together. */
+
+void metro_screen_list_init(void);
+
+/* Shared nav instance -- metro_screen_hub.c reads/writes depth 1
+ * through this, nothing else needs it directly. */
+metro_nav_t *metro_screen_nav(void);
+
+/* Pushes page and a matching metro_nav_t frame together. Returns
+ * false (no-op) if the stack is already at METRO_NAV_MAX_DEPTH. */
+bool metro_screen_list_push(const struct metro_page *page);
+bool metro_screen_list_pop(void);
+void metro_screen_list_pop_to_root(void);
+
+/* Draws the page currently on top of the stack (pivots header + rows
+ * + page header). No-op if the stack is empty (depth 1, i.e. the hub
+ * is showing -- metro_main.c decides which screen to draw). */
+void metro_screen_list_show(void);
+
+/* Reacts to one MACT_* action against the top-of-stack page: PIVOT_*
+ * switches pivots, PREV/NEXT moves the selection, SELECT calls the
+ * current row's on_select(), BACK pops, HOME pops to the root. Does
+ * NOT redraw -- the caller (metro_main.c) decides when to. */
+void metro_screen_list_handle(int action, int steps);
+
+#endif /* METRO_SCREEN_LIST_H */

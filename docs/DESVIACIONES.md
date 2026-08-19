@@ -122,3 +122,15 @@ Tras la confirmación de F2-2 en sesión interactiva, se intentó una solución 
 **Lección metodológica registrada** (para el resto de la Fase 4): cuando un síntoma "parece del entorno", **la primera prueba es el discriminador más barato y potente** — aquí, correr el proyecto hermano que comparte el 100 % del entorno. Dos rondas de investigación (F2-2, F2-3, ~7 técnicas) se gastaron razonando sobre nombres de símbolos de un backtrace sin depurador, cuando `lldb --batch -o run -k "thread backtrace all"` (lanzar, no adjuntar) daba el backtrace real en 30 segundos y el test con Aura en 10.
 
 **Impacto en `PLAN_MAESTRO.md`**: ninguno en el plan en sí — el principio "simulador primero" sigue siendo válido y ahora está operativo. `DECISIONS.md` M-025/M-026 quedan superadas por M-027/M-028.
+
+---
+
+## F3-1 — `metro_page.h`: título/nombre de pivot como `enum metro_lang_id`, no `const char *`
+
+**Plan decía** (`PLAN_MAESTRO.md` §1.1 punto 3, boceto de tipos): `struct metro_row {const char *title; ...}`, `struct metro_pivot {const char *name; ...}`, `struct metro_page {title; ...}` — sin distinguir explícitamente el tipo exacto de `title`/`name` en las tablas de pivots/páginas.
+
+**Qué se encontró**: las tablas de pivots/páginas de F3 (`music_pivots[]`, `videos_pivots[]`, `settings_page`, etc.) son `static const` — inicializadas en tiempo de compilación. `metro_lang_str(LANG_X)` es una llamada a función, no una expresión constante — usarla como inicializador de un `const char *name` dentro de un array `static const` es un error de compilación en C. Además, aunque compilara, un `const char *` fijo en una tabla `static const` quedaría congelado en el idioma vigente al momento de construir el binario — cambiar el idioma en vivo (`metro_lang_set()`, ya cableado en Ajustes) nunca actualizaría los encabezados de pivot ni los títulos de página.
+
+**Qué se hizo**: `struct metro_page.title` y `struct metro_pivot.name` son `enum metro_lang_id` (una constante de verdad, válida en un inicializador estático). `metro_draw_pivots()`/`metro_screen_list_show()` resuelven el string con `metro_lang_str()` en el momento de dibujar, no antes — así el cambio de idioma se refleja de inmediato en el próximo redibujado, sin tocar ninguna tabla. `struct metro_row.title`/`.subtitle` no tuvieron este problema: `get_row()` corre en tiempo de dibujo (una llamada a función normal, no un inicializador), así que puede llamar a `metro_lang_str()` directamente.
+
+**Impacto en `PLAN_MAESTRO.md`**: ninguno en el comportamiento visible; es una corrección de tipo en la firma de `metro_page.h` respecto al boceto original del plan, necesaria para que compile y para que M-009 (idioma en vivo) funcione de verdad.
