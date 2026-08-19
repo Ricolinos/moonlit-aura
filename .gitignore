@@ -1,0 +1,17 @@
+# Builds (regenerables con firmware/tools/build_*.sh)
+firmware/build-sim/
+firmware/build-ipod6g/
+firmware/build-ipod6g-boot/
+firmware/toolchain/
+firmware/test-media/
+
+# Assets de distribución generados (package_dist.sh), salvo el README
+firmware/dist/*
+!firmware/dist/README.md
+
+# macOS
+.DS_Store
+*.dSYM/
+
+# Fuentes fuente vendoreadas (TTF de Selawik) — SÍ se versionan, no ignorar
+!firmware/assets/fonts-src/
