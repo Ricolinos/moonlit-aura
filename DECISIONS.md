@@ -1024,3 +1024,99 @@ no se escribe -- su ausencia sigue siendo una señal válida en sí misma.
   imposible antes del commit de cierre de R2-F1. Queda como
   verificación pendiente natural la primera vez que R2-F5 corra un
   release real (`v0.2.0`, con el árbol ya limpio en ese punto).
+
+## M-057 — R2-F2/DD-7,8,9: cuadrícula de fotos (modelo declarativo + geometría 4×80 + caché propia de miniaturas)
+
+**Nota de numeración**: `PLAN-metro-r2-maestro.md` sugería "M-053" para
+DD-9 -- ese número ya quedó tomado por DD-3 (R2-F1) en el orden real de
+ejecución, mismo caso que M-056 ya documentó. Bitácora cronológica, no
+spec (encabezado de este archivo).
+
+**DD-7 -- modelo extendido, no pantalla centinela**: `struct metro_pivot`
+(`metro_page.h`) gana dos campos **al final** -- `int tile_cols;` (0 =
+lista de filas, el comportamiento de siempre) y
+`const fb_data *(*get_tile)(void *ctx, int index);` (NULL = tile de
+acento con inicial, `metro_draw_tile()`). Todo inicializador posicional
+existente en el árbol sigue compilando -- los dos campos nuevos caen en
+0/NULL por defecto (warnings `-Wmissing-field-initializers` esperados y
+aceptados, no tratados como error). `metro_screen_list_show()` llama
+`metro_draw_tiles()` (nuevo, `metro_draw.c`) cuando `tile_cols > 0`;
+`metro_screen_list_handle()` usa `metro_nav_move_sel_grid()` (nuevo,
+`metro_nav.c`) en vez de `metro_nav_move_sel()` para ese mismo caso.
+FEATHER (F12) y el índice flotante (F10) se omiten para pivots de
+cuadrícula -- ninguno de los dos tiene sentido en un grid, ver los
+comentarios en `metro_screen_list.c`.
+
+**DD-8 -- geometría (320×240, header+pivots hasta y=84)**: 4 columnas ×
+tiles de 80×80, sin separación, al ras de los bordes
+(`METRO_TILE_SIZE`/`METRO_TILE_COLS`/`METRO_TILE_ROWS_VISIBLE`,
+`metro_draw.h`). Fila 1 en y=84, fila 2 en y=164 -- se corta sola en
+y=240 (asoma 76 de 80px), sin necesitar una fila extra de "peek" como
+`metro_draw_rows_ex()`. Selección: borde de 3px `metro_color_accent()`
+**dentro** del tile (no lo agranda). Verificado visualmente:
+`docs/screenshots/R2-F2-photos-grid.png` (8 tiles, borde de selección,
+segunda fila asomando cortada).
+
+**DD-9 -- caché de miniaturas (`metro_photo_thumbs.c/.h`, nuevo)**:
+- Directorio propio `.../aura/metrocache/photos/` (NO el `photocache/`
+  de Aura -- formato/tamaño distintos, y la limpieza de convivencia lo
+  borraría de todas formas). Ruta armada solo en
+  `metro_settings_metro_cache_dir()` (`metro_settings.c`), regla de
+  rutas de contrato del `CLAUDE.md`.
+- Formato: `fb_data` crudo 80×80 (12 800 B/foto), nombre
+  `<archivo>.<mtime>.mth` -- la mtime en el nombre ES la invalidación.
+  `metro_photo_item_t` (`metro_photos.h`) gana un campo `mtime`, ya
+  disponible gratis: `metro_fsutil_list_by_ext()` ya llamaba
+  `dir_get_info()` por cada entrada (M-053, R2-F1) para el chequeo de
+  `ATTR_DIRECTORY` -- se agregó `metro_fsutil_list_by_ext_mtime()`
+  (variante con un `out_mtimes[]` opcional) en vez de un segundo scan.
+- Generación bajo demanda, presupuestada: `metro_photo_thumbs_get()`
+  devuelve de inmediato lo que ya esté en la ventana RAM (16
+  miniaturas, ~205KB) o en caché de disco (lectura cruda, no
+  decodificación -- barata, se intenta síncrona); si no hay nada,
+  encola el nombre y devuelve `NULL` (el llamador cae al tile de acento
+  con inicial). `metro_photo_thumbs_tick()`, llamado una vez por
+  iteración ociosa de `metro_main()` (mismo poll que el redibujado del
+  índice flotante de F10), decodifica **como máximo una** miniatura
+  pendiente por llamada y pide redibujo solo si de verdad decodificó
+  algo. Verificado: `docs/screenshots/R2-F2-photos-grid-loading.png`
+  (8 placeholders con inicial, caché de disco vacía a propósito) vs.
+  `R2-F2-photos-grid.png` (mismos 8, ya decodificados) tras más ticks.
+- **"Cubrir" sin probe de dimensiones JPEG**: en vez de portar el
+  `probe_jpeg_dimensions()` propio de Aura (`aura_photos.c`, parser de
+  cabecera JPEG a mano, sin equivalente en Rockbox stock) para calcular
+  el recorte de cobertura de antemano, se decodifica UNA vez con
+  `read_jpeg_file(FORMAT_NATIVE|FORMAT_RESIZE|FORMAT_KEEP_ASPECT)` a un
+  scratch de `80*80*2*2` bytes (margen M-033) -- el resultado siempre
+  trae una dimensión exactamente en 80 y la otra ≤80 -- y luego
+  `cover_crop()` (`metro_photo_thumbs.c`) hace un remuestreo nearest-
+  neighbor puramente entero desde ESE bitmap ya chico hasta el recorte
+  centrado 80×80 final, sin una segunda decodificación de mayor
+  resolución. Sacrifica algo de nitidez en el eje recortado a cambio de
+  quedarse en una sola decodificación barata -- aceptable a 80px; el
+  visor propio de fotos (R2-F3, DD-10) sí necesita precisión real ahí
+  y por eso ese sí lee el algoritmo Q16.16 de `aura_photos.c` como
+  referencia, esta miniatura no.
+- Limpieza de huérfanos: `remove_stale()` corre solo en el momento de
+  una decodificación real (ya es el camino lento) -- escanea el
+  directorio de caché una vez y borra cualquier otro `.mth` con el
+  mismo nombre base que el que se acaba de escribir. Verificado en
+  vivo: se tocó `beach.jpg` (mtime nuevo, simulando un re-sync),
+  se re-entró a la cuadrícula, y el `.mth` viejo desapareció al
+  terminar de decodificar el nuevo -- solo queda un archivo por foto.
+- Persistencia entre arranques verificada: mismos mtimes de archivo
+  exactos en los 14 `.mth` antes/después de un segundo arranque
+  completo del simulador entrando a la cuadrícula -- ninguno se
+  regeneró.
+
+**Fixtures**: `gen_test_media.sh` pasa de 5 a 14 fotos `.jpg` reales
+(sigue habiendo `.bmp`/`.png` no soportados, y una sin categoría a
+propósito) -- "todos" abarca casi 2 pantallas completas de la
+cuadrícula (14 > 8 tiles/pantalla), demostrando el asoma de la segunda
+fila. `photo_categories.cfg` reparte las nuevas entre las 3 categorías.
+
+**`test_nav.c`**: 5 casos nuevos para `metro_nav_move_sel_grid()` --
+alineación de `first_visible` a filas, clamp en ambos extremos, `count`
+no múltiplo de `cols` (21/4, caso real de biblioteca), lista vacía. 89
+checks totales, 0 fallos (`metro_nav_move_sel()` intacto, cero
+regresión en los casos ya existentes).

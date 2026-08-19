@@ -34,6 +34,10 @@
 typedef struct {
     char filename[METRO_FSUTIL_NAME_LEN];
     metro_photo_cat_t category;
+    /* R2-F2/DD-9: source file's mtime -- metro_photo_thumbs.c's cache
+     * invalidation key (a re-synced file with the same name but new
+     * content must not serve a stale cached thumbnail). */
+    long mtime;
 } metro_photo_item_t;
 
 /* Re-scans /Photos fresh (natural order, .jpg/.jpeg) and reloads the

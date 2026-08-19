@@ -287,3 +287,48 @@ void metro_draw_tile(int x, int y, int size, const char *label)
         lcd_putsxy(x + (size - w) / 2, y + (size - h) / 2, (const unsigned char *)initial);
     }
 }
+
+/* R2-F2/DD-7/DD-8 (M-057): grid counterpart of metro_draw_rows() --
+ * see the geometry rationale in metro_draw.h. `first` is always a
+ * multiple of METRO_TILE_COLS (metro_nav_move_sel_grid() guarantees
+ * this), so slot->index->col/row is a straight linear mapping, no
+ * wraparound bookkeeping needed. */
+void metro_draw_tiles(const struct metro_pivot *pivot, int first, int sel,
+                       int x_offset)
+{
+    int count = pivot->count(pivot->ctx);
+    int slot;
+
+    for (slot = 0; slot < METRO_TILE_COLS * METRO_TILE_ROWS_VISIBLE; slot++)
+    {
+        int index = first + slot;
+        int col, row, x, y;
+        const fb_data *bmp;
+
+        if (index >= count)
+            break;
+
+        col = slot % METRO_TILE_COLS;
+        row = slot / METRO_TILE_COLS;
+        x = x_offset + col * METRO_TILE_SIZE;
+        y = METRO_ROWS_FIRST_Y + row * METRO_TILE_SIZE;
+
+        bmp = pivot->get_tile ? pivot->get_tile(pivot->ctx, index) : NULL;
+        if (bmp)
+            lcd_bitmap(bmp, x, y, METRO_TILE_SIZE, METRO_TILE_SIZE);
+        else
+        {
+            struct metro_row row_info;
+            pivot->get_row(pivot->ctx, index, &row_info);
+            metro_draw_tile(x, y, METRO_TILE_SIZE, row_info.title);
+        }
+
+        if (index == sel)
+        {
+            int b;
+            lcd_set_foreground(metro_color_accent());
+            for (b = 0; b < 3; b++)
+                lcd_drawrect(x + b, y + b, METRO_TILE_SIZE - 2 * b, METRO_TILE_SIZE - 2 * b);
+        }
+    }
+}

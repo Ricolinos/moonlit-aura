@@ -104,6 +104,20 @@ gen_cover_jpg "0xCCCCCC" "320x240" "$OUT_DIR/Photos/diagram.jpg"
 gen_cover_jpg "0xFF66CC" "320x240" "$OUT_DIR/Photos/dreamscape.jpg"
 gen_cover_jpg "0x336699" "320x240" "$OUT_DIR/Photos/sin categoria.jpg"
 
+# R2-F2/DD-9 "hecho": >= 12 fotos totales para que el pivot "todos" de
+# la cuadricula (4 cols) abarque mas de una pantalla y se vea el asomo
+# de la fila siguiente (misma logica que la lista, "asoma cortado").
+# Repartidas entre las 3 categorias (no solo colores parejos, para que
+# las capturas de la cuadricula muestren miniaturas distinguibles).
+gen_cover_jpg "0xE07A5F" "320x240" "$OUT_DIR/Photos/mountain.jpg"
+gen_cover_jpg "0x3D5A80" "320x240" "$OUT_DIR/Photos/ocean.jpg"
+gen_cover_jpg "0x81B29A" "320x240" "$OUT_DIR/Photos/receipt.jpg"
+gen_cover_jpg "0xF2CC8F" "320x240" "$OUT_DIR/Photos/whiteboard.jpg"
+gen_cover_jpg "0x9B5DE5" "320x240" "$OUT_DIR/Photos/portrait-ai.jpg"
+gen_cover_jpg "0xF15BB5" "320x240" "$OUT_DIR/Photos/landscape-ai.jpg"
+gen_cover_jpg "0x00BBF9" "320x240" "$OUT_DIR/Photos/beach.jpg"
+gen_cover_jpg "0xFEE440" "320x240" "$OUT_DIR/Photos/forest.jpg"
+
 echo "==> Generando fixtures de Video (test-media/Videos)"
 mkdir -p "$OUT_DIR/Videos"
 gen_video() {
@@ -135,6 +149,12 @@ sunset.jpg: photo
 diagram.jpg: image
 dreamscape.jpg: ai
 photo1.jpg: photo
+mountain.jpg: photo
+ocean.jpg: photo
+receipt.jpg: image
+whiteboard.jpg: image
+portrait-ai.jpg: ai
+landscape-ai.jpg: ai
 EOF
 
 # F4: biblioteca musical de prueba para metro_music.c (proveedores sobre

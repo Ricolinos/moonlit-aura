@@ -45,4 +45,13 @@
 int metro_fsutil_list_by_ext(const char *dir, const char *const *exts, int n_exts,
                               char out[][METRO_FSUTIL_NAME_LEN], int max);
 
+/* R2-F2/DD-9: same scan as metro_fsutil_list_by_ext(), plus each
+ * entry's mtime in out_mtimes (parallel array, same indices as out) --
+ * metro_photo_thumbs.c's cache invalidation key. out_mtimes may be
+ * NULL (metro_fsutil_list_by_ext() itself is exactly this call with
+ * NULL). */
+int metro_fsutil_list_by_ext_mtime(const char *dir, const char *const *exts, int n_exts,
+                                    char out[][METRO_FSUTIL_NAME_LEN], long out_mtimes[],
+                                    int max);
+
 #endif /* METRO_FSUTIL_H */

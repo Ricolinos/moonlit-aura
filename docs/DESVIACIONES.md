@@ -305,3 +305,17 @@ Durante la captura de las evidencias de F4 (`docs/screenshots/F4-*.png`), UNA co
 **Por qué es equivalente, no una desviación de fondo**: el efecto que DD-1 pide (nunca dibujar texto de `apps/metro/` bajo `DRMODE_SOLID` después de que un plugin externo corrió y pudo haberlo dejado así) es idéntico — solo cambia el archivo físico donde vive la línea, porque esa es la ubicación real del punto de retorno de `plugin_load()`, no `metro_main.c`. Ver `DECISIONS.md` M-051 para el detalle técnico completo del fix de DRMODE_FG.
 
 **Impacto en `PLAN-metro-r2-maestro.md`**: ninguno en el criterio de "hecho" de R2-F1 — el requisito ("nunca DRMODE_SOLID en texto de apps/metro/ tras volver de un plugin") queda cubierto igual; solo se corrige la ubicación de archivo asumida por el texto del plan.
+
+---
+
+## R2-2 — Cuadrícula de fotos: geometría 4×80 (Metro/Zune HD), no la 5×55 con margen de Aura
+
+**Plan decía** (`PLAN-metro-r2-maestro.md` DD-8): la geometría de la cuadrícula queda fijada de entrada en **4 columnas × tiles de 80×80px, sin separación, al ras de los bordes** — explícitamente distinta de la celda de 55px con margen que usa la cuadrícula de fotos de Aura-Firmware (D-323, precedente citado por el propio DD-7). El mismo DD-8 deja anotado que, si tras verla el dueño prefiere 5 columnas × 64px (10 tiles visibles + asoma), es un cambio de dos constantes — decisión abierta DA-1 en §7 del plan.
+
+**Por qué la diferencia es deliberada, no un error de lectura del precedente**: la cuadrícula de Aura replica el layout de miniaturas con margen de Apple Fotos/iOS (celdas separadas, esquinas redondeadas conceptualmente) — coherente con el sistema de diseño Apple2026 de ese repositorio. Metro sigue el lenguaje visual Zune HD/Windows Phone en todo lo demás (`CLAUDE.md`, tiles del hub, Now Playing) — ahí las cuadrículas (Music Flow, Pictures hub) son tiles **pegados, sin margen, al ras del borde de pantalla**, no tarjetas separadas. Usar la celda de Aura tal cual hubiera sido inconsistente con cada otra superficie que Metro ya tiene construida.
+
+**Qué se hizo**: `METRO_TILE_SIZE = 80`, `METRO_TILE_COLS = 4`, `METRO_TILE_ROWS_VISIBLE = 2` (`metro_draw.h`, `metro_draw_tiles()`). Verificado visualmente: `docs/screenshots/R2-F2-photos-grid.png` — 4 tiles por fila llenan exactamente los 320px de ancho de pantalla (320/4=80, sin resto), segunda fila asoma cortada en y=240 por la propia geometría (164+80=244), sin necesitar la fila extra de "peek" que sí usa la lista de filas.
+
+**DA-1, decisión abierta (no cerrada en esta fase)**: si tras la revisión visual de la PARADA de R2-F2 el dueño prefiere 5×64 (más tiles visibles, cuadrícula más densa), es un cambio de únicamente `METRO_TILE_SIZE`/`METRO_TILE_COLS` en `metro_draw.h` — ningún otro archivo asume el valor 80 o 4 directamente (`metro_photo_thumbs.c` decodifica al tamaño de `METRO_TILE_SIZE`, no a un literal propio).
+
+**Impacto en `PLAN-metro-r2-maestro.md`**: ninguno — el propio DD-8 preveía esta comparación explícitamente y dejó la puerta abierta a cambiarla sin que sea una desviación real del plan, solo una decisión de diseño que el dueño puede revisar en la PARADA.

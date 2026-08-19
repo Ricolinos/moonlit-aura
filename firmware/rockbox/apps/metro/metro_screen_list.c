@@ -131,10 +131,14 @@ void metro_screen_list_show(void)
 
     if (pivot->count(pivot->ctx) == 0)
         metro_widgets_draw_empty_state(metro_lang_str(LANG_EMPTY_LIST));
+    else if (pivot->tile_cols > 0)
+        metro_draw_tiles(pivot, metro_nav_first_visible(&s_nav), metro_nav_sel(&s_nav), 0);
     else
         metro_draw_rows(pivot, metro_nav_first_visible(&s_nav), metro_nav_sel(&s_nav), 0);
 
-    if (current_tick < s_index_letter_until)
+    /* R2-F2/DD-7: the floating index letter doesn't apply to grids
+     * (also never gets armed for one -- see metro_screen_list_handle()) */
+    if (pivot->tile_cols == 0 && current_tick < s_index_letter_until)
         metro_widgets_draw_index_letter(s_index_letter);
 
     lcd_update();
@@ -156,6 +160,17 @@ void metro_screen_list_handle(int action, int steps)
     {
         case MACT_PREV:
         case MACT_NEXT:
+            /* R2-F2/DD-7: grid pivots move the same linear index one
+             * tile at a time (reading order, not a column jump) but
+             * window by whole rows of tile_cols -- the floating index
+             * letter (F10) doesn't apply here, it's a row-list-only
+             * affordance. */
+            if (pivot->tile_cols > 0)
+            {
+                metro_nav_move_sel_grid(&s_nav, action == MACT_PREV ? -steps : steps,
+                                         count, pivot->tile_cols, METRO_TILE_ROWS_VISIBLE);
+                break;
+            }
             metro_nav_move_sel(&s_nav, action == MACT_PREV ? -steps : steps,
                                 count, METRO_DRAW_ROWS_VISIBLE);
             if (steps >= METRO_INDEX_LETTER_MIN_STEPS && count > 0)
@@ -222,6 +237,8 @@ void metro_screen_list_run_feather_if_pending(void)
     count = pivot->count(pivot->ctx);
     if (count == 0)
         return; /* empty-state tile drew instead -- nothing to cascade */
+    if (pivot->tile_cols > 0)
+        return; /* R2-F2/DD-7: FEATHER is a row-list affordance, not for grids */
 
     first = metro_nav_first_visible(&s_nav);
     sel = metro_nav_sel(&s_nav);

@@ -20,6 +20,7 @@
 #ifndef METRO_PAGE_H
 #define METRO_PAGE_H
 
+#include "lcd.h" /* fb_data, R2-F2/DD-7 -- struct metro_pivot's get_tile() */
 #include "metro_lang.h"
 
 /* Declarative model for any twist page (PLAN_MAESTRO.md S1.1 point 3):
@@ -60,6 +61,21 @@ struct metro_pivot {
      * via metro_screen_list_push() (METRO_ROW_NAV). */
     void (*on_select)(void *ctx, int index);
     void *ctx;
+
+    /* R2-F2/DD-7: appended at the end on purpose -- every existing
+     * positional initializer of struct metro_pivot across the codebase
+     * stays valid (these two fields default to 0/NULL, meaning "plain
+     * row list", the behaviour every pivot had before this phase).
+     * tile_cols > 0 switches this pivot to a grid of square tiles
+     * (metro_screen_list.c calls metro_draw_tiles()/
+     * metro_nav_move_sel_grid() instead of the row-list path) --
+     * get_tile() then supplies each tile's already-decoded bitmap
+     * (RAM-resident, DD-9's thumbnail engine owns decoding/caching),
+     * or NULL to fall back to an accent tile with the row's initial
+     * letter (metro_draw_tile(), same placeholder plain rows never
+     * needed because they don't have a "picture"). */
+    int tile_cols;
+    const fb_data *(*get_tile)(void *ctx, int index);
 };
 
 struct metro_page {

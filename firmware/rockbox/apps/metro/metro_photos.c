@@ -39,18 +39,20 @@ static const char *const k_exts[] = { ".jpg", ".jpeg" };
 int metro_photos_list(metro_photo_item_t *out, int max)
 {
     static char names[METRO_PHOTOS_MAX][METRO_FSUTIL_NAME_LEN];
+    static long mtimes[METRO_PHOTOS_MAX];
     int n, i;
 
     if (max > METRO_PHOTOS_MAX)
         max = METRO_PHOTOS_MAX;
 
     metro_media_categories_load_photo();
-    n = metro_fsutil_list_by_ext(PHOTOS_DIR, k_exts, 2, names, max);
+    n = metro_fsutil_list_by_ext_mtime(PHOTOS_DIR, k_exts, 2, names, mtimes, max);
 
     for (i = 0; i < n; i++)
     {
         strlcpy(out[i].filename, names[i], sizeof(out[i].filename));
         out[i].category = metro_media_categories_photo_lookup(names[i]);
+        out[i].mtime = mtimes[i];
     }
     return n;
 }

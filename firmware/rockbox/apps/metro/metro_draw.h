@@ -109,4 +109,27 @@ void metro_draw_progress(int x, int y, int width, int height, int pct);
  * inicial del album"). */
 void metro_draw_tile(int x, int y, int size, const char *label);
 
+/* R2-F2/DD-8: grid geometry -- 4 flush 80x80 tiles per row (Metro/Zune
+ * HD: no gap, no margin, unlike Aura's 55px-with-margin photo grid),
+ * 2 full rows visible before the natural screen-edge clip at y=240
+ * peeks the start of a 3rd (row 2 sits at y=164, 164+80=244 -- the
+ * bottom 76px show, same "asoma cortado" rule metro_draw_rows_ex()
+ * already uses, no extra peek row needed here since the geometry does
+ * it on its own). */
+#define METRO_TILE_SIZE         80
+#define METRO_TILE_COLS         4
+#define METRO_TILE_ROWS_VISIBLE 2
+
+/* Grid counterpart of metro_draw_rows() -- `first` MUST already be
+ * aligned to a multiple of METRO_TILE_COLS (metro_nav_move_sel_grid()
+ * guarantees this), `sel` the selected linear index. Draws up to
+ * METRO_TILE_COLS*METRO_TILE_ROWS_VISIBLE tiles starting at `first`:
+ * pivot->get_tile() supplies each tile's bitmap (already decoded/cached
+ * RAM, DD-9), or metro_draw_tile() with that row's title is the
+ * fallback when it returns NULL (thumbnail not ready yet, or the
+ * pivot has none). The selected tile gets a 3px metro_color_accent()
+ * border drawn INSIDE its bounds -- the tile stays 80x80, never grows. */
+void metro_draw_tiles(const struct metro_pivot *pivot, int first, int sel,
+                       int x_offset);
+
 #endif /* METRO_DRAW_H */

@@ -84,4 +84,17 @@ int  metro_nav_first_visible(const metro_nav_t *nav);
 void metro_nav_move_sel(metro_nav_t *nav, int delta, int row_count, int visible_rows);
 void metro_nav_set_sel(metro_nav_t *nav, int index, int row_count, int visible_rows);
 
+/* R2-F2/DD-7: grid counterpart of metro_nav_move_sel() for pivots with
+ * tile_cols > 0 -- delta still moves the LINEAR index by one tile at a
+ * time (wheel = next/previous tile in reading order, same as a plain
+ * list, not a column jump), clamped to [0, count-1]. The difference is
+ * windowing: first_visible tracks whole GRID ROWS (count/cols each),
+ * kept within [0, ceil(count/cols)-visible_rows] and always a multiple
+ * of cols -- metro_draw_tiles() depends on that alignment to map
+ * first_visible straight to a (row, col) start with no remainder
+ * bookkeeping. metro_nav_move_sel() is untouched; a pivot never mixes
+ * both in the same frame slot (tile_cols is fixed per pivot). */
+void metro_nav_move_sel_grid(metro_nav_t *nav, int delta, int count, int cols,
+                              int visible_rows);
+
 #endif /* METRO_NAV_H */

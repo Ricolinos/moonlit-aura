@@ -25,6 +25,7 @@
 #include "misc.h"
 #include "rbpaths.h"
 #include "rtc.h"
+#include "string-extra.h"
 #include "timefuncs.h"
 
 #include "metro_settings.h"
@@ -178,4 +179,9 @@ void metro_ensure_media_dirs(void)
         if (!dir_exists(dirs[i]))
             mkdir(dirs[i]);
     }
+}
+
+void metro_settings_metro_cache_dir(char *out, size_t outsz)
+{
+    strlcpy(out, METRO_DIR "/metrocache/photos", outsz);
 }

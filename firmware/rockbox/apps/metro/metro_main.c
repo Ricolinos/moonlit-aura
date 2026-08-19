@@ -47,6 +47,7 @@
 #include "metro_sync.h"
 #include "metro_device.h"
 #include "metro_transitions.h"
+#include "metro_photo_thumbs.h"
 
 /* See metro_main.h for why this must be called from apps/main.c's
  * init(), not from here. None of these settings are exposed anywhere
@@ -312,6 +313,17 @@ void metro_main(void)
                 if (pending || index_letter_was_pending)
                     redraw_current();
                 index_letter_was_pending = pending;
+
+                /* R2-F2/DD-9: budget one photo thumbnail decode per
+                 * idle tick, same poll as the index-letter redraw
+                 * above -- a no-op (returns false immediately) on any
+                 * screen that isn't the Photos grid, since nothing
+                 * ever gets queued outside of it. Redraw only when it
+                 * actually decoded something, so a freshly-ready tile
+                 * replaces its placeholder without redrawing every
+                 * single idle tick for nothing. */
+                if (metro_photo_thumbs_tick())
+                    redraw_current();
             }
 
             continue;

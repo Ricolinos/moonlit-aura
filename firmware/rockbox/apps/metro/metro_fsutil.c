@@ -33,6 +33,11 @@
 #define METRO_FSUTIL_SCAN_CEILING 4096
 
 static char s_scan[METRO_FSUTIL_SCAN_CEILING][METRO_FSUTIL_NAME_LEN];
+/* R2-F2/DD-9: mtime alongside each name, same scan -- metro_photo_thumbs.c
+ * needs it as the thumbnail cache's invalidation key, and dir_get_info()
+ * is already called per entry below for the ATTR_DIRECTORY check
+ * (M-053), so this is free. */
+static long s_scan_mtime[METRO_FSUTIL_SCAN_CEILING];
 
 static bool matches_any_ext(const char *name, const char *const *exts, int n_exts)
 {
@@ -48,26 +53,36 @@ static bool matches_any_ext(const char *name, const char *const *exts, int n_ext
     return false;
 }
 
-static void sort_natural(char names[][METRO_FSUTIL_NAME_LEN], int n)
+static void sort_natural(char names[][METRO_FSUTIL_NAME_LEN], long mtimes[], int n)
 {
     int a, b;
 
     for (a = 1; a < n; a++)
     {
         char key[METRO_FSUTIL_NAME_LEN];
+        long key_mtime = mtimes[a];
         strlcpy(key, names[a], sizeof(key));
         b = a - 1;
         while (b >= 0 && strnatcasecmp(names[b], key) > 0)
         {
             strlcpy(names[b + 1], names[b], METRO_FSUTIL_NAME_LEN);
+            mtimes[b + 1] = mtimes[b];
             b--;
         }
         strlcpy(names[b + 1], key, METRO_FSUTIL_NAME_LEN);
+        mtimes[b + 1] = key_mtime;
     }
 }
 
 int metro_fsutil_list_by_ext(const char *dir, const char *const *exts, int n_exts,
                               char out[][METRO_FSUTIL_NAME_LEN], int max)
+{
+    return metro_fsutil_list_by_ext_mtime(dir, exts, n_exts, out, NULL, max);
+}
+
+int metro_fsutil_list_by_ext_mtime(const char *dir, const char *const *exts, int n_exts,
+                                    char out[][METRO_FSUTIL_NAME_LEN], long out_mtimes[],
+                                    int max)
 {
     DIR *d;
     struct DIRENT *entry;
@@ -94,16 +109,21 @@ int metro_fsutil_list_by_ext(const char *dir, const char *const *exts, int n_ext
             continue;
 
         strlcpy(s_scan[n], entry->d_name, METRO_FSUTIL_NAME_LEN);
+        s_scan_mtime[n] = (long)info.mtime;
         n++;
     }
     closedir(d);
 
-    sort_natural(s_scan, n);
+    sort_natural(s_scan, s_scan_mtime, n);
 
     if (n > max)
         n = max;
     for (i = 0; i < n; i++)
+    {
         strlcpy(out[i], s_scan[i], METRO_FSUTIL_NAME_LEN);
+        if (out_mtimes)
+            out_mtimes[i] = s_scan_mtime[i];
+    }
 
     return n;
 }

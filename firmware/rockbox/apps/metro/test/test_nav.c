@@ -198,6 +198,93 @@ static void test_set_sel_direct(void)
     CHECK(metro_nav_sel(&nav) == 29);
 }
 
+/* R2-F2/DD-7: metro_nav_move_sel_grid() -- same windowing contract as
+ * metro_nav_move_sel() (clamp, remember-per-pivot, push/pop) already
+ * covered above via the untouched metro_nav_move_sel() itself; these
+ * cover what's actually NEW: row-aligned windowing (first_visible is
+ * always a multiple of `cols`, never a mid-row remainder) and a
+ * count that isn't a multiple of cols (the grid's real-world case --
+ * a photo library rarely lands on an exact multiple of 4). */
+
+static void test_grid_init(void)
+{
+    metro_nav_t nav;
+    metro_nav_init(&nav, 1);
+    metro_nav_push(&nav, 1);
+
+    CHECK(metro_nav_sel(&nav) == 0);
+    CHECK(metro_nav_first_visible(&nav) == 0);
+}
+
+static void test_grid_move_row_alignment(void)
+{
+    metro_nav_t nav;
+    metro_nav_init(&nav, 1);
+    metro_nav_push(&nav, 1);
+
+    /* 21 tiles, 4 cols, 2 visible rows (real geometry, DD-8) */
+    metro_nav_move_sel_grid(&nav, 1, 21, 4, 2);
+    CHECK(metro_nav_sel(&nav) == 1);
+    CHECK(metro_nav_first_visible(&nav) == 0); /* row 0, still in window */
+
+    metro_nav_move_sel_grid(&nav, 6, 21, 4, 2); /* sel -> 7, row 1 -- still in [0,2) */
+    CHECK(metro_nav_sel(&nav) == 7);
+    CHECK(metro_nav_first_visible(&nav) == 0);
+
+    metro_nav_move_sel_grid(&nav, 1, 21, 4, 2); /* sel -> 8, row 2 -- pushes the window */
+    CHECK(metro_nav_sel(&nav) == 8);
+    CHECK(metro_nav_first_visible(&nav) == 4); /* row 1 * cols, first row scrolled off */
+    CHECK(metro_nav_first_visible(&nav) % 4 == 0); /* always row-aligned */
+}
+
+static void test_grid_move_clamps_at_edges(void)
+{
+    metro_nav_t nav;
+    metro_nav_init(&nav, 1);
+    metro_nav_push(&nav, 1);
+
+    metro_nav_move_sel_grid(&nav, -5, 21, 4, 2); /* clamped to 0 */
+    CHECK(metro_nav_sel(&nav) == 0);
+    CHECK(metro_nav_first_visible(&nav) == 0);
+
+    metro_nav_move_sel_grid(&nav, 999, 21, 4, 2); /* clamped to count-1 */
+    CHECK(metro_nav_sel(&nav) == 20);
+    /* count=21, cols=4 -> 6 rows (0..5); max first row = 6-2 = 4 -> *cols = 16 */
+    CHECK(metro_nav_first_visible(&nav) == 16);
+    CHECK(metro_nav_first_visible(&nav) % 4 == 0);
+}
+
+static void test_grid_count_not_multiple_of_cols(void)
+{
+    metro_nav_t nav;
+    metro_nav_init(&nav, 1);
+    metro_nav_push(&nav, 1);
+
+    /* 21 isn't a multiple of 4 -- row 5 (the last) only has 1 tile
+     * (index 20), not a full row of 4. Landing sel exactly on it must
+     * not push first_visible past the real last row. */
+    metro_nav_move_sel_grid(&nav, 20, 21, 4, 2);
+    CHECK(metro_nav_sel(&nav) == 20);
+    CHECK(metro_nav_first_visible(&nav) == 16);
+
+    /* One step back (sel -> 19, still row 4) must not move the window
+     * either -- row 4 is already the first visible row. */
+    metro_nav_move_sel_grid(&nav, -1, 21, 4, 2);
+    CHECK(metro_nav_sel(&nav) == 19);
+    CHECK(metro_nav_first_visible(&nav) == 16);
+}
+
+static void test_grid_selection_empty(void)
+{
+    metro_nav_t nav;
+    metro_nav_init(&nav, 1);
+    metro_nav_push(&nav, 1);
+
+    metro_nav_move_sel_grid(&nav, 5, 0, 4, 2); /* count == 0 */
+    CHECK(metro_nav_sel(&nav) == 0);
+    CHECK(metro_nav_first_visible(&nav) == 0);
+}
+
 int main(void)
 {
     test_init();
@@ -211,6 +298,11 @@ int main(void)
     test_selection_remembered_per_pivot();
     test_selection_remembered_across_push_pop();
     test_set_sel_direct();
+    test_grid_init();
+    test_grid_move_row_alignment();
+    test_grid_move_clamps_at_edges();
+    test_grid_count_not_multiple_of_cols();
+    test_grid_selection_empty();
 
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

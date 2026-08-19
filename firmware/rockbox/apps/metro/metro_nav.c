@@ -176,3 +176,44 @@ void metro_nav_move_sel(metro_nav_t *nav, int delta, int row_count, int visible_
     int current = metro_nav_sel(nav);
     metro_nav_set_sel(nav, current + delta, row_count, visible_rows);
 }
+
+void metro_nav_move_sel_grid(metro_nav_t *nav, int delta, int count, int cols,
+                              int visible_rows)
+{
+    struct metro_nav_frame *f = current_frame(nav);
+    int p = f->pivot;
+    int sel, sel_row, first_row, total_rows, max_first_row;
+
+    if (count <= 0 || cols <= 0)
+    {
+        f->sel[p] = 0;
+        f->first_visible[p] = 0;
+        return;
+    }
+
+    sel = f->sel[p] + delta;
+    if (sel < 0)
+        sel = 0;
+    if (sel > count - 1)
+        sel = count - 1;
+    f->sel[p] = sel;
+
+    sel_row = sel / cols;
+    first_row = f->first_visible[p] / cols;
+
+    if (sel_row < first_row)
+        first_row = sel_row;
+    else if (visible_rows > 0 && sel_row >= first_row + visible_rows)
+        first_row = sel_row - visible_rows + 1;
+
+    total_rows = (count + cols - 1) / cols;
+    max_first_row = total_rows - visible_rows;
+    if (max_first_row < 0)
+        max_first_row = 0;
+    if (first_row > max_first_row)
+        first_row = max_first_row;
+    if (first_row < 0)
+        first_row = 0;
+
+    f->first_visible[p] = first_row * cols;
+}

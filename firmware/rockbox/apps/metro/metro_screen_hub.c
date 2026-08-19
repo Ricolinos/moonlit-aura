@@ -30,6 +30,7 @@
 #include "metro_music.h"
 #include "metro_video.h"
 #include "metro_photos.h"
+#include "metro_photo_thumbs.h"
 #include "metro_draw.h"
 #include "metro_theme.h"
 #include "metro_lang.h"
@@ -165,12 +166,28 @@ static void photo_pivot_on_select(void *ctx, int index)
     metro_photos_view(c->items[index].filename);
 }
 
+/* R2-F2/DD-7/DD-9: bitmap for the grid's get_tile() -- delegates
+ * straight to the thumbnail engine, keyed by filename+mtime (the same
+ * pair metro_photo_thumbs.c uses to invalidate a stale cache entry). */
+static const fb_data *photo_pivot_get_tile(void *ctx, int index)
+{
+    struct photo_pivot_ctx *c = ctx;
+    return metro_photo_thumbs_get(c->items[index].filename, c->items[index].mtime);
+}
+
 static struct metro_pivot photo_pivots[4];
 static struct metro_page photos_page = { LANG_HUB_PHOTOS, photo_pivots, 1, NULL };
 
 static void build_photos_page(void)
 {
     int i, n = 0;
+
+    /* R2-F2/DD-9: a fresh visit to Photos always starts the thumbnail
+     * engine clean -- otherwise the RAM window/pending queue could
+     * still be serving or decoding for a pivot the user isn't even
+     * looking at anymore (e.g. left "ia" scrolled deep, came back into
+     * "todos"). */
+    metro_photo_thumbs_reset();
 
     s_photo_all_n = metro_photos_list(s_photo_all, METRO_PHOTOS_MAX);
     s_photo_photos_n = s_photo_images_n = s_photo_ai_n = 0;
@@ -186,15 +203,19 @@ static void build_photos_page(void)
     }
 
     photo_pivots[n++] = (struct metro_pivot){
-        LANG_PIVOT_ALL, photo_pivot_count, photo_pivot_get_row, photo_pivot_on_select, &photo_all_ctx };
+        LANG_PIVOT_ALL, photo_pivot_count, photo_pivot_get_row, photo_pivot_on_select, &photo_all_ctx,
+        METRO_TILE_COLS, photo_pivot_get_tile };
     if (s_photo_photos_n || s_photo_images_n || s_photo_ai_n)
     {
         photo_pivots[n++] = (struct metro_pivot){
-            LANG_PIVOT_PHOTOS, photo_pivot_count, photo_pivot_get_row, photo_pivot_on_select, &photo_photos_ctx };
+            LANG_PIVOT_PHOTOS, photo_pivot_count, photo_pivot_get_row, photo_pivot_on_select, &photo_photos_ctx,
+            METRO_TILE_COLS, photo_pivot_get_tile };
         photo_pivots[n++] = (struct metro_pivot){
-            LANG_PIVOT_IMAGES, photo_pivot_count, photo_pivot_get_row, photo_pivot_on_select, &photo_images_ctx };
+            LANG_PIVOT_IMAGES, photo_pivot_count, photo_pivot_get_row, photo_pivot_on_select, &photo_images_ctx,
+            METRO_TILE_COLS, photo_pivot_get_tile };
         photo_pivots[n++] = (struct metro_pivot){
-            LANG_PIVOT_AI, photo_pivot_count, photo_pivot_get_row, photo_pivot_on_select, &photo_ai_ctx };
+            LANG_PIVOT_AI, photo_pivot_count, photo_pivot_get_row, photo_pivot_on_select, &photo_ai_ctx,
+            METRO_TILE_COLS, photo_pivot_get_tile };
     }
     photos_page.npivots = n;
 }
