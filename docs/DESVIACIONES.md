@@ -52,7 +52,12 @@ Cada entrada: fase · qué decía el plan · qué se encontró en la práctica �
 
 ---
 
-## F2-2 — Capturas headless del simulador no son fiables una vez `metro_main()` entra a su loop de botones (macOS ≥26.4)
+## F2-2 — Capturas headless del simulador no son fiables una vez `metro_main()` entra a su loop de botones (macOS ≥26.4) — **DIAGNÓSTICO INCORRECTO, VER F2-4**
+
+> **CORRECCIÓN (F2-4, 2026-08-20)**: todo lo que sigue en F2-2 y F2-3 es el registro honesto de una investigación que llegó a una conclusión **equivocada**. El crash NO era una limitación del entorno (macOS/SDL/AppKit) sino un **bug de Metro**: un `struct viewport` sin inicializar en `metro_draw_text_cut_right()` (F2). Se conserva el texto original como historial de cómo se razonó mal, y F2-4 explica la causa real, la evidencia y el arreglo. Las decisiones M-025 y M-026 de `DECISIONS.md` quedan **superadas** por M-027.
+
+### Texto original de F2-2 (conclusión superada)
+
 
 **Plan decía** (`PLAN_MAESTRO.md` §5, criterio de "hecho" de F2): capturar `F2-type-specimen.png` con `sim_shot.sh` de la forma estándar (como ya había funcionado en F0 y F1).
 
@@ -82,7 +87,7 @@ Este Mac corre macOS 26.5.2 -- dentro del rango que ese `FIXME` ya marca como pr
 
 ---
 
-## F2-3 — Intento de arreglo real (mover `screen_dump()` al hilo de `metro_main()`): revertido, cambia el crash por un deadlock peor
+## F2-3 — Intento de arreglo real (mover `screen_dump()` al hilo de `metro_main()`): revertido, cambia el crash por un deadlock peor — **CAUSA RAÍZ EQUIVOCADA, VER F2-4**
 
 Tras la confirmación de F2-2 en sesión interactiva, se intentó una solución real en vez de solo documentar el bloqueo, ya que F3 depende de esto.
 
@@ -95,3 +100,25 @@ Tras la confirmación de F2-2 en sesión interactiva, se intentó una solución 
 **Qué se hizo**: se revirtió el intento por completo (`git checkout --` sobre los 4 archivos tocados) -- un deadlock del 100% de las veces es estrictamente peor que un crash que al menos funcionaba parcialmente (`ticks≤25`, antes de que `metro_main()` entrara a su loop). El árbol quedó exactamente como en el commit de F2.
 
 **Impacto en `PLAN_MAESTRO.md`**: ninguno adicional a F2-2 -- el bloqueo para F3 sigue en pie. **Pista real para quien retome esto**: el problema no es únicamente "qué hilo bombea eventos SDL" (F2-2) -- hay una **segunda** condición de carrera independiente en la capa de filesystem simulado de Rockbox, que se dispara específicamente cuando `screen_dump()` se llama desde el hilo "device" (`metro_main`) en vez de `sim_thread`. Cualquier solución real necesita investigar `firmware/target/hosted/filesystem-unix.c` y qué primitivo de sincronización usa alrededor de `open`/`write`/`close`, no solo el problema de AppKit. Candidato con mejor relación esfuerzo/resultado si se retoma: correr `sim_shot.sh` sin `METRO_SIM_AUTODUMP_QUIT` y con `lldb`/Instruments interactivo (no headless) para ver el backtrace real de ambos hilos en el momento del cuelgue -- esta sesión no pudo usar `lldb` por falta de autorización interactiva de macOS (ver F2-2).
+
+---
+
+## F2-4 — Causa real del crash de captura: `struct viewport` sin inicializar en `metro_draw_text_cut_right()` (bug de Metro, no del entorno). ARREGLADO.
+
+**Qué se hizo distinto esta vez**: en vez de seguir razonando sobre símbolos de un backtrace impreso por AppKit, se buscó primero el **discriminador más potente**: el simulador de **Aura-Firmware** (mismo Mac, mismo macOS 26.5.2, mismo SDL3/sdl2-compat, mismo `HAVE_SDL_THREADS`, mismo `sim_tasks.c`, mismo `screen_dump()`, y una UI que también espera botones en `button_get_w_tmo()`) se probó con `apple2026_sim_shot.sh … 300` — **y funcionó a la primera**. Eso descartó de golpe toda la hipótesis de "limitación del entorno" de F2-2/F2-3: la diferencia tenía que estar en el código de Metro.
+
+**Backtrace real (lldb, todos los hilos, lanzando el proceso bajo el depurador — no adjuntándose, que era lo que pedía permiso)**: el hilo que crashea (#11, `sim_thread` de `sim_tasks.c`) muestra esta cadena: `runthread → sim_thread (sim_tasks.c:183, la llamada a screen_dump()) → metro_main (metro_main.c:71, la llamada a button_get_w_tmo) → button_queue_wait → SDL_PumpEvents → Cocoa → excepción`. Es decir, **`sim_thread` aparece "llamando" a `metro_main`**, algo imposible como cadena de llamadas legítima — `screen_dump()` no llama a nada de Metro. La única explicación consistente con el desensamblado (`screen_dump` hace `bl _sim_creat`, `bl _sim_write` y lee píxeles con `FBADDR(0,y)`): `FBADDR(x,y)` se expande a **`lcd_current_viewport->buffer->get_address_fn(x,y)`** — una llamada indirecta a través de un puntero a función guardado en el viewport activo. Si ese viewport (o su `buffer`) está corrupto, la llamada indirecta salta a código arbitrario; aquí cayó dentro de `metro_main()`, cuyo loop llama a `button_get_w_tmo()`, que en `__APPLE__ && PLATFORM_SDL` hace **`SDL_PumpEvents()` en el hilo llamante** (`firmware/drivers/button_queue.c:105`, por diseño — en macOS no hay hilo de eventos aparte y el hilo principal debe bombear). Ejecutado desde `sim_thread` (un hilo secundario), eso dispara exactamente `nextEventMatchingMask should only be called from the Main Thread!`. Y explica también el deadlock del 100 % de F2-3: al mover `screen_dump()` al hilo principal, el salto indirecto corrupto aterrizó en otro lugar que bloqueaba en vez de crashear.
+
+**La corrupción**: `metro_draw_text_cut_right()` (`apps/metro/metro_draw.c`, F2) declaraba `struct viewport vp;` **en la pila, sin inicializar**, y llamaba `viewport_set_fullscreen(&vp, SCREEN_MAIN)` directamente. `viewport_set_fullscreen()` llama primero a `screens[].init_viewport(vp)` = `lcd_init_viewport()` (`firmware/drivers/lcd-bitmap-common.c:259`), que **lee `vp->buffer` antes de que nadie lo haya asignado**: si es distinto de NULL (basura de pila), lo desreferencia como `struct frame_buffer_t*`, lee `->elems`, y si no es cero **escribe** `->stride`, `->data` y `->get_address_fn` a través de ese puntero basura cuando los encuentra en cero. Comportamiento indefinido que en la práctica corrompió el estado del LCD (el `get_address_fn` que `screen_dump()` usa más tarde). El idioma correcto de Rockbox, usado por todos los llamadores del core, es `viewport_set_defaults()`, que hace `vp->buffer = NULL` **antes** de llamar a `viewport_set_fullscreen()` — por eso ellos no tienen el problema.
+
+**Verificación empírica (causalidad, no solo correlación)**:
+- Experimento A: quitar únicamente la llamada a `metro_draw_text_cut_right()` del espécimen → captura correcta (153 666 bytes, salida limpia) a `ticks=100`, exactamente donde antes fallaba 15/15 veces.
+- Arreglo: `viewport_set_defaults(&vp, SCREEN_MAIN)` en vez de `viewport_set_fullscreen(&vp, …)` → captura correcta con la función presente, a `ticks=100`, `200` y `300`; también con inyección de botones (`"SELECT,SCROLL_FWD,SCROLL_FWD,MENU,RIGHT,LEFT"`, el escenario de F3).
+
+**Segundo bug detectado gracias a la primera captura real**: los espacios no se veían ("title28px", "list20pxregular"). Causa: el flag `-x` de `convttf` en `gen_fonts.sh` ("trim glyphs horizontally of nearly empty space") recorta hasta 2 px por lado de **todo** glifo casi vacío, incluido el espacio (0x20), que a 20 px pasa de ~5 px a ~1 px de ancho. Aura-Firmware no usa `-x` (`design-system/generate.py` invoca solo `-p <size>`). Se quitó `-x`, se regeneraron las 5 fuentes, y la captura muestra espacios correctos. Ver `DECISIONS.md` M-028.
+
+**Qué se hizo**: (1) `metro_draw.c`: `viewport_set_defaults()` + comentario explicando por qué; (2) `gen_fonts.sh`: sin `-x`, fuentes regeneradas y versionadas; (3) `metro_screen_specimen.c`: el titular `display` ahora es "recorte al borde" para que el recorte en x=320 se vea de verdad (criterio de F2); (4) `docs/screenshots/F2-type-specimen.png` capturada — **el criterio de "hecho" de F2 queda cumplido al 100 %**; (5) `sim_shot.sh` con botones inyectados verificado → **F3 queda desbloqueada**; (6) simulador y target ipod6g compilan limpio.
+
+**Lección metodológica registrada** (para el resto de la Fase 4): cuando un síntoma "parece del entorno", **la primera prueba es el discriminador más barato y potente** — aquí, correr el proyecto hermano que comparte el 100 % del entorno. Dos rondas de investigación (F2-2, F2-3, ~7 técnicas) se gastaron razonando sobre nombres de símbolos de un backtrace sin depurador, cuando `lldb --batch -o run -k "thread backtrace all"` (lanzar, no adjuntar) daba el backtrace real en 30 segundos y el test con Aura en 10.
+
+**Impacto en `PLAN_MAESTRO.md`**: ninguno en el plan en sí — el principio "simulador primero" sigue siendo válido y ahora está operativo. `DECISIONS.md` M-025/M-026 quedan superadas por M-027/M-028.

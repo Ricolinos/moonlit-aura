@@ -48,7 +48,17 @@ void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
     struct viewport vp;
     struct viewport *old_vp;
 
-    viewport_set_fullscreen(&vp, SCREEN_MAIN);
+    /* viewport_set_defaults() -- NOT viewport_set_fullscreen() directly.
+     * Both end up in lcd_init_viewport(), which READS vp->buffer before
+     * anything sets it: if it's non-NULL it is dereferenced as a
+     * struct frame_buffer_t* and its stride/data/get_address_fn fields
+     * are read and possibly written through. With a stack viewport that
+     * is whatever garbage was on the stack -- undefined behaviour that
+     * in practice corrupted the LCD state and made later
+     * screen_dump() calls (FBADDR() -> buffer->get_address_fn) jump
+     * into random code. viewport_set_defaults() zeroes vp->buffer first,
+     * which is why every core caller uses it. See DECISIONS.md M-027. */
+    viewport_set_defaults(&vp, SCREEN_MAIN);
     vp.x = x;
     vp.width = clip_w;
     vp.font = metro_font_id(role);

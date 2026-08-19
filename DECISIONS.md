@@ -234,7 +234,7 @@ provisionales. `metro_draw.c` de F2 solo trae lo que su propio
 criterio de "hecho" necesita: `clear`, `text`, `text_cut_right`,
 `header`, `battery`.
 
-### M-025 — F2: captura visual de `F2-type-specimen.png` no lograda en esta sesión (limitación de entorno, no de código)
+### M-025 — F2: captura visual de `F2-type-specimen.png` no lograda en esta sesión (limitación de entorno, no de código) — **SUPERADA por M-027: el diagnóstico era incorrecto, SÍ era código de Metro**
 
 Ver `docs/DESVIACIONES.md` F2-2 — hallazgo importante para toda fase
 futura que dependa de `sim_shot.sh` con `metro_main()` corriendo su
@@ -263,7 +263,7 @@ reprodujo el mismo crash corriendo `sim_shot.sh` directamente en
 Terminal.app. No es un artefacto de sesión en segundo plano — es un
 problema real de este entorno (macOS 26.5.2 + SDL3 + Rockbox).
 
-### M-026 — F2: intento de mover `screen_dump()` al hilo de `metro_main()`, revertido (cambia el crash por un deadlock)
+### M-026 — F2: intento de mover `screen_dump()` al hilo de `metro_main()`, revertido (cambia el crash por un deadlock) — **SUPERADA por M-027 (misma causa raíz equivocada)**
 
 Ver `docs/DESVIACIONES.md` F2-3. Se separó el disparo del volcado
 (`sim_thread`, sin cambios) de su ejecución real (`screen_dump()`/
@@ -291,3 +291,34 @@ desde el hilo "device" en vez de `sim_thread`. Una solución real
 necesita depurar ambos hilos con `lldb`/Instruments en una sesión
 interactiva (no disponible en esta sesión por falta de autorización
 de macOS), no solo resolver el problema de AppKit de M-025.
+
+### M-027 — F2: causa real del crash de captura — `struct viewport` sin inicializar en `metro_draw_text_cut_right()`; M-025/M-026 quedan superadas
+
+Ver `docs/DESVIACIONES.md` F2-4 (detalle completo, evidencia y
+lección metodológica). Resumen: el simulador de **Aura-Firmware**
+captura sin problema en esta misma máquina con el mismo entorno — el
+problema era de Metro. `metro_draw_text_cut_right()` declaraba un
+`struct viewport` en la pila sin inicializar y llamaba
+`viewport_set_fullscreen()` directamente; `lcd_init_viewport()` lee
+`vp->buffer` (basura) antes de que nadie lo asigne y lo desreferencia/
+escribe a través de él (UB) — corrompiendo el estado del LCD que
+`screen_dump()` usa después vía `FBADDR()` → `buffer->get_address_fn`
+(llamada indirecta que saltó a código arbitrario: a `metro_main`, cuyo
+`button_get_w_tmo()` hace `SDL_PumpEvents()` en el hilo llamante por
+diseño en `__APPLE__`, de ahí la excepción de AppKit desde
+`sim_thread`). **Arreglo**: `viewport_set_defaults()` (idioma de
+Rockbox, pone `buffer = NULL` primero). Verificado: captura
+determinista a 100/200/300 ticks y con botones inyectados; simulador y
+target compilan limpio. **Regla nueva para `apps/metro/`**: todo
+`struct viewport` local se inicializa con `viewport_set_defaults()`
+(o `memset` 0 + `viewport_set_fullscreen()`), nunca con
+`viewport_set_fullscreen()` a secas. Se añade a `CLAUDE.md`.
+
+### M-028 — F2: `gen_fonts.sh` sin `-x` (trim horizontal) — recortaba el glifo del espacio a ~1 px
+
+Detectado en la primera captura real de F2: el texto aparecía sin
+espacios ("title28px"). `convttf -x` recorta hasta 2 px por lado de
+todo glifo "casi vacío", incluido el espacio (0x20): a 20 px pasa de
+~5 px a ~1 px. Aura-Firmware no usa `-x` (`design-system/generate.py`
+invoca solo `-p <size>`). Quitado; las 5 fuentes se regeneraron y se
+versionaron de nuevo. M-010 sigue vigente en todo lo demás.

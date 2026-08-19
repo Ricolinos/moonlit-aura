@@ -30,6 +30,13 @@ completo de ejecución.
 - Toda animación respeta la puerta `lcd_active()` y el nivel de FX
   activo (`aura.cfg` → `animations`/`graphics`, ver `DECISIONS.md`
   M-015).
+- Todo `struct viewport` local se inicializa con
+  `viewport_set_defaults(&vp, SCREEN_MAIN)` (o `memset` a 0 +
+  `viewport_set_fullscreen()`), **nunca** con `viewport_set_fullscreen()`
+  a secas sobre una variable sin inicializar — `lcd_init_viewport()`
+  lee y desreferencia `vp->buffer` antes de asignarlo (ver
+  `DECISIONS.md` M-027: costó dos rondas de investigación y un
+  diagnóstico equivocado).
 
 ## Cambios a archivos de Rockbox fuera de `apps/metro/`
 

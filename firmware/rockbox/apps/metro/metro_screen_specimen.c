@@ -37,7 +37,7 @@ void metro_screen_specimen_show(void)
     /* display 48px -- deliberately wide enough to overflow past the
      * right edge of the screen; the LCD driver clips it automatically
      * (INVESTIGACION.md A.6), no explicit viewport needed here. */
-    metro_draw_text(MFONT_DISPLAY, 140, 26, "recorte", fg);
+    metro_draw_text(MFONT_DISPLAY, 140, 26, "recorte al borde", fg);
 
     metro_draw_text(MFONT_TITLE, 12, 84, "title 28px", fg);
     metro_draw_text(MFONT_LIST, 12, 118, "list 20px regular", fg);

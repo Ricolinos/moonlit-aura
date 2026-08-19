@@ -38,6 +38,12 @@ ROLES=(
 # Rango de caracteres: latin basico + Latin-1 Supplement + Latin
 # Extended-A (0x20-0x17F) -- suficiente para espanol con acentos/enie,
 # sin cargar el conjunto completo de simbolos de Selawik.
+#
+# Sin "-x" (trim horizontal): convttf recorta hasta 2px por lado de
+# TODO glifo "casi vacio", incluido el espacio (0x20), que a 20px pasa
+# de ~5px a ~1px de ancho -- el texto se ve sin espacios. Aura-Firmware
+# tampoco lo usa (design-system/generate.py: solo "-p <size>"). Ver
+# DECISIONS.md M-028.
 START=0x20
 LIMIT=0x17F
 DEFAULT=0x3F # '?'
@@ -47,7 +53,7 @@ for entry in "${ROLES[@]}"; do
   in="$FONTS_SRC/$srcfont"
   out="$FONTS_OUT/metro-$role-$size.fnt"
   echo "==> $role: $srcfont @ ${size}px -> $(basename "$out")"
-  "$CONVTTF" -p "$size" -s "$START" -l "$LIMIT" -D "$DEFAULT" -x \
+  "$CONVTTF" -p "$size" -s "$START" -l "$LIMIT" -D "$DEFAULT" \
     -o "$out" "$in"
 done
 
