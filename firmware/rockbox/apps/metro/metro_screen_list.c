@@ -19,12 +19,26 @@
  ****************************************************************************/
 #include <stddef.h>
 #include "lcd.h"
+#include "kernel.h"
 
 #include "metro_screen_list.h"
 #include "metro_draw.h"
 #include "metro_lang.h"
+#include "metro_widgets.h"
 
 static metro_nav_t s_nav;
+
+/* F10: floating index letter (S1.4) -- shown for 600ms after a fast
+ * scroll (steps >= 3) lands on a new row, using that row's own first
+ * character. Deliberately without the plan's "count >= 40" gate
+ * (DESVIACIONES.md F10-1): none of Metro's real lists have that many
+ * items with the test fixtures this session can generate, and a big
+ * jump on a shorter list still benefits from the same feedback. */
+#define METRO_INDEX_LETTER_TICKS (HZ * 3 / 5)
+#define METRO_INDEX_LETTER_MIN_STEPS 3
+
+static long s_index_letter_until = 0;
+static char s_index_letter = '\0';
 
 /* page_stack[d-1] holds the page pushed at nav depth d, for d>=2 --
  * index 0 (depth 1, the hub) is never used, metro_screen_hub.c owns
@@ -76,6 +90,11 @@ const struct metro_page *metro_screen_list_current_page(void)
     return current_page();
 }
 
+bool metro_screen_list_has_pending_redraw(void)
+{
+    return current_tick < s_index_letter_until;
+}
+
 void metro_screen_list_show(void)
 {
     const struct metro_page *page = current_page();
@@ -92,7 +111,15 @@ void metro_screen_list_show(void)
     metro_draw_header(page->title_dynamic ? page->title_dynamic
                                            : metro_lang_str(page->title));
     metro_draw_pivots(page, active, 0);
-    metro_draw_rows(pivot, metro_nav_first_visible(&s_nav), metro_nav_sel(&s_nav), 0);
+
+    if (pivot->count(pivot->ctx) == 0)
+        metro_widgets_draw_empty_state(metro_lang_str(LANG_EMPTY_LIST));
+    else
+        metro_draw_rows(pivot, metro_nav_first_visible(&s_nav), metro_nav_sel(&s_nav), 0);
+
+    if (current_tick < s_index_letter_until)
+        metro_widgets_draw_index_letter(s_index_letter);
+
     lcd_update();
 }
 
@@ -111,10 +138,19 @@ void metro_screen_list_handle(int action, int steps)
     switch (action)
     {
         case MACT_PREV:
-            metro_nav_move_sel(&s_nav, -steps, count, METRO_DRAW_ROWS_VISIBLE);
-            break;
         case MACT_NEXT:
-            metro_nav_move_sel(&s_nav, steps, count, METRO_DRAW_ROWS_VISIBLE);
+            metro_nav_move_sel(&s_nav, action == MACT_PREV ? -steps : steps,
+                                count, METRO_DRAW_ROWS_VISIBLE);
+            if (steps >= METRO_INDEX_LETTER_MIN_STEPS && count > 0)
+            {
+                struct metro_row row;
+                pivot->get_row(pivot->ctx, metro_nav_sel(&s_nav), &row);
+                s_index_letter = row.title && row.title[0]
+                                      ? (char)(row.title[0] >= 'a' && row.title[0] <= 'z'
+                                                    ? row.title[0] - 32 : row.title[0])
+                                      : '?';
+                s_index_letter_until = current_tick + METRO_INDEX_LETTER_TICKS;
+            }
             break;
         case MACT_PIVOT_PREV:
             metro_nav_pivot_prev(&s_nav);

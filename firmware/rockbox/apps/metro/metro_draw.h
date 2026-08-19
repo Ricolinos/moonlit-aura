@@ -58,9 +58,8 @@ void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
  * (if the RTC has one) and battery percentage at the right. */
 void metro_draw_header(const char *page_title);
 
-/* Battery percentage as caption-font text ending at (x_right, y) --
- * no bitmap icon yet (M-018, lands in F5 with the rest of the
- * compiled-in icon set). */
+/* Battery icon (rect body + nub, proportionally filled) ending at
+ * (x_right, y) -- M-018's icon set, F10. 20px wide total. */
 void metro_draw_battery(int x_right, int y);
 
 /* Pivot header at y=28..76 (PLAN_MAESTRO.md S1.4): draws pivots from

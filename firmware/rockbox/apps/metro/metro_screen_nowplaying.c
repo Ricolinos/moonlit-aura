@@ -226,32 +226,23 @@ static int current_volume_pct(void)
     return pct;
 }
 
+/* F10: real geometric icons (M-018) replacing F5-1's text badges --
+ * right-aligned, repeat first (closer to the edge) then shuffle,
+ * METRO_WIDGETS_ICON_SIZE square each with a small gap between. */
 static void draw_mode_indicators(void)
 {
-    int x = LCD_WIDTH - 12;
-    int w, h;
+    int x = LCD_WIDTH - 12 - METRO_WIDGETS_ICON_SIZE;
+    int y = 176;
 
     if (global_settings.repeat_mode == REPEAT_ALL ||
         global_settings.repeat_mode == REPEAT_ONE)
     {
-        char buf[32];
-        snprintf(buf, sizeof(buf), "%s %s", metro_lang_str(LANG_NP_REPEAT),
-                  metro_lang_str(repeat_value_lang()));
-        lcd_setfont(metro_font_id(MFONT_CAPTION));
-        lcd_getstringsize((const unsigned char *)buf, &w, &h);
-        x -= w;
-        metro_draw_text(MFONT_CAPTION, x, 178, buf, metro_color_accent());
-        x -= 12;
+        metro_widgets_draw_repeat_icon(x, y, global_settings.repeat_mode == REPEAT_ONE);
+        x -= METRO_WIDGETS_ICON_SIZE + 12;
     }
 
     if (global_settings.playlist_shuffle)
-    {
-        const char *s = metro_lang_str(LANG_NP_SHUFFLE);
-        lcd_setfont(metro_font_id(MFONT_CAPTION));
-        lcd_getstringsize((const unsigned char *)s, &w, &h);
-        x -= w;
-        metro_draw_text(MFONT_CAPTION, x, 178, s, metro_color_accent());
-    }
+        metro_widgets_draw_shuffle_icon(x, y);
 }
 
 void metro_screen_nowplaying_show(void)

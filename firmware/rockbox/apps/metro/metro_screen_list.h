@@ -59,6 +59,11 @@ void metro_screen_list_show(void);
  * anything about Now Playing itself. */
 const struct metro_page *metro_screen_list_current_page(void);
 
+/* F10: true while the floating index letter (metro_widgets.h) is
+ * still on screen -- metro_main.c polls this to redraw again once it
+ * expires, since nothing else about the list changed in the meantime. */
+bool metro_screen_list_has_pending_redraw(void);
+
 /* Reacts to one MACT_* action against the top-of-stack page: PIVOT_*
  * switches pivots, PREV/NEXT moves the selection, SELECT calls the
  * current row's on_select(), BACK pops, HOME pops to the root. Does

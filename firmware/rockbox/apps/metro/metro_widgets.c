@@ -82,3 +82,75 @@ void metro_widgets_draw_volume_overlay(int pct)
     metro_draw_text(MFONT_CAPTION, 12, METRO_VOLUME_OVERLAY_Y - 14, label,
                      metro_color_secondary());
 }
+
+#define METRO_INDEX_LETTER_SIZE 80
+
+void metro_widgets_draw_index_letter(char c)
+{
+    char s[2] = { c, '\0' };
+    int x = (LCD_WIDTH - METRO_INDEX_LETTER_SIZE) / 2;
+    int y = (LCD_HEIGHT - METRO_INDEX_LETTER_SIZE) / 2;
+
+    metro_draw_tile(x, y, METRO_INDEX_LETTER_SIZE, s);
+}
+
+#define METRO_EMPTY_TILE_SIZE 96
+
+void metro_widgets_draw_empty_state(const char *message)
+{
+    int x = (LCD_WIDTH - METRO_EMPTY_TILE_SIZE) / 2;
+    int y = 60;
+    int w, h;
+
+    metro_draw_tile(x, y, METRO_EMPTY_TILE_SIZE, " ");
+
+    lcd_setfont(metro_font_id(MFONT_CAPTION));
+    lcd_getstringsize((const unsigned char *)message, &w, &h);
+    metro_draw_text(MFONT_CAPTION, (LCD_WIDTH - w) / 2, y + METRO_EMPTY_TILE_SIZE + 16,
+                     message, metro_color_secondary());
+}
+
+/* F10: crossed paths with arrowheads at both right-hand ends -- the
+ * "shuffle" metaphor, contained within a METRO_WIDGETS_ICON_SIZE
+ * square starting at (x, y). */
+void metro_widgets_draw_shuffle_icon(int x, int y)
+{
+    int s = METRO_WIDGETS_ICON_SIZE;
+
+    lcd_set_foreground(metro_color_accent());
+
+    lcd_drawline(x, y, x + s, y + s);
+    lcd_drawline(x, y + s, x + s, y);
+
+    lcd_drawline(x + s - 4, y - 3, x + s, y);
+    lcd_drawline(x + s - 4, y + 3, x + s, y);
+    lcd_drawline(x + s - 4, y + s - 3, x + s, y + s);
+    lcd_drawline(x + s - 4, y + s + 3, x + s, y + s);
+}
+
+/* F10: square loop outline with a small arrowhead breaking its
+ * top-right corner -- the "repeat" metaphor. `one` overlays a small
+ * "1" (REPEAT_ONE vs REPEAT_ALL), same square as
+ * metro_widgets_draw_shuffle_icon() for side-by-side alignment on the
+ * Now Playing screen. */
+void metro_widgets_draw_repeat_icon(int x, int y, bool one)
+{
+    int s = METRO_WIDGETS_ICON_SIZE;
+
+    lcd_set_foreground(metro_color_accent());
+    lcd_drawrect(x, y, s, s);
+
+    lcd_drawline(x + s - 5, y - 3, x + s + 1, y - 3);
+    lcd_drawline(x + s + 1, y - 3, x + s - 2, y + 1);
+
+    if (one)
+    {
+        char digit[2] = { '1', '\0' };
+        int w, h;
+
+        lcd_setfont(metro_font_id(MFONT_CAPTION));
+        lcd_getstringsize((const unsigned char *)digit, &w, &h);
+        lcd_set_foreground(metro_color_accent());
+        lcd_putsxy(x + (s - w) / 2, y + (s - h) / 2, (const unsigned char *)digit);
+    }
+}

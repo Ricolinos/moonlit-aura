@@ -115,6 +115,8 @@ enum metro_lang_id {
     LANG_USB_CONNECTED,
     LANG_SHUTTING_DOWN,
 
+    LANG_EMPTY_LIST,
+
     LANG_COUNT
 };
 

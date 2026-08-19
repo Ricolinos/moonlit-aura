@@ -72,27 +72,37 @@ void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
     lcd_set_viewport(old_vp);
 }
 
+/* F10: real geometric icon (rect body + nub, proportional fill)
+ * replacing the "N%" text (M-018's deferred placeholder). Body is
+ * outlined regardless of charge level; a negative battery_level()
+ * (charge unknown, e.g. running off USB power in the sim) just draws
+ * the empty outline with no fill instead of Rockbox's own "--%". */
+#define METRO_BATTERY_W     18
+#define METRO_BATTERY_H     9
+#define METRO_BATTERY_NUB_W 2
+#define METRO_BATTERY_NUB_H 4
+
 void metro_draw_battery(int x_right, int y)
 {
-    char buf[8];
-    int w, h;
     int level = battery_level();
+    int body_x = x_right - METRO_BATTERY_NUB_W - METRO_BATTERY_W;
+    int nub_x = x_right - METRO_BATTERY_NUB_W;
+    int nub_y = y + (METRO_BATTERY_H - METRO_BATTERY_NUB_H) / 2;
+    int fill_w;
 
-    if (level < 0)
-        snprintf(buf, sizeof(buf), "--%%");
-    else
-    {
-        if (level > 100)
-            level = 100; /* battery_level() is documented as percent,
-                            but its prototype can't tell the compiler
-                            that -- clamp so %d can't overflow buf */
-        snprintf(buf, sizeof(buf), "%d%%", level);
-    }
-
-    lcd_setfont(metro_font_id(MFONT_CAPTION));
-    lcd_getstringsize((const unsigned char *)buf, &w, &h);
     lcd_set_foreground(metro_color_secondary());
-    lcd_putsxy(x_right - w, y, (const unsigned char *)buf);
+    lcd_drawrect(body_x, y, METRO_BATTERY_W, METRO_BATTERY_H);
+    lcd_fillrect(nub_x, nub_y, METRO_BATTERY_NUB_W, METRO_BATTERY_NUB_H);
+
+    if (level > 100)
+        level = 100; /* battery_level() is documented as percent, but
+                        its prototype can't tell the compiler that. */
+    if (level > 0)
+    {
+        fill_w = (METRO_BATTERY_W - 4) * level / 100;
+        if (fill_w > 0)
+            lcd_fillrect(body_x + 2, y + 2, fill_w, METRO_BATTERY_H - 4);
+    }
 }
 
 void metro_draw_header(const char *page_title)
@@ -159,18 +169,28 @@ void metro_draw_rows(const struct metro_pivot *pivot, int first, int sel,
         bool selected = (i == sel);
 
         pivot->get_row(pivot->ctx, i, &row);
-        metro_draw_text(selected ? MFONT_LIST_SEL : MFONT_LIST, x, y,
-                         row.title,
-                         selected ? metro_color_fg() : metro_color_secondary());
+
+        /* F10: clip the title so it can never run into the
+         * right-aligned subtitle (long filenames especially --
+         * videos/photos, up to METRO_FSUTIL_NAME_LEN bytes). Subtitle
+         * width has to be measured first to know where the title's
+         * clip boundary is. */
+        int title_clip_w = LCD_WIDTH - x;
 
         if (row.subtitle)
         {
-            int w, h;
+            int sub_w, sub_h;
             lcd_setfont(metro_font_id(MFONT_CAPTION));
-            lcd_getstringsize((const unsigned char *)row.subtitle, &w, &h);
-            metro_draw_text(MFONT_CAPTION, LCD_WIDTH - 12 - w, y + 4,
+            lcd_getstringsize((const unsigned char *)row.subtitle, &sub_w, &sub_h);
+            metro_draw_text(MFONT_CAPTION, LCD_WIDTH - 12 - sub_w, y + 4,
                              row.subtitle, metro_color_tertiary());
+            title_clip_w = LCD_WIDTH - 12 - sub_w - x - 8;
         }
+
+        metro_draw_text_cut_right(selected ? MFONT_LIST_SEL : MFONT_LIST, x, y,
+                                   row.title,
+                                   selected ? metro_color_fg() : metro_color_secondary(),
+                                   title_clip_w);
 
         y += METRO_ROW_PITCH;
     }
@@ -209,8 +229,16 @@ void metro_draw_tile(int x, int y, int size, const char *label)
     lcd_set_foreground(metro_color_accent());
     lcd_fillrect(x, y, size, size);
 
-    lcd_setfont(metro_font_id(MFONT_DISPLAY));
-    lcd_getstringsize((const unsigned char *)initial, &w, &h);
-    lcd_set_foreground(metro_color_bg());
-    lcd_putsxy(x + (size - w) / 2, y + (size - h) / 2, (const unsigned char *)initial);
+    /* A blank label (metro_widgets_draw_empty_state()'s plain accent
+     * square, no letter) must draw nothing here -- the custom
+     * MFONT_DISPLAY bitmap font has no real space glyph and falls
+     * back to garbage (observed rendering an unrelated glyph) instead
+     * of blank pixels. */
+    if (initial[0] != ' ')
+    {
+        lcd_setfont(metro_font_id(MFONT_DISPLAY));
+        lcd_getstringsize((const unsigned char *)initial, &w, &h);
+        lcd_set_foreground(metro_color_bg());
+        lcd_putsxy(x + (size - w) / 2, y + (size - h) / 2, (const unsigned char *)initial);
+    }
 }

@@ -10,6 +10,18 @@ sin GPU, clickwheel).
 
 Es "el Zune que Microsoft habría diseñado para el iPod".
 
+## Capturas
+
+Simulador SDL, tema oscuro (acento magenta, el default — `DECISIONS.md`
+M-020) y tema claro lado a lado. Matriz completa (2 temas × 3 acentos)
+en `docs/screenshots/F10-matrix/`, generada con `firmware/tools/sim_matrix.sh`.
+
+| | Oscuro | Claro |
+|---|---|---|
+| Hub | ![hub oscuro](docs/screenshots/F10-matrix/dark-magenta-hub.png) | ![hub claro](docs/screenshots/F10-matrix/light-magenta-hub.png) |
+| Lista | ![lista oscura](docs/screenshots/F10-matrix/dark-magenta-list.png) | ![lista clara](docs/screenshots/F10-matrix/light-magenta-list.png) |
+| Now Playing | ![now playing oscuro](docs/screenshots/F10-matrix/dark-magenta-nowplaying.png) | ![now playing claro](docs/screenshots/F10-matrix/light-magenta-nowplaying.png) |
+
 ## Compatibilidad con Aura Studio
 
 Este firmware es 100% compatible con

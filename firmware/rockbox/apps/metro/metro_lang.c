@@ -105,6 +105,8 @@ static const char *const strings_es[LANG_COUNT] = {
 
     [LANG_USB_CONNECTED] = "conectado",
     [LANG_SHUTTING_DOWN] = "apagando...",
+
+    [LANG_EMPTY_LIST] = "aun no hay nada aqui -- sincroniza con aura studio",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -191,6 +193,8 @@ static const char *const strings_en[LANG_COUNT] = {
 
     [LANG_USB_CONNECTED] = "connected",
     [LANG_SHUTTING_DOWN] = "shutting down...",
+
+    [LANG_EMPTY_LIST] = "nothing here yet -- sync with aura studio",
 };
 
 void metro_lang_set(enum metro_language lang)

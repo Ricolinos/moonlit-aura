@@ -201,6 +201,7 @@ static void wait_for_tagcache_with_splash(void)
 void metro_main(void)
 {
     long last_player_tick = 0;
+    bool index_letter_was_pending = false;
 
     /* metro_apply_hygiene() already ran inside init() (apps/main.c) --
      * see metro_main.h for why it can't run here, after init() returns. */
@@ -283,6 +284,19 @@ void metro_main(void)
                 last_player_tick = current_tick;
                 redraw_current();
             }
+
+            /* F10: the floating index letter (metro_screen_list.c)
+             * needs one more redraw right after it expires to clear
+             * itself -- nothing else about the list changed to
+             * trigger that on its own otherwise. */
+            if (!at_root && !at_player)
+            {
+                bool pending = metro_screen_list_has_pending_redraw();
+                if (pending || index_letter_was_pending)
+                    redraw_current();
+                index_letter_was_pending = pending;
+            }
+
             continue;
         }
 

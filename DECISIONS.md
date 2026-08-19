@@ -494,3 +494,58 @@ llama `sim_trigger_usb(true)` directamente (declarado en
 inventar una variable de entorno nueva (`PLAN_MAESTRO.md` F9 proponía
 `METRO_SIM_FORCE_USB=1`) cuando el mecanismo de inyección existente ya
 alcanzaba con un token más. Ver `MODIFICATIONS.md` F9.
+
+## M-040 — F10: la letra flotante del índice no se puede disparar por botones inyectados en el simulador headless
+
+`metro_screen_list.c`'s índice flotante (S1.4) exige `steps >= 3`,
+donde `steps` sale de `button_apply_acceleration(get_action_data())`
+(`firmware/drivers/button.c`) -- una función que solo devuelve más de
+1 cuando el bit 31 de `data` viene encendido con una velocidad de
+rueda real. `uisimulator/common/sim_tasks.c` inyecta cada botón vía
+`button_queue_post(codigo, 0)` (dato siempre 0, ver `MODIFICATIONS.md`
+F0/F9): sin ese bit, `button_apply_acceleration()` devuelve 0 y
+`metro_input.c` cae siempre a `steps=1`, sin importar cuántos
+`SCROLL_FWD` se inyecten seguidos ni con qué separación. Verificado
+bajando `METRO_INDEX_LETTER_MIN_STEPS` a 1 de forma temporal, tomando
+la captura, y devolviéndolo a 3 antes de compilar la versión final --
+mismo patrón que la instrumentación de depuración temporal de F4/F5,
+nunca llega a un commit. El umbral real de 3 queda sin verificar
+visualmente en este entorno (misma categoría que la pantalla USB de
+F9, M-038): [ESTIMADO] correcto por inspección de código
+(`metro_nav_move_sel()` recibe el mismo `steps` que ya usa para mover
+la selección, así que si la selección salta 3+ filas la letra
+correspondiente es la de la fila donde aterriza), pero requiere
+hardware real (o una rueda simulada con velocidad, fuera de alcance
+de este sim) para confirmar el disparo natural. Ver
+`docs/DESVIACIONES.md` F10-1.
+
+## M-041 — F10: `metro_draw_tile()` con etiqueta en blanco no dibuja nada, en vez de depender de un glifo de espacio
+
+`metro_widgets_draw_empty_state()` reutiliza `metro_draw_tile()` para
+el cuadro acento sin letra (S1.4), pasándole `" "` como `label` con la
+intención de que el glifo de espacio no dibuje nada visible. La fuente
+bitmap propia de `MFONT_DISPLAY` no tiene un glifo real para el
+carácter espacio -- `lcd_putsxy()` cae a otro glifo de la tabla en su
+lugar (visto en el simulador como una "I" mayúscula grande, sin
+relación con el contenido esperado; capturado antes del fix
+vaciando `Playlists/` para forzar la pivote vacía). Encontrado
+verificando visualmente el estado vacío recién implementado, no antes
+de esta fase porque `metro_draw_tile()` no tenía ningún llamador con
+una etiqueta en blanco hasta ahora. Fix: `metro_draw_tile()` ahora
+salta el `lcd_putsxy()` por completo cuando el carácter resuelto es
+un espacio, en vez de confiar en que la fuente lo dibuje en blanco.
+
+## M-042 — F10: iconos geométricos reales para batería/aleatorio/repetir, reemplazando los textos de M-018/F5-1
+
+`metro_draw_battery()` pasa de texto "`N%`" a un ícono real (rectángulo
++ pestaña, relleno proporcional al nivel vía `lcd_fillrect`) -- mismo
+ancho reservado en el encabezado (`metro_draw_header()`), sin cambios
+ahí. Las insignias de texto "aleatorio"/"repetir todo" de Now Playing
+(F5-1, deferidas explícitamente a F10) se reemplazan con
+`metro_widgets_draw_shuffle_icon()` (trazos cruzados con puntas de
+flecha) y `metro_widgets_draw_repeat_icon()` (cuadro-lazo con una
+punta de flecha rompiendo la esquina superior derecha, más un "1"
+superpuesto cuando `REPEAT_ONE` está activo) -- ambos construidos solo
+con primitivas `lcd_drawline`/`lcd_drawrect`/`lcd_fillrect` (M-018:
+nunca se lee un bitmap de disco), verificados visualmente en
+`docs/screenshots/F10-np-icons.png`.

@@ -36,4 +36,28 @@ bool metro_widgets_confirm(const char *title, const char *question);
  * it (this widget has no timer state, it just draws one frame). */
 void metro_widgets_draw_volume_overlay(int pct);
 
+/* F10: floating index letter, shown ~600ms after a fast scroll (steps
+ * >= 3) stops moving -- PLAN_MAESTRO.md S1.4. `c` is the first
+ * character of the row the selection landed on, uppercased by the
+ * caller. Draws over whatever the list already shows (a solid
+ * MFONT_DISPLAY-sized accent square, centered) -- the caller decides
+ * when to stop calling it and let the next real redraw clear it. */
+void metro_widgets_draw_index_letter(char c);
+
+/* Empty-list state (PLAN_MAESTRO.md S1.4): a centered 96x96 accent
+ * tile (blank -- metro_draw_tile() with no letter, this isn't naming
+ * anything) plus a caption message below it. Callers: any pivot whose
+ * count() is 0. */
+void metro_widgets_draw_empty_state(const char *message);
+
+/* F10: Now Playing's shuffle/repeat status icons (M-018's icon set),
+ * replacing F5-1's deferred "shuffle"/"repeat todo" text badges --
+ * simple line-art, top-left corner at (x, y), METRO_WIDGETS_ICON_SIZE
+ * square. Repeat draws a small "1" centered over the loop when `one`
+ * is true (REPEAT_ONE vs REPEAT_ALL). */
+#define METRO_WIDGETS_ICON_SIZE 16
+
+void metro_widgets_draw_shuffle_icon(int x, int y);
+void metro_widgets_draw_repeat_icon(int x, int y, bool one);
+
 #endif /* METRO_WIDGETS_H */
