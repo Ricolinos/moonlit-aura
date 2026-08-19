@@ -53,11 +53,26 @@ if [[ ! -d "$TC_BIN" ]]; then
   exit 1
 fi
 
+# DECISIONS.md M-050: tools/version.sh calcula mal el estado "sucio"
+# en este repo (compara con GIT_WORK_TREE apuntando a firmware/rockbox/,
+# no a la raíz real del repo git) -- lo calculamos bien aquí mismo y
+# se lo pasamos a build_target.sh como VERSION= en vez de dejar que
+# Rockbox lo intente por su cuenta.
+GIT_HASH="$(git -C "$ROOT_DIR" rev-parse --short=10 HEAD)"
+if [[ -n "$(git -C "$ROOT_DIR" status --porcelain)" ]]; then
+  echo "ADVERTENCIA: hay cambios sin commitear -- el release incluirá una 'M' real en la versión" >&2
+  GIT_DIRTY="M"
+else
+  GIT_DIRTY=""
+fi
+export VERSION="${GIT_HASH}${GIT_DIRTY}-$(date -u +%y%m%d)"
+echo "==> Versión: $VERSION"
+
 echo "==> Compilando firmware + bootloader (build_target.sh)"
 "$ROOT_DIR/firmware/tools/build_target.sh"
 
 echo "==> Empaquetando el árbol .rockbox/ real (make zip: códecs, rocks, viewers.config, codepages, langs)"
-(cd "$BUILD_DIR" && PATH="$TC_BIN:$PATH" make zip)
+(cd "$BUILD_DIR" && PATH="$TC_BIN:$PATH" make zip ${VERSION:+VERSION="$VERSION"})
 
 echo "==> Compilando mks5lboot"
 MKS5LBOOT_DIR="$SRC_DIR/utils/mks5lboot"

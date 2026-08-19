@@ -9,6 +9,17 @@
 #
 # RBDEV_TOOLCHAIN=<ruta a bin/> usa un toolchain externo en vez del de
 # este repo (atajo de desarrollo, nunca por defecto — DECISIONS.md M-002).
+#
+# VERSION=<string> fuerza la cadena de versión (rockbox-info.txt/
+# rbversion.h) en vez de que Rockbox la calcule con tools/version.sh --
+# ese script asume que la ruta de código fuente ES la raíz del repo
+# git (compara con GIT_WORK_TREE apuntando ahí); en Metro-Aura el repo
+# real es la carpeta padre de firmware/rockbox/, así que esa
+# comparación falla estructuralmente y siempre marca "M" (árbol
+# modificado), incluso con todo comiteado -- DECISIONS.md M-050.
+# package_dist.sh calcula esta variable correctamente antes de
+# invocar este script para un release; en desarrollo normal, se deja
+# sin usar (la "M" de más no afecta nada funcional).
 
 set -euo pipefail
 
@@ -34,7 +45,7 @@ build_one() {
     PATH="$TC_BIN:$PATH" "$SRC_DIR/tools/configure" --target=ipod6g --type="$type"
   fi
   echo "==> Compilando $dir"
-  PATH="$TC_BIN:$PATH" make -j"$(sysctl -n hw.ncpu)"
+  PATH="$TC_BIN:$PATH" make -j"$(sysctl -n hw.ncpu)" ${VERSION:+VERSION="$VERSION"}
 }
 
 if [[ "$WHAT" == "--all" || "$WHAT" == "--firmware" ]]; then

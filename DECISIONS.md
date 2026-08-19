@@ -762,3 +762,37 @@ buffer no se llene con el logging de todo el firmware a la vez);
 que es la única definición. `METRO_TRACE` ahora llama a ambos
 (`DEBUGF` para el simulador, `logf` para hardware real) -- ver
 `docs/ESTADO_FINAL.md` para el procedimiento completo de medición.
+
+## M-050 — F13: `tools/version.sh` marca "M" (árbol sucio) incluso con todo comiteado -- estructura del repo, no un bug de Metro
+
+`firmware/rockbox/tools/version.sh` decide si el árbol está "sucio"
+corriendo `git -C "$1" diff --name-only HEAD` con
+`GIT_WORK_TREE="$1"`, donde `$1` es la ruta al código fuente de
+Rockbox (`firmware/rockbox/`, pasada como `ROOTDIR` desde
+`firmware.make`). Ese mecanismo asume que esa ruta ES la raíz del
+repo git -- cierto en un checkout de Rockbox standalone, **falso**
+en Metro-Aura: el repo real es la carpeta padre completa (`DECISIONS.md`
+M-006 y ss., todo el árbol de fases vive ahí). Con `GIT_WORK_TREE`
+apuntando a un subdirectorio en vez de la raíz real, el comando falla
+(`fatal: this operation must be run in a work tree`) y el resultado se
+interpreta como "sucio" -- comprobado generando un release con el
+árbol perfectamente limpio (`git status --porcelain` vacío) y viendo
+igual una "M" en `rockbox-info.txt`. No es un bug introducido por
+Metro-Aura ni algo que `apps/metro/` pueda arreglar -- es cómo
+`tools/version.sh` fue escrito, asumiendo la estructura de un checkout
+de Rockbox suelto.
+
+**Fix, sin tocar ningún archivo de Rockbox**: `firmware.make` ya
+respeta una variable `VERSION` pasada por línea de comandos con
+prioridad sobre el cálculo de git (`SVNVERSION:=$(shell VERSION='$(VERSION)'
+...)`, y `version.sh` mismo: `if [ -z $VERSION ]; then ... fi`).
+`firmware/tools/build_target.sh` ahora propaga una `VERSION` opcional
+del entorno a cada `make`; `firmware/tools/package_dist.sh` la calcula
+correctamente ANTES de invocar `build_target.sh` -- hash corto real +
+fecha, con la "M" solo si `git status --porcelain` (corrido desde la
+raíz real del repo, sin el `GIT_WORK_TREE` mal alineado) dice de
+verdad que hay cambios sin commitear. Mismo patrón que
+Aura-Firmware's D-296/D-297 documentó como aceptado sin diagnosticar
+la causa raíz (`package_dist.sh` de ese repositorio solo bloquea el
+release si el árbol está sucio, nunca corrige el string en sí) -- acá
+se corrigió la causa en vez de solo evitarla.
