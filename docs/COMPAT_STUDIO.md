@@ -31,4 +31,4 @@ Leyenda: ⬜ pendiente · 🟡 parcial/no verificado · ✅ verificado en simula
 | C18 | Ninguna ruta/clave del contrato se escribe con otro nombre; nada se borra salvo el marcador al terminar | ✅ | continuo | Revisado en cada fase que tocó `metro_settings`/`metro_sync`/`metro_device`: las únicas escrituras de Metro son `aura.cfg` (F6, claves de la tabla D), el marcador (F6/F8, solo su propio `attempts`/borrado al terminar bien) — ninguna clave/ruta ajena se toca |
 | C19 | Descriptor USB sin cambios (stack Rockbox stock) | ✅ | F0 | F0 no toca `usb-s5l8702.c` ni strings de identidad USB — confirmado por el diff de F0 (ningún archivo USB en la lista de 10 portados) |
 | C20 | `AuraDeviceProbe` clasifica `.aura(hasBooted:true)` con Studio real | ⬜ | F13 | Requiere hardware |
-| C21 | Advertencia documentada sobre `AuraUpdateChecker` | ⬜ | F13 | `docs/ESTADO_FINAL.md` |
+| C21 | Advertencia documentada sobre `AuraUpdateChecker` | ✅ | F13 | `docs/ESTADO_FINAL.md`, sección "Advertencia: riesgo con Aura Studio (M-004)" |

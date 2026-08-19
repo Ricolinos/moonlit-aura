@@ -735,3 +735,30 @@ fondo ESTÁTICO con más dibujo encima (tile pequeño, texto, controles)
 antes de un único `lcd_update()` al final de
 `metro_screen_nowplaying_show()`, no el único paso de una animación
 por cuadro.
+
+## M-049 — F13: `METRO_TRACE` gana `logf()` -- `DEBUGF` solo es visible en el simulador, nunca en hardware real sin equipo adicional
+
+`PLAN_MAESTRO.md` S3.4 pide `METRO_TRACE` para medir el costo real de
+cada transición en hardware (F13). Investigando cómo verla ahí se
+encontró que `DEBUGF` (`firmware/debug.c`, target nativo) formatea el
+mensaje a un buffer local y llama a `debug()` -- una función
+`static inline` que **no hace nada** (`(void)msg;`) salvo que el
+target tenga su propio `HAVE_GDB_API`/`breakpoint()` conectado a un
+depurador JTAG real. En el simulador SÍ se ve (siempre va a `stderr`,
+`firmware/target/hosted/debug-hosted.c`, ya usado para verificar F11 —
+`docs/DESVIACIONES.md` no tiene entrada porque no era un hallazgo
+nuevo ahí, solo una comprobación), pero en un iPod real la promesa del
+plan de "medir en hardware con METRO_TRACE" habría sido letra muerta
+sin cambiar nada. Rockbox sí tiene un mecanismo pensado exactamente
+para esto: `logf()` (`firmware/export/logf.h`), un buffer circular de
+16 KB en RAM (`ROCKBOX_HAS_LOGF`, definido para `ipod6g`) visible
+desde el propio dispositivo, sin cable ni depurador -- menú de
+depuración → "Show Log File" (`apps/debug_menu.c`, `logfdisplay`).
+Requiere `#define LOGF_ENABLE` ANTES de `#include "logf.h"` en CADA
+archivo que quiera usarlo de verdad (si no, `logf()` se compila a
+no-op en ese archivo -- el propio header lo hace así para que el
+buffer no se llene con el logging de todo el firmware a la vez);
+`metro_transitions.c` es el único archivo de Metro que lo necesita, así
+que es la única definición. `METRO_TRACE` ahora llama a ambos
+(`DEBUGF` para el simulador, `logf` para hardware real) -- ver
+`docs/ESTADO_FINAL.md` para el procedimiento completo de medición.

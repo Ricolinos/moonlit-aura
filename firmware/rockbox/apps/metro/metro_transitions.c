@@ -22,6 +22,13 @@
 #include "system.h"
 #include "button.h"
 #include "debug.h"
+/* F13: LOGF_ENABLE before logf.h opts THIS file's logf() calls into
+ * Rockbox's own circular buffer (firmware/debug.c) -- without it,
+ * logf() compiles to a no-op even where ROCKBOX_HAS_LOGF is defined
+ * (logf.h's own per-file gate, to keep the 16KB buffer from filling
+ * with every file's logging at once). */
+#define LOGF_ENABLE
+#include "logf.h"
 
 #include "metro_transitions.h"
 #include "metro_fb.h"
@@ -35,10 +42,20 @@
 static fb_data s_fb_from[METRO_FB_PIXELS];
 static fb_data s_fb_to[METRO_FB_PIXELS];
 
-/* DEBUGF is a no-op outside DEBUG builds -- always present in the
- * code at zero release cost, PLAN_MAESTRO.md S3.4. */
+/* DEBUGF is a no-op outside DEBUG builds (only useful in the sim,
+ * where it always goes to stderr regardless -- debug.h) -- on real
+ * hardware it stays silent even with DEBUG defined, since generic
+ * firmware/debug.c's own debug() hook is a no-op there (no JTAG/GDB
+ * connected). logf() is what's actually observable on real hardware
+ * without extra equipment: ipod6g has ROCKBOX_HAS_LOGF, so this ships
+ * straight to Rockbox's own on-device log viewer (Debug menu -> "Show
+ * Log File") -- see docs/ESTADO_FINAL.md for the full measurement
+ * procedure this exists for (PLAN_MAESTRO.md S3.4). */
 #define METRO_TRACE(fmt, ...) \
-    DEBUGF("metro_transitions: " fmt "\n", ##__VA_ARGS__)
+    do { \
+        DEBUGF("metro_transitions: " fmt "\n", ##__VA_ARGS__); \
+        logf("metro_transitions: " fmt, ##__VA_ARGS__); \
+    } while (0)
 
 /* Real bug class documented by Aura-Firmware's own aura_transitions.c
  * (D-074): these loops sleep() between frames without ever reading a
