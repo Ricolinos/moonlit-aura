@@ -21,6 +21,7 @@
 
 #include "rbpaths.h"
 #include "file.h"
+#include "lcd.h"
 #include "plugin.h"
 #include "string-extra.h"
 
@@ -61,6 +62,11 @@ void metro_photos_view(const char *filename)
     snprintf(path, sizeof(path), "%s/%s", PHOTOS_DIR, filename);
     plugin_set_silent_open_errors(true);
     plugin_load(VIEWERS_DIR "/imageviewer.rock", path);
+
+    /* R2-F1/DD-1 (M-051): imageviewer is free to leave the LCD in
+     * DRMODE_SOLID -- restore Metro's DRMODE_FG baseline before
+     * anything in apps/metro/ draws again. */
+    lcd_set_drawmode(DRMODE_FG);
 
     /* F11: see metro_video_play()'s identical comment. */
     metro_transitions_fade(metro_screen_list_show);

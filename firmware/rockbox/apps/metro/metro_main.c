@@ -26,6 +26,7 @@
 #include "tagcache.h"
 #include "kernel.h"
 #include "button.h"
+#include "lcd.h"
 #include "misc.h"
 #include "settings.h"
 #include "statusbar.h"
@@ -169,6 +170,12 @@ void metro_run_sync_screen_if_needed(void)
 static void metro_disk_handoff(void)
 {
     metro_settings_apply_pending_clock();
+    /* R2-F1/DD-4 (M-054): a fresh disk (first boot, or a USB session
+     * that just mounted a different volume) may not have any of the
+     * four media folders yet -- ensure they exist before anything
+     * else in this handoff (sync, device reload) tries to read from
+     * them. */
+    metro_ensure_media_dirs();
     metro_device_reload();
     metro_sync_check_pending();
     metro_run_sync_screen_if_needed();
@@ -208,6 +215,15 @@ void metro_main(void)
      * see metro_main.h for why it can't run here, after init() returns. */
     metro_settings_load();
     metro_fonts_init();
+    /* R2-F1/DD-1 (M-051): DRMODE_FG is the drawmode every apps/metro/
+     * text draw expects -- metro_draw_text()/metro_draw_text_cut_right()
+     * also set it per call, but the LCD starts in Rockbox's default
+     * DRMODE_SOLID and nothing has drawn text yet at this point (the
+     * splash screen is next), so set the baseline here too.
+     * metro_photos.c and metro_video.c re-set it after their
+     * plugin_load() calls return, since imageviewer/mpegplayer are
+     * free to leave the LCD in DRMODE_SOLID behind them. */
+    lcd_set_drawmode(DRMODE_FG);
     metro_theme_init();
     /* metro_theme_init()/metro_lang.c's own module-level statics set
      * the compiled defaults; applying the loaded settings right after

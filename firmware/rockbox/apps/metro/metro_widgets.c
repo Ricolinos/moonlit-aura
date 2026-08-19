@@ -150,7 +150,7 @@ void metro_widgets_draw_repeat_icon(int x, int y, bool one)
 
         lcd_setfont(metro_font_id(MFONT_CAPTION));
         lcd_getstringsize((const unsigned char *)digit, &w, &h);
-        lcd_set_foreground(metro_color_accent());
-        lcd_putsxy(x + (s - w) / 2, y + (s - h) / 2, (const unsigned char *)digit);
+        metro_draw_text(MFONT_CAPTION, x + (s - w) / 2, y + (s - h) / 2,
+                         digit, metro_color_accent());
     }
 }

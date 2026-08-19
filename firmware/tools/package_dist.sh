@@ -6,6 +6,15 @@
 #
 # Uso:
 #   firmware/tools/package_dist.sh
+#   firmware/tools/package_dist.sh --release-tag v0.2.0
+#
+# --release-tag <tag>: marca este empaquetado como un Release real --
+# escribe el tag exacto en .rockbox/aura/version.txt (dentro de
+# rockbox.zip), la única forma en que Aura Studio puede saber qué
+# versión de Metro tiene instalada un dispositivo (mismo contrato que
+# Aura-Firmware's package_dist.sh, D-297/M-004). Sin este flag (build
+# de desarrollo) el archivo no se escribe -- su ausencia es una señal
+# válida en sí misma. Requiere el árbol git limpio (aborta si no).
 #
 # Requiere: el toolchain ARM instalado en firmware/toolchain/ (ver
 # firmware/tools/build_toolchain.sh) -- o RBDEV_TOOLCHAIN apuntando a
@@ -39,6 +48,12 @@
 
 set -euo pipefail
 
+RELEASE_TAG=""
+if [[ "${1:-}" == "--release-tag" ]]; then
+  RELEASE_TAG="${2:-}"
+  [[ -n "$RELEASE_TAG" ]] || { echo "ERROR: --release-tag requiere un valor (ej. v0.2.0)" >&2; exit 1; }
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SRC_DIR="$ROOT_DIR/firmware/rockbox"
 BUILD_DIR="$ROOT_DIR/firmware/build-ipod6g"
@@ -59,7 +74,20 @@ fi
 # se lo pasamos a build_target.sh como VERSION= en vez de dejar que
 # Rockbox lo intente por su cuenta.
 GIT_HASH="$(git -C "$ROOT_DIR" rev-parse --short=10 HEAD)"
-if [[ -n "$(git -C "$ROOT_DIR" status --porcelain)" ]]; then
+GIT_STATUS="$(git -C "$ROOT_DIR" status --porcelain)"
+
+# R2-F1/DD-6 (M-056): mismo requisito que Aura-Firmware's package_dist.sh
+# (D-297) -- un --release-tag construido sobre un árbol sucio produce
+# un rockbox.ipod cuyo rockbox-info.txt queda marcado con una "M", no
+# bit-provable contra el commit del tag. En desarrollo (sin el flag)
+# no bloquea -- es normal estar iterando.
+if [[ -n "$RELEASE_TAG" ]] && [[ -n "$GIT_STATUS" ]]; then
+  echo "ERROR: hay cambios sin commitear -- un --release-tag necesita el árbol limpio" >&2
+  echo "  (git status --short en $ROOT_DIR)" >&2
+  exit 1
+fi
+
+if [[ -n "$GIT_STATUS" ]]; then
   echo "ADVERTENCIA: hay cambios sin commitear -- el release incluirá una 'M' real en la versión" >&2
   GIT_DIRTY="M"
 else
@@ -132,6 +160,16 @@ for sentinel in "${SENTINELS[@]}"; do
   fi
 done
 echo "==> Centinelas verificados: $(find "$STAGE/.rockbox" -type f | wc -l | tr -d ' ') archivos en el árbol"
+
+# version.txt (R2-F1/DD-6, M-056): solo se escribe si este empaquetado
+# corresponde a un Release real (--release-tag) -- mismo contrato que
+# Aura-Firmware. Aura Studio's AuraUpdateChecker lo lee para saber la
+# versión instalada sin depender del hash embebido en rockbox-info.txt.
+if [[ -n "$RELEASE_TAG" ]]; then
+  echo "==> Escribiendo .rockbox/aura/version.txt ($RELEASE_TAG)"
+  mkdir -p "$STAGE/.rockbox/aura"
+  echo "$RELEASE_TAG" > "$STAGE/.rockbox/aura/version.txt"
+fi
 
 (cd "$STAGE" && zip -qr "$DIST_DIR/rockbox.zip" .rockbox)
 

@@ -42,10 +42,9 @@ prefijo rompería la detección automática sin ninguna ganancia
 
 Metro-Aura publica sus propios releases (tag, `rockbox.ipod`,
 `rockbox.zip`, `bootloader-ipod6g.ipod`, `mks5lboot`, `checksums.txt`)
-e instalación manual. **No** escribe `.rockbox/aura/version.txt`
-(evita aparentar ser una versión de Aura). **Sí** escribe la clave
-nueva `firmware_family: metro` en `aura.cfg` — clave propia de Metro,
-sin equivalente en el contrato de Aura-Firmware/Aura-Studio.
+e instalación manual. Escribe la clave `firmware_family: metro` en
+`aura.cfg` — clave propia de Metro, sin equivalente en el contrato de
+Aura-Firmware/Aura-Studio.
 
 **Riesgo abierto, no resuelto en este proyecto**: si el usuario tiene
 Aura Studio instalado con el `rockbox.ipod` de Aura embebido y conecta
@@ -56,6 +55,20 @@ aprenda a leer `firmware_family` y no ofrezca esa acción — trabajo en
 otro repositorio, fuera del alcance de este proyecto (regla de
 contención de la carpeta padre). Documentado como advertencia en
 `docs/ESTADO_FINAL.md`.
+
+**Actualización R2-F1/DD-6 (M-056, no se borra esta entrada)**: la
+frase original decía que Metro "no escribe `.rockbox/aura/version.txt`
+(evita aparentar ser una versión de Aura)". Eso cambió --
+`package_dist.sh --release-tag` ahora SÍ lo escribe (ver M-056),
+porque con `PLAN-metro-r2-maestro.md` DD-13 Aura Studio va a distinguir
+familias por el contenido real de `firmware_family` en vez de por la
+mera presencia de `version.txt` -- una vez que eso exista (`ST-045`,
+Aura-Studio, fuera de esta sesión), `version.txt` deja de "aparentar
+ser Aura" y pasa a ser el único canal para que Studio sepa qué versión
+de **Metro** hay instalada. El riesgo de este M-004 **sigue vigente
+sin cambios para cualquier versión de Aura Studio anterior a ST-045**
+-- esas versiones no saben leer `firmware_family` y seguirán
+comparando por hash igual que hoy.
 
 ## M-005 — Marcador de sincronización desde el día uno
 
@@ -796,3 +809,218 @@ Aura-Firmware's D-296/D-297 documentó como aceptado sin diagnosticar
 la causa raíz (`package_dist.sh` de ese repositorio solo bloquea el
 release si el árbol está sucio, nunca corrige el string en sí) -- acá
 se corrigió la causa en vez de solo evitarla.
+
+## M-051 — R2-F1: todo texto de `apps/metro/` dibuja bajo `DRMODE_FG`, nunca el `DRMODE_SOLID` por defecto de Rockbox
+
+`INVESTIGACION-metro-r2.md` E.1 confirmó la causa raíz de las "placas
+negras" que tapaban el cover art en Now Playing: `metro_draw.c` nunca
+llamaba a `lcd_set_drawmode()`, así que cada `lcd_putsxy()` heredaba el
+`DRMODE_SOLID` por defecto de Rockbox -- cada glifo se dibuja con una
+caja de fondo opaca (`fg_pattern`/`bg_pattern` del viewport), tapando
+lo que sea que estuviera detrás en vez de leerlo como transparente.
+
+**Fix**: `metro_draw_text()` fija `lcd_set_drawmode(DRMODE_FG)` justo
+antes de `lcd_putsxy()`; `metro_draw_text_cut_right()` fija
+`vp.drawmode = DRMODE_FG` en el viewport temporal que ya arma para el
+recorte de texto (M-027); `metro_draw_tile()` (letra inicial de un
+tile) fija `DRMODE_FG` inline antes de su `lcd_putsxy()` propio. Las
+tres llamadas directas a `lcd_putsxy()` que quedaban fuera de
+`metro_draw_text()` (`metro_draw_header()` x2, `metro_draw_pivots()` y
+el dígito del ícono de repetir en `metro_widgets.c`) ahora se canalizan
+por `metro_draw_text()` en vez de duplicar la lógica de drawmode --
+simplifica el llamador y garantiza el mismo comportamiento en un solo
+lugar. `metro_main()` fija el mismo baseline una vez, justo después de
+`metro_fonts_init()` (el LCD arranca en `DRMODE_SOLID` y nada dibujó
+texto todavía en ese punto).
+
+**Desviación del plan** (`PLAN-metro-r2-maestro.md` DD-1): el plan
+asumía que las llamadas a `plugin_load()` vivían dentro de
+`metro_main.c` y pedía restaurar `DRMODE_FG` ahí "al volver de
+cualquier `plugin_load()`". En el código real esas llamadas están en
+`metro_photos.c` (`imageviewer.rock`) y `metro_video.c`
+(`mpegplayer.rock`), no en `metro_main.c` -- cada una restaura
+`DRMODE_FG` inline justo después de su propio `plugin_load()`, antes
+de que `metro_transitions_fade()` vuelva a dibujar la lista. Ver
+`docs/DESVIACIONES.md` R2-F1-1 para el detalle completo.
+
+**Por qué no restaurar `DRMODE_SOLID` en algún punto**: ningún dibujo
+de `apps/metro/` quiere una caja de fondo opaca a propósito -- el
+fondo ya se pinta explícitamente donde hace falta (`lcd_fillrect()` en
+`metro_draw_tile()`, `metro_draw_clear_rows_area()`, etc.) antes de
+dibujar el texto encima, así que no hay ningún caso real que necesite
+volver a `SOLID`.
+
+## M-052 — R2-F1/DD-2: `METRO_NP_BG_ALPHA256` se mantiene en 77 (30%) tras verificar contra una carátula casi blanca
+
+`INVESTIGACION-metro-r2.md` E.4 estimaba, sin observación real, que el
+peor caso de contraste para la línea de texto terciaria (álbum) de Now
+Playing rondaría ~25/255 (~10%) contra una carátula casi blanca --
+suficiente para preocupar por legibilidad. `PLAN-metro-r2-maestro.md`
+DD-2 pedía generar esa carátula, capturar el tema oscuro real y decidir
+entre mantener 77 o bajar a 51 (20%) según lo que se viera.
+
+**Qué se hizo**: `gen_test_media.sh` ahora genera una carátula
+`0xF2F2EC` (casi blanca) para el álbum "Wheel & Click/Analog Dreams"
+(ver el comentario nuevo ahí). Se capturó Now Playing reproduciendo un
+tema de ese álbum en el simulador, tema oscuro, `graphics=full`:
+`docs/screenshots/R2-F1-np-worstcase.png`. Se comparó contra
+`docs/screenshots/R2-F1-np-clean.png` (carátula naranja `0xCC7733`,
+"First Light", caso típico).
+
+**Resultado**: la línea terciaria ("Analog Dreams") queda legible en
+ambas capturas. La razón, visible al mirar el propio código de
+`metro_screen_nowplaying_show()`: `metro_fb_blend_over_color()` mezcla
+la carátula sobre `metro_color_bg()` (un azul-marino oscuro) al 30% --
+incluso con una carátula casi blanca (~242 de luminosidad), el
+compuesto queda dominado por el 70% del fondo oscuro
+(`0.3*242 + 0.7*25 ≈ 90`, un gris medio-oscuro, no un blanco real). La
+estimación de E.4 asumía implícitamente comparar el texto contra la
+carátula a color pleno, no contra su versión ya atenuada al 30% -- el
+mecanismo de blend en sí ya actúa como salvaguarda de contraste antes
+de llegar al texto.
+
+**Decisión**: se mantiene `METRO_NP_BG_ALPHA256 = 77`, sin bajar a 51.
+Ver `docs/DESVIACIONES.md` no aplica aquí -- no hubo desviación del
+plan, DD-2 preveía explícitamente ambos desenlaces ("si es legible,
+mantener 77; si no, bajar a 51") y este es el desenlace "mantener".
+
+**Nota lateral, fuera de alcance de R2-F1**: verificando estas capturas
+se encontró que el índice de fila seleccionado en pantalla NO siempre
+coincide con la pista que efectivamente empieza a sonar al reproducir
+desde "Canciones" (todas) o desde una lista de canciones de álbum --
+confirmado con trazas temporales (`songs_on_select` recibe el índice
+correcto, pero `metro_music_play_all_songs()`/
+`metro_music_play_songs_of_album()` terminan reproduciendo una pista
+distinta a la de esa fila). Es un bug real y reproducible en
+`metro_music.c` (`insert_matching_tracks()` y su interacción con
+`playlist_start()`), preexistente a esta ronda (F4/F6), no introducido
+por DD-1/DD-2 ni relacionado con ellos. No se investigó ni se corrigió
+aquí -- fuera del alcance declarado de R2-F1. Reportado al dueño en el
+resumen de esta fase para decidir cuándo abrirlo como su propia fase o
+ítem de trabajo.
+
+## M-053 — R2-F1/DD-3: `metro_fsutil_list_by_ext()` descarta directorios vía `dir_get_info()`/`ATTR_DIRECTORY`
+
+`INVESTIGACION-metro-r2.md` B.3 confirmó empíricamente que
+`metro_fsutil_list_by_ext()` no distinguía directorios de archivos --
+un directorio literalmente llamado `Folder.jpg` (herramientas de
+escritorio de terceros lo crean) aparecía en la lista de fotos como si
+fuera una imagen.
+
+**Fix**: mismo patrón que `apps/filetree.c` (línea ~201) ya usa para su
+propio escaneo filtrado por extensión -- `dir_get_info(d, entry)` por
+cada entrada, y se descarta si `info.attribute & ATTR_DIRECTORY`.
+`fs_attr.h` (que define `ATTR_DIRECTORY`) llega transitivo vía
+`dir.h`, ya incluido en `metro_fsutil.c` -- sin includes nuevos.
+
+**Verificado**: se recreó el caso de repro exacto de B.3 --
+`Photos/Folder.jpg/` (directorio) junto a los fixtures reales de fotos
+en el simulador -- y se capturó la lista "todos" de Fotos
+(`docs/screenshots/R2-F1-photos-dirfilter.png`): el directorio no
+aparece, solo los 6 archivos de imagen reales quedan listados.
+
+## M-054 — R2-F1/DD-4: `metro_ensure_media_dirs()` crea `/Music`, `/Videos`, `/Photos`, `/Playlists` si faltan
+
+Un disco que nunca pasó por un sync real de Aura Studio (música
+copiada a mano por USB, o un iPod recién formateado) puede no tener
+ninguna de las cuatro carpetas de medios de nivel superior que
+`docs/contracts/library-layout-v1.md` (Aura-Firmware, consultado en
+solo lectura) define -- `/Music/`, `/Videos/`, `/Photos/`,
+`/Playlists/`. Sin ellas, las pantallas de Videos/Fotos muestran listas
+vacías sin explicación y guardar una lista de reproducción nueva
+fallaría en silencio.
+
+**Qué se hizo**: `metro_ensure_media_dirs()` (`metro_settings.c`, único
+módulo autorizado por `CLAUDE.md` a construir rutas del contrato) crea
+las cuatro carpetas con `mkdir()` si `dir_exists()` dice que falta cada
+una -- mismo patrón que `metro_settings_save()` ya usa para
+`METRO_DIR`. Se llama desde `metro_disk_handoff()` en `metro_main.c`,
+el único punto (arranque + cada vuelta de USB, comentario ya existente
+ahí) donde el firmware "recupera" el disco.
+
+**Verificado**: se apartaron las cuatro carpetas del simulador
+(simulando un disco recién montado sin ellas), se arrancó el
+simulador, y las cuatro reaparecieron vacías tras el boot antes de
+restaurar los fixtures reales.
+
+## M-055 — R2-F1/DD-5: `metro_manifest_t` parsea las 13 claves reales de `sync_summary.cfg`, no solo 3
+
+Aura Studio escribe el mismo `sync_summary.cfg` de 13 claves para
+cualquier dispositivo, sea Aura o Metro (`CatalogSummaryWriter`, no
+distingue por `firmware_family`) -- pero `metro_manifest_t` solo leía
+`music_count`/`video_count`/`photo_count`, ignorando las otras 10
+claves reales que Studio ya escribe hoy (`music_bytes`, `video_bytes`,
+`photo_bytes`, `playlist_count`, y el desglose por categoría de
+video/foto).
+
+**Qué se hizo**: `metro_manifest_t`/`metro_manifest_load()`
+(`metro_manifest.c/.h`) ahora replican el mismo conjunto de campos que
+`aura_manifest_t` de Aura-Firmware (consultado en solo lectura) --
+incluyendo el parser `parse_i64()` propio (mismo motivo que el de Aura:
+`atoll()` no está disponible en todos los targets de este árbol) y las
+banderas `has_video_categories`/`has_photo_categories`, derivadas de
+si las claves de desglose aparecieron en el archivo (no son claves en
+sí mismas) -- un manifiesto escrito antes de que Studio agregara el
+desglose no las tiene, y el firmware debe distinguir eso de "el conteo
+real es cero".
+
+`metro_screen_about.c` (`about_count()`/`about_get_row()`) agrega filas
+para `playlist_count` (siempre que haya sync) y, condicionalmente, las
+6 filas de desglose (películas/series/videoclips si
+`has_video_categories`; imágenes/fotografías/IA si
+`has_photo_categories`) -- mismo orden que la pantalla Acerca de real
+de Aura-Firmware (`aura_screens.c`, consultada en solo lectura),
+adaptado al motor de filas genérico de Metro (Aura dibuja esa pantalla
+a mano; Metro reutiliza su lista de filas existente, sin copiar el
+motor de dibujo de Aura). 7 strings nuevos ES/EN en `metro_lang.c`
+(`LANG_ABOUT_PLAYLISTS`/`MOVIES`/`SERIES`/`CLIPS`/`IMAGES`/
+`PHOTOS_TAKEN`/`AI`), minúsculas sin acentos -- mismo estilo que el
+resto de `metro_lang.c` (ninguna cadena existente usa tildes).
+
+**Verificado**: `sync_summary.cfg` de 13 claves colocado a mano en el
+simulador (conteos: 21 canciones, 5 videos, 8 fotos, 1 lista, desglose
+1/1/3 de video y 1/6/1 de foto) -- capturas
+`docs/screenshots/R2-F1-about-full.png`,
+`R2-F1-about-full-scrolled.png`, `R2-F1-about-full-end.png` muestran
+las 13 filas de conteo más "basado en rockbox" al final, en el orden
+correcto.
+
+## M-056 — R2-F1/DD-6: `package_dist.sh --release-tag` escribe `.rockbox/aura/version.txt`, mismo contrato que Aura-Firmware
+
+**Nota de numeración**: `PLAN-metro-r2-maestro.md` DD-6 sugería "Decisión
+M-052" para este ítem, escrito en Fase 3 antes de saber el orden real
+de ejecución de Fase 4. `DECISIONS.md` es una bitácora cronológica, no
+una spec (encabezado del archivo) -- M-052 ya quedó asignado a la
+decisión de DD-2 (la primera que necesitó número nuevo tras M-051 en
+el orden real de ejecución). Este ítem es M-056, siguiente libre.
+
+`package_dist.sh` acepta `--release-tag vX.Y.Z` como primer/segundo
+argumento -- mismo contrato exacto que el `package_dist.sh` de
+Aura-Firmware (consultado en solo lectura, D-297): exige árbol git
+limpio (`ERROR` + `exit 1` si `--release-tag` se combina con cambios
+sin commitear, ANTES de compilar nada), y solo con la bandera escribe
+`$RELEASE_TAG` literal en `.rockbox/aura/version.txt` dentro del
+`$STAGE` que arma `rockbox.zip`, justo antes del `zip -qr` (mismo punto
+que Aura). Sin la bandera (build de desarrollo, uso normal) el archivo
+no se escribe -- su ausencia sigue siendo una señal válida en sí misma.
+
+**Verificado**:
+- Guardia de árbol sucio: `package_dist.sh --release-tag v0.2.0-test`
+  corrido con los 25 archivos de esta misma fase sin commitear ->
+  `ERROR: hay cambios sin commitear -- un --release-tag necesita el
+  árbol limpio`, `exit 1`, sin compilar nada -- confirmado en vivo.
+- Build de desarrollo (sin la bandera): corrida completa real
+  (`build_target.sh` + bootloader + `make zip` + `mks5lboot` +
+  `rockbox.zip` armado + centinelas + checksums, terminó en
+  `firmware/dist/`) -- confirmado que `.rockbox/aura/version.txt`
+  **no** aparece en `rockbox.zip` (`unzip -l` sin esa entrada).
+- Escritura de `version.txt` en sí (el bloque `mkdir -p`/`echo >`
+  dentro de `$STAGE`): verificado en aislamiento contra un directorio
+  de staging de prueba -- contenido exacto `v0.2.0-test` escrito en
+  `$STAGE/.rockbox/aura/version.txt`. **No verificado end-to-end**
+  dentro de una corrida real de `package_dist.sh --release-tag` sobre
+  árbol limpio: probar eso exige que `package_dist.sh` mismo (el
+  archivo que esta misma decisión modifica) ya esté comiteado --
+  imposible antes del commit de cierre de R2-F1. Queda como
+  verificación pendiente natural la primera vez que R2-F5 corra un
+  release real (`v0.2.0`, con el árbol ya limpio en ese punto).

@@ -37,6 +37,20 @@ completo de ejecución.
   lee y desreferencia `vp->buffer` antes de asignarlo (ver
   `DECISIONS.md` M-027: costó dos rondas de investigación y un
   diagnóstico equivocado).
+- Todo `lcd_putsxy`/`lcd_puts` de `apps/metro/` corre bajo
+  `DRMODE_FG` (transparente contra lo que ya haya en pantalla) —
+  `DRMODE_SOLID`, el default de Rockbox, pinta una caja de fondo
+  opaca por glifo y tapaba el cover art detrás del texto en Now
+  Playing. En la práctica esto significa: dibujar texto siempre a
+  través de `metro_draw_text()`/`metro_draw_text_cut_right()`
+  (`metro_draw.c`), nunca con un `lcd_putsxy()` suelto; si un sitio
+  nuevo necesita de verdad un rectángulo de fondo sólido detrás de
+  texto, lo pinta explícito con `lcd_fillrect()` antes de dibujar
+  (nunca vía `DRMODE_SOLID`). Cualquier código que llame
+  `plugin_load()` (imageviewer, mpegplayer) restaura
+  `lcd_set_drawmode(DRMODE_FG)` justo después, ya que el plugin es
+  libre de dejar el LCD en `DRMODE_SOLID` al salir. Ver `DECISIONS.md`
+  M-051.
 
 ## Cambios a archivos de Rockbox fuera de `apps/metro/`
 

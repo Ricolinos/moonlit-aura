@@ -25,15 +25,29 @@
 #include "metro_manifest.h"
 #include "metro_lang.h"
 
-/* Row layout: device name, then either 3 count rows (music/video/photo,
- * if sync_summary.cfg exists) or 1 "not synced yet" row, then "based
- * on rockbox". */
+/* Row layout: device name, then either "based on rockbox" straight
+ * after 1 "not synced yet" row, or (if sync_summary.cfg exists, R2-F1/
+ * DD-5, M-055) music/video/photo/playlist counts followed by whichever
+ * category breakdown rows the manifest actually carries (0, 3, or 6
+ * extra rows depending on has_video_categories/has_photo_categories --
+ * a manifest written before Studio added category breakdown has
+ * neither), then "based on rockbox". */
+
+static int synced_row_count(const metro_manifest_t *m)
+{
+    int n = 4; /* music, video, photo, playlists */
+    if (m->has_video_categories)
+        n += 3; /* movies, series, clips */
+    if (m->has_photo_categories)
+        n += 3; /* images, photos, ai */
+    return n;
+}
 
 static int about_count(void *ctx)
 {
     metro_manifest_t m;
     (void)ctx;
-    return 2 + (metro_manifest_load(&m) ? 3 : 1);
+    return 2 + (metro_manifest_load(&m) ? synced_row_count(&m) : 1);
 }
 
 static void about_get_row(void *ctx, int index, struct metro_row *out)
@@ -66,23 +80,78 @@ static void about_get_row(void *ctx, int index, struct metro_row *out)
     }
     else
     {
-        if (index == 1)
+        /* R2-F1/DD-5 (M-055): row order mirrors Aura-Firmware's own
+         * About screen (consulted read-only, aura_screens.c) -- top-level
+         * counts, then playlists, then video breakdown, then photo
+         * breakdown, each breakdown only if the manifest actually
+         * carries it. */
+        int row = 1;
+
+        if (index == row++)
         {
             snprintf(buf, sizeof(buf), "%d %s", m.music_count, metro_lang_str(LANG_ABOUT_SONGS));
             out->title = buf;
             return;
         }
-        if (index == 2)
+        if (index == row++)
         {
             snprintf(buf, sizeof(buf), "%d %s", m.video_count, metro_lang_str(LANG_HUB_VIDEOS));
             out->title = buf;
             return;
         }
-        if (index == 3)
+        if (index == row++)
         {
             snprintf(buf, sizeof(buf), "%d %s", m.photo_count, metro_lang_str(LANG_HUB_PHOTOS));
             out->title = buf;
             return;
+        }
+        if (index == row++)
+        {
+            snprintf(buf, sizeof(buf), "%d %s", m.playlist_count, metro_lang_str(LANG_ABOUT_PLAYLISTS));
+            out->title = buf;
+            return;
+        }
+        if (m.has_video_categories)
+        {
+            if (index == row++)
+            {
+                snprintf(buf, sizeof(buf), "%d %s", m.video_movies_count, metro_lang_str(LANG_ABOUT_MOVIES));
+                out->title = buf;
+                return;
+            }
+            if (index == row++)
+            {
+                snprintf(buf, sizeof(buf), "%d %s", m.video_series_count, metro_lang_str(LANG_ABOUT_SERIES));
+                out->title = buf;
+                return;
+            }
+            if (index == row++)
+            {
+                snprintf(buf, sizeof(buf), "%d %s", m.video_clips_count, metro_lang_str(LANG_ABOUT_CLIPS));
+                out->title = buf;
+                return;
+            }
+        }
+        if (m.has_photo_categories)
+        {
+            if (index == row++)
+            {
+                snprintf(buf, sizeof(buf), "%d %s", m.photo_images_count, metro_lang_str(LANG_ABOUT_IMAGES));
+                out->title = buf;
+                return;
+            }
+            if (index == row++)
+            {
+                snprintf(buf, sizeof(buf), "%d %s", m.photo_photos_count, metro_lang_str(LANG_ABOUT_PHOTOS_TAKEN));
+                out->title = buf;
+                return;
+            }
+            if (index == row++)
+            {
+                snprintf(buf, sizeof(buf), "%d %s", m.photo_ai_count, metro_lang_str(LANG_ABOUT_AI));
+                out->title = buf;
+                return;
+            }
         }
     }
 

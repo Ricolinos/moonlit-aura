@@ -18,7 +18,6 @@
  *
  ****************************************************************************/
 #include <string.h>
-#include <stdlib.h>
 
 #include "file.h"
 #include "rbpaths.h"
@@ -28,6 +27,23 @@
 
 #define METRO_DIR           ROCKBOX_DIR "/aura"
 #define MANIFEST_PATH        METRO_DIR "/sync_summary.cfg"
+
+/* Same reasoning as Aura-Firmware's aura_manifest.c (consulted
+ * read-only): atoll()/strtoll() aren't available on every target in
+ * this tree, and every value here is a non-negative decimal integer
+ * written by CatalogSummaryWriter (Aura Studio), so a small parser of
+ * its own is enough without pulling in extended libc. */
+static long long parse_i64(const char *s)
+{
+    long long value = 0;
+
+    while (*s >= '0' && *s <= '9')
+    {
+        value = value * 10 + (*s - '0');
+        s++;
+    }
+    return value;
+}
 
 bool metro_manifest_load(metro_manifest_t *out)
 {
@@ -48,13 +64,31 @@ bool metro_manifest_load(metro_manifest_t *out)
             continue;
 
         if (!strcmp(name, "music_count"))
-            out->music_count = atoi(value);
+            out->music_count = (int)parse_i64(value);
+        else if (!strcmp(name, "music_bytes"))
+            out->music_bytes = parse_i64(value);
         else if (!strcmp(name, "video_count"))
-            out->video_count = atoi(value);
+            out->video_count = (int)parse_i64(value);
+        else if (!strcmp(name, "video_bytes"))
+            out->video_bytes = parse_i64(value);
         else if (!strcmp(name, "photo_count"))
-            out->photo_count = atoi(value);
-        /* Byte totals, playlist_count, per-category breakdown: not
-         * read here, see the module comment in metro_manifest.h. */
+            out->photo_count = (int)parse_i64(value);
+        else if (!strcmp(name, "photo_bytes"))
+            out->photo_bytes = parse_i64(value);
+        else if (!strcmp(name, "playlist_count"))
+            out->playlist_count = (int)parse_i64(value);
+        else if (!strcmp(name, "video_movies_count"))
+        { out->video_movies_count = (int)parse_i64(value); out->has_video_categories = true; }
+        else if (!strcmp(name, "video_series_count"))
+        { out->video_series_count = (int)parse_i64(value); out->has_video_categories = true; }
+        else if (!strcmp(name, "video_clips_count"))
+        { out->video_clips_count = (int)parse_i64(value); out->has_video_categories = true; }
+        else if (!strcmp(name, "photo_images_count"))
+        { out->photo_images_count = (int)parse_i64(value); out->has_photo_categories = true; }
+        else if (!strcmp(name, "photo_photos_count"))
+        { out->photo_photos_count = (int)parse_i64(value); out->has_photo_categories = true; }
+        else if (!strcmp(name, "photo_ai_count"))
+        { out->photo_ai_count = (int)parse_i64(value); out->has_photo_categories = true; }
     }
     close(fd);
     return true;

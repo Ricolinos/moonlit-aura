@@ -186,6 +186,13 @@ gen_track "Wheel & Click" "Analog Dreams" "Ambient" 2 "Ferrite" 175
 gen_track "Wheel & Click" "Analog Dreams" "Ambient" 3 "Idle Hum" 185
 gen_track "Wheel & Click" "Analog Dreams" "Ambient" 4 "Wind Down" 196
 
+# R2-F1/DD-2: near-white cover art, worst-case contrast fixture for
+# Now Playing's semi-transparent text plate (METRO_NP_BG_ALPHA256,
+# metro_screen_nowplaying.c) -- the palest fixture that ships, on
+# purpose, to check the tertiary (album) text line stays legible over
+# the palest cover a real user could plausibly have.
+gen_cover_jpg "0xF2F2EC" "300x300" "$MUSIC_DIR/Wheel & Click/Analog Dreams/cover.jpg"
+
 # COMPAT_STUDIO.md C8: tagcache escanea todo el disco sin importar la
 # profundidad de carpetas (docs/contracts/library-layout-v1.md SS "/Music/",
 # Aura-Firmware, "no depende del layout") -- estas dos pistas ejercitan

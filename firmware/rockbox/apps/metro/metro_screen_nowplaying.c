@@ -250,7 +250,17 @@ static void draw_mode_indicators(void)
 /* F12: 30% of the track's own art, scaled to fill the screen, behind
  * everything else -- graphics=full only (PLAN_MAESTRO.md S3.3);
  * static, redrawn plainly every metro_screen_nowplaying_show() call
- * like the rest of this screen, never animated on its own. */
+ * like the rest of this screen, never animated on its own.
+ *
+ * R2-F1/DD-2 (M-052): re-verified against a near-white cover fixture
+ * (0xF2F2EC, "Wheel & Click/Analog Dreams" in gen_test_media.sh) --
+ * kept at 77 rather than dropping to 51 (20%). Blending at only 30%
+ * keeps metro_color_bg()'s dark base dominant in the composite
+ * regardless of how bright the source art is (0.3*brightCover +
+ * 0.7*darkBg still lands in a medium-dark gray, not near-white), so
+ * the tertiary (album) text line stays legible in practice even
+ * against the palest cover this fixture set can produce -- see
+ * docs/screenshots/R2-F1-np-worstcase.png. */
 #define METRO_NP_BG_ALPHA256 77 /* ~30% of 256 */
 
 void metro_screen_nowplaying_show(void)

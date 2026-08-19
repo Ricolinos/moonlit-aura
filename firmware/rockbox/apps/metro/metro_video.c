@@ -21,6 +21,7 @@
 
 #include "rbpaths.h"
 #include "file.h"
+#include "lcd.h"
 #include "plugin.h"
 #include "string-extra.h"
 
@@ -66,6 +67,11 @@ void metro_video_play(const char *filename)
     snprintf(path, sizeof(path), "%s/%s", VIDEOS_DIR, filename);
     plugin_set_silent_open_errors(true);
     plugin_load(VIEWERS_DIR "/mpegplayer.rock", path);
+
+    /* R2-F1/DD-1 (M-051): mpegplayer is free to leave the LCD in
+     * DRMODE_SOLID -- restore Metro's DRMODE_FG baseline before
+     * anything in apps/metro/ draws again. */
+    lcd_set_drawmode(DRMODE_FG);
 
     /* F11: FADE back into the videos list (PLAN_MAESTRO.md S3.3, "a/desde
      * plugins") -- the nav stack itself never changed while the plugin

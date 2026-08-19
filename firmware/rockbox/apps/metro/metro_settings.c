@@ -167,3 +167,15 @@ void metro_settings_apply_pending_clock(void)
         metro_settings_save();
     }
 }
+
+void metro_ensure_media_dirs(void)
+{
+    static const char *const dirs[] = { "/Music", "/Videos", "/Photos", "/Playlists" };
+    unsigned i;
+
+    for (i = 0; i < sizeof(dirs) / sizeof(dirs[0]); i++)
+    {
+        if (!dir_exists(dirs[i]))
+            mkdir(dirs[i]);
+    }
+}

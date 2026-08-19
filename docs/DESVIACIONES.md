@@ -291,3 +291,17 @@ Durante la captura de las evidencias de F4 (`docs/screenshots/F4-*.png`), UNA co
 **Geometría de proyección [ESTIMADO], no verificada contra una fuente primaria**: ni el eje de rotación (centro vertical de la pantalla) ni la distancia focal de la cámara (`LCD_WIDTH*1.2`) están confirmados contra el `Turnstile` real de WP7/Windows Phone Toolkit -- `INVESTIGACION.md` F.3 solo documenta el RANGO de ángulo (-80°→0°/0°→50°) y la duración, tomados de `Microsoft.Phone.Controls.Toolkit`, no la geometría de cámara/eje que ese control usa internamente. Ver M-046 (`DECISIONS.md`) para el detalle completo de la elección y su justificación.
 
 **Impacto en `PLAN_MAESTRO.md`**: ninguno en el criterio de "hecho" de F12 (`F12-turnstile-mid.png`, `F12-feather-mid.png`, `F12-np-artbg.png`, `F12-np-lite.png`, todos capturados y verificados). Si una revisión visual del dueño encuentra que el ángulo/eje/distancia focal no se sienten como el Zune HD real, ajustar `firmware/tools/gen_turnstile_table.py` y regenerar la tabla es un cambio de unos pocos parámetros, no una reescritura.
+
+---
+
+## R2-F1-1 — DD-1: restauración de `DRMODE_FG` tras `plugin_load()` vive en `metro_photos.c`/`metro_video.c`, no en `metro_main.c`
+
+**Plan decía** (`PLAN-metro-r2-maestro.md` DD-1): *"metro_main() fija DRMODE_FG una vez tras metro_fonts_init() y lo vuelve a fijar al volver de cualquier plugin_load()"* — redactado asumiendo que las llamadas a `plugin_load()` (para lanzar `imageviewer.rock`/`mpegplayer.rock`) están dentro de `metro_main.c`.
+
+**Qué se encontró al ejecutar**: `plugin_load()` no se llama desde `metro_main.c` en ningún punto — vive en `metro_photos.c:metro_photos_view()` (imageviewer) y `metro_video.c:metro_video_play()` (mpegplayer), cada una su propio módulo con su propia razón para no incluir headers de Metro que colisionarían con `apps/plugin.h` (ver el comentario ya existente en ambos archivos sobre el choque de `LANG_*` con `metro_lang.h`).
+
+**Qué se hizo**: `metro_main()` sigue fijando el baseline `DRMODE_FG` una vez, justo después de `metro_fonts_init()`, tal como pedía el plan. La restauración "al volver de `plugin_load()`" se hizo en el sitio real de cada llamada: `metro_photos.c` y `metro_video.c` ahora incluyen `lcd.h` y llaman `lcd_set_drawmode(DRMODE_FG)` inmediatamente después de su propio `plugin_load()`, antes de que `metro_transitions_fade()` vuelva a dibujar la lista.
+
+**Por qué es equivalente, no una desviación de fondo**: el efecto que DD-1 pide (nunca dibujar texto de `apps/metro/` bajo `DRMODE_SOLID` después de que un plugin externo corrió y pudo haberlo dejado así) es idéntico — solo cambia el archivo físico donde vive la línea, porque esa es la ubicación real del punto de retorno de `plugin_load()`, no `metro_main.c`. Ver `DECISIONS.md` M-051 para el detalle técnico completo del fix de DRMODE_FG.
+
+**Impacto en `PLAN-metro-r2-maestro.md`**: ninguno en el criterio de "hecho" de R2-F1 — el requisito ("nunca DRMODE_SOLID en texto de apps/metro/ tras volver de un plugin") queda cubierto igual; solo se corrige la ubicación de archivo asumida por el texto del plan.

@@ -79,8 +79,20 @@ int metro_fsutil_list_by_ext(const char *dir, const char *const *exts, int n_ext
 
     while (n < METRO_FSUTIL_SCAN_CEILING && (entry = readdir(d)) != NULL)
     {
+        struct dirinfo info;
+
         if (!matches_any_ext(entry->d_name, exts, n_exts))
             continue;
+
+        /* R2-F1/DD-3 (M-053): a directory can carry a name that
+         * matches one of our extensions (e.g. "Folder.jpg/" -- some
+         * desktop tools create these) -- same dir_get_info()/
+         * ATTR_DIRECTORY check apps/filetree.c uses to skip
+         * directories in its own extension-filtered scan. */
+        info = dir_get_info(d, entry);
+        if (info.attribute & ATTR_DIRECTORY)
+            continue;
+
         strlcpy(s_scan[n], entry->d_name, METRO_FSUTIL_NAME_LEN);
         n++;
     }

@@ -36,11 +36,19 @@ void metro_draw_clear(void)
     lcd_clear_display();
 }
 
+/* R2-F1/DD-1: every apps/metro/ glyph draws under DRMODE_FG (transparent
+ * against whatever is already on screen) instead of Rockbox's default
+ * DRMODE_SOLID (opaque per-glyph background box) -- SOLID was painting
+ * black plates over Now Playing's cover art behind every text line.
+ * Left set to FG afterward; nothing in apps/metro/ needs a SOLID
+ * rectangle on purpose, so there is no restore step. See DECISIONS.md
+ * M-051. */
 void metro_draw_text(enum metro_font_role role, int x, int y,
                       const char *str, unsigned color)
 {
     lcd_setfont(metro_font_id(role));
     lcd_set_foreground(color);
+    lcd_set_drawmode(DRMODE_FG);
     lcd_putsxy(x, y, (const unsigned char *)str);
 }
 
@@ -79,6 +87,7 @@ void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
     vp.font = metro_font_id(role);
     vp.fg_pattern = color;
     vp.bg_pattern = metro_color_bg();
+    vp.drawmode = DRMODE_FG; /* M-051 -- see metro_draw_text() */
 
     old_vp = lcd_set_viewport(&vp);
     lcd_putsxy(0, y - vp.y, (const unsigned char *)str);
@@ -124,16 +133,15 @@ void metro_draw_header(const char *page_title)
     char timebuf[8];
     int w, h;
 
-    lcd_setfont(metro_font_id(MFONT_CAPTION));
-    lcd_set_foreground(metro_color_secondary());
-    lcd_putsxy(12, 4, (const unsigned char *)page_title);
+    metro_draw_text(MFONT_CAPTION, 12, 4, page_title, metro_color_secondary());
 
     if (now != NULL)
     {
+        lcd_setfont(metro_font_id(MFONT_CAPTION));
         snprintf(timebuf, sizeof(timebuf), "%02d:%02d", now->tm_hour, now->tm_min);
         lcd_getstringsize((const unsigned char *)timebuf, &w, &h);
-        lcd_set_foreground(metro_color_secondary());
-        lcd_putsxy(LCD_WIDTH - 40 - w, 4, (const unsigned char *)timebuf);
+        metro_draw_text(MFONT_CAPTION, LCD_WIDTH - 40 - w, 4, timebuf,
+                         metro_color_secondary());
     }
 
     metro_draw_battery(LCD_WIDTH - 4, 4);
@@ -158,10 +166,10 @@ void metro_draw_pivots(const struct metro_page *page, int active_pivot,
         int w, h;
         const char *name = metro_lang_str(page->pivots[i].name);
 
-        lcd_set_foreground(i == active_pivot ? metro_color_fg()
-                                              : metro_color_tertiary());
         lcd_getstringsize((const unsigned char *)name, &w, &h);
-        lcd_putsxy(x, METRO_PIVOT_Y, (const unsigned char *)name);
+        metro_draw_text(MFONT_DISPLAY, x, METRO_PIVOT_Y, name,
+                         i == active_pivot ? metro_color_fg()
+                                            : metro_color_tertiary());
         x += w + METRO_PIVOT_GAP;
     }
 }
@@ -275,6 +283,7 @@ void metro_draw_tile(int x, int y, int size, const char *label)
         lcd_setfont(metro_font_id(MFONT_DISPLAY));
         lcd_getstringsize((const unsigned char *)initial, &w, &h);
         lcd_set_foreground(metro_color_bg());
+        lcd_set_drawmode(DRMODE_FG); /* M-051 -- see metro_draw_text() */
         lcd_putsxy(x + (size - w) / 2, y + (size - h) / 2, (const unsigned char *)initial);
     }
 }

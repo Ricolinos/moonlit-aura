@@ -84,4 +84,16 @@ void metro_settings_save(void);
  * from the USB screen. */
 void metro_settings_apply_pending_clock(void);
 
+/* R2-F1/DD-4 (M-054): creates /Music, /Videos, /Photos, /Playlists
+ * (mkdir(), no-op if a path already exists) -- library-layout-v1.md's
+ * four top-level media folders, so a device that never went through
+ * an Aura Studio sync (music copied over USB by hand, or a completely
+ * fresh install) still has somewhere for Metro's own screens/plugins
+ * to read and write from on first boot. Call at the same two moments
+ * as metro_settings_apply_pending_clock(): boot and after returning
+ * from the USB screen (metro_main.c's metro_disk_handoff()) -- a USB
+ * session is exactly when a folder could have been deleted or a fresh
+ * disk mounted. */
+void metro_ensure_media_dirs(void);
+
 #endif /* METRO_SETTINGS_H */
