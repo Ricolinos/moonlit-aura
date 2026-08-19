@@ -84,7 +84,8 @@ void metro_screen_list_show(void)
     pivot = &page->pivots[active];
 
     metro_draw_clear();
-    metro_draw_header(metro_lang_str(page->title));
+    metro_draw_header(page->title_dynamic ? page->title_dynamic
+                                           : metro_lang_str(page->title));
     metro_draw_pivots(page, active, 0);
     metro_draw_rows(pivot, metro_nav_first_visible(&s_nav), metro_nav_sel(&s_nav), 0);
     lcd_update();

@@ -66,6 +66,16 @@ struct metro_page {
     enum metro_lang_id title;
     const struct metro_pivot *pivots;
     int npivots;
+    /* F4: NULL for every static page (the common case -- title resolved
+     * from `title` above, same as a pivot name). Non-NULL overrides it
+     * verbatim: a page whose header names a piece of the user's own
+     * library (an artist, an album, a genre) can't use `title`, because
+     * that string isn't UI chrome and was never going to fit in a
+     * compile-time enum metro_lang_id -- it's data, pulled from
+     * tagcache at the moment the page is pushed. Owned by whoever
+     * pushes the page (a static buffer alive for as long as the page
+     * stays on the nav stack is enough, see metro_screen_hub.c). */
+    const char *title_dynamic;
 };
 
 #endif /* METRO_PAGE_H */

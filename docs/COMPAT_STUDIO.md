@@ -18,10 +18,10 @@ Leyenda: ⬜ pendiente · 🟡 parcial/no verificado · ✅ verificado en simula
 | C5 | Marcador con `version` no soportada se deja intacto | ⬜ | F6 | |
 | C6 | `metro_disk_handoff()` corre al volver de USB | ⬜ | F9 | |
 | C7 | Claves `rtc_sync_*` se aplican y se descartan | ⬜ | F6 | |
-| C8 | Tagcache indexa los 3 layouts de `/Music/` | ⬜ | F4 | |
+| C8 | Tagcache indexa los 3 layouts de `/Music/` | ✅ | F4 | `firmware/tools/gen_test_media.sh` genera pistas en los 3 layouts (`Artista/Álbum/archivo`, `Álbum/archivo`, `Artista/archivo`); los 3 aparecen correctamente agrupados en `docs/screenshots/F4-artists.png`/`F4-artist-albums.png` ("Flat Album Test"/"Flat Artist Test" son los layouts sin carpeta de artista/álbum). Por diseño el firmware no distingue layouts (`tagcache_scan_paths = "/"`, ver `docs/contracts/library-layout-v1.md` de Aura-Firmware) — Metro no necesitó código propio para esto |
 | C9 | `cover.jpg` de carpeta y carátula embebida (APIC) se muestran | ⬜ | F5 | |
-| C10 | `.lrc` no rompe nada (sin mostrarse en v1) | ⬜ | F4 | Backlog: mostrarlo |
-| C11 | `Playlists/*.m3u8` se listan y reproducen | ⬜ | F4 | |
+| C10 | `.lrc` no rompe nada (sin mostrarse en v1) | ✅ | F4 | `metro-test.lrc` convive en `Music/` con las pistas de prueba en todas las corridas de F4; tagcache lo ignora (extensión no reconocida como audio), Metro no lo lee en ningún lado. Backlog: mostrarlo |
+| C11 | `Playlists/*.m3u8` se listan y reproducen | ✅ | F4 | `docs/screenshots/F4-playlists.png` (listado) + verificado que seleccionar "QA Favorites" arranca reproducción real (pantalla "reproduciendo" con la primera pista de la lista) |
 | C12 | `/Videos/*.mpg` con nombre límite (95 bytes) se lista y abre | ⬜ | F7 | |
 | C13 | `/Photos/*.jpg` ≤640px se listan (hasta 500) y abren | ⬜ | F7 | |
 | C14 | Categorías de video/foto: presentes → pivots; ausentes → solo "all" | ⬜ | F7 | |

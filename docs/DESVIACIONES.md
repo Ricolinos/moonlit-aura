@@ -134,3 +134,25 @@ Tras la confirmación de F2-2 en sesión interactiva, se intentó una solución 
 **Qué se hizo**: `struct metro_page.title` y `struct metro_pivot.name` son `enum metro_lang_id` (una constante de verdad, válida en un inicializador estático). `metro_draw_pivots()`/`metro_screen_list_show()` resuelven el string con `metro_lang_str()` en el momento de dibujar, no antes — así el cambio de idioma se refleja de inmediato en el próximo redibujado, sin tocar ninguna tabla. `struct metro_row.title`/`.subtitle` no tuvieron este problema: `get_row()` corre en tiempo de dibujo (una llamada a función normal, no un inicializador), así que puede llamar a `metro_lang_str()` directamente.
 
 **Impacto en `PLAN_MAESTRO.md`**: ninguno en el comportamiento visible; es una corrección de tipo en la firma de `metro_page.h` respecto al boceto original del plan, necesaria para que compile y para que M-009 (idioma en vivo) funcione de verdad.
+
+---
+
+## F4-1 — `metro_page.h`: `title_dynamic` para páginas cuyo encabezado nombra datos del usuario
+
+**Plan decía** (`PLAN_MAESTRO.md` §5 F4): "biblioteca musical real (tagcache) y reproducción", con pantallas de artistas → álbumes de ese artista → canciones de ese álbum (implícito en las capturas requeridas: `F4-artist-albums.png`, `F4-album-songs.png`). No especifica cómo el encabezado de esas pantallas intermedias muestra CUÁL artista/álbum se está viendo.
+
+**Qué se encontró**: `struct metro_page.title` es `enum metro_lang_id` desde F3-1 (una constante de tiempo de compilación, resuelta con `metro_lang_str()`), precisamente para que las tablas `static const struct metro_page` sigan siendo inicializadores válidos y el cambio de idioma se refleje solo. Pero el nombre de un artista, álbum o género no es una cadena de UI traducible — es un dato del usuario, leído de tagcache en el momento de la navegación. Nunca pudo caber en ese enum, y forzarlo ahí habría exigido inventar un id de idioma por cada artista de la biblioteca, absurdo.
+
+**Qué se hizo**: se agregó `const char *title_dynamic` a `struct metro_page` (NULL en toda página estática existente — F3 no cambia). Una página cuyo encabezado nombra un dato del usuario aparta un buffer `static char[]` propio (p. ej. `s_artist_albums_title` en `metro_screen_hub.c`), copia ahí la etiqueta con `strlcpy()` antes de empujar la página, y apunta `title_dynamic` a ese buffer — `metro_screen_list_show()` usa `title_dynamic` si no es NULL, si no cae a `metro_lang_str(title)` como siempre. Como solo puede haber una instancia de cada subpágina de este tipo en la pila de navegación a la vez (un único camino lineal hacia abajo, ver comentario en `metro_page.h`), reusar un único buffer estático por subpágina es seguro.
+
+**Impacto en `PLAN_MAESTRO.md`**: ninguno en el comportamiento visible; extiende el modelo de página declarativo de F3 de forma necesaria para F4, no una preferencia de diseño.
+
+---
+
+## F4-2 — Falso positivo observado en verificación: navegación "de más" en una corrida aislada del simulador
+
+Durante la captura de las evidencias de F4 (`docs/screenshots/F4-*.png`), UNA corrida (de más de veinte intentos con parámetros idénticos) aterrizó dos niveles más abajo de lo esperado tras un solo `SELECT` (en música → artistas, terminó mostrando los álbumes de "Metro QA" en vez de la lista de artistas). Investigado con logging temporal en `metro_main()` (cada `metro_input_next()` resuelto, con profundidad de navegación antes/después): en cuatro corridas instrumentadas y en las siete siguientes sin instrumentar, `metro_main()` procesó exactamente UNA acción `MACT_SELECT` por cada token `SELECT` inyectado, con la profundidad de pila avanzando 1→2 como corresponde — nunca 1→3. No se logró reproducir la falla ni una sola vez en ~15 intentos adicionales bajo las mismas condiciones exactas (mismo build, mismo `simdisk`, mismos ticks de espera).
+
+**Diagnóstico**: no hay evidencia de un bug determinístico en `metro_nav`/`metro_keymap`/`metro_input` (la máquina de pila resetea pivot/selección en cada `push`, comprobado por lectura de `metro_nav.c`; el conteo de acciones despachadas fue el esperado en cada corrida instrumentada). Todo apunta a una fluctuación de scheduling del host (macOS, hilo del simulador vs. hilo de tagcache en segundo plano) durante una corrida aislada de un lote de siete capturas consecutivas — no a código de Metro.
+
+**Mitigación usada**: cada captura de F4 usa su propia corrida limpia del simulador (proceso `rockboxui` nuevo) con un margen amplio de espera (`WAIT` ×10, ~10 s) antes del primer `SELECT` hacia música, dando tiempo de sobra a que `tagcache_rebuild()` termine antes de que se inyecte cualquier botón. Cualquier captura futura cuyo contenido no corresponda al esperado debe simplemente repetirse (proceso nuevo) antes de darla por buena — no se investiga más a fondo dado que no hay mecanismo determinístico identificado y el costo de una repetición es bajo.

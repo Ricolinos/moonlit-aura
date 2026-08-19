@@ -1,0 +1,545 @@
+/***************************************************************************
+ *             __________               __   ___.
+ *   Open      \______   \ ____   ____ |  | _\_ |__   _______  ___
+ *   Source     |       _//  _ \_/ ___\|  |/ /| __ \ /  _ \  \/  /
+ *   Jukebox    |    |   (  <_> )  \___|    < | \_\ (  <_> > <  <
+ *   Firmware   |____|_  /\____/ \___  >__|_ \|___  /\____/__/\_ \
+ *                     \/            \/     \/    \/            \/
+ *
+ * Copyright (C) 2026 Ricardo Gomez
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+ *
+ ****************************************************************************/
+#include <string.h>
+#include <stdio.h>
+
+/* tagcache.h checks "#ifdef HAVE_TAGCACHE" before including config.h
+ * itself (that macro comes from config.h via config/ipod6g.h); if
+ * tagcache.h were the first header in this file, HAVE_TAGCACHE would
+ * not exist yet and its whole contents would silently disappear. Same
+ * gotcha as Aura-Firmware's aura_music.c -- see DECISIONS.md M-030. */
+#include "config.h"
+#include "tagcache.h"
+#include "playlist.h"
+#include "playlist_catalog.h"
+#include "audio.h"
+#include "dir.h"
+#include "string-extra.h"
+#include "kernel.h" /* current_tick, for playlist_randomise()'s seed */
+
+#include "metro_music.h"
+#include "metro_lang.h"
+
+/* Enough unique values for a few thousand artists/albums/genres --
+ * same size Aura-Firmware settled on for the same purpose (D-021).
+ * tagcache_search_set_uniqbuf() only needs this for tags with a small
+ * unique-value space (artist/album/genre); it ignores it for tag_title. */
+static uint32_t s_uniqbuf[2048];
+
+static bool s_scan_triggered = false;
+static bool s_update_triggered = false;
+
+bool metro_music_is_playing(void)
+{
+    return (audio_status() & AUDIO_STATUS_PLAY) != 0;
+}
+
+bool metro_music_now_playing(char *title_out, size_t title_sz,
+                              char *sub_out, size_t sub_sz)
+{
+    struct mp3entry *id3;
+    const char *base;
+
+    if (!metro_music_is_playing())
+        return false;
+
+    id3 = audio_current_track();
+    if (!id3)
+        return false;
+
+    if (id3->title)
+        strlcpy(title_out, id3->title, title_sz);
+    else
+    {
+        /* id3->path is a fixed char[MAX_PATH], never NULL -- only ever
+         * empty. */
+        base = strrchr(id3->path, '/');
+        strlcpy(title_out, base ? base + 1 : id3->path, title_sz);
+    }
+
+    if (id3->artist && id3->album)
+        snprintf(sub_out, sub_sz, "%s - %s", id3->artist, id3->album);
+    else if (id3->artist)
+        strlcpy(sub_out, id3->artist, sub_sz);
+    else
+        sub_out[0] = '\0';
+
+    return true;
+}
+
+bool metro_music_db_ready(void)
+{
+    /* Same reasoning as aura_music_db_ready() (D-021): Rockbox only
+     * scans the library on its own from the folder-browser "Database >
+     * Initialize now" screen, which Metro doesn't have. tagcache_init()
+     * decides asynchronously whether a valid database already exists
+     * on disk; rebuilding before that decision lands would blow away a
+     * database that was actually fine. tagcache_start_scan() is NOT
+     * the right call for a first-time build -- its handler bails out
+     * if tc_stat.ready is false, it only refreshes an existing one. */
+    if (tagcache_is_fully_initialized() && !tagcache_is_usable() && !s_scan_triggered)
+    {
+        tagcache_rebuild();
+        s_scan_triggered = true;
+    }
+
+    /* A database built in an earlier session never otherwise learns
+     * about files added since (USB sync, D-206 in Aura-Firmware: files
+     * copied over USB, library empty on the device) -- Rockbox only
+     * refreshes it from the same folder-browser screen Metro doesn't
+     * have. One pass per boot, on the tagcache thread, cheap when
+     * nothing changed. tagcache_is_fully_initialized() guards this the
+     * same way as the rebuild above: is_usable() can go true before
+     * the background "is there already a database" check lands. */
+    if (tagcache_is_usable() && tagcache_is_fully_initialized() && !s_update_triggered)
+    {
+        tagcache_start_scan();
+        s_update_triggered = true;
+    }
+
+    return tagcache_is_usable();
+}
+
+static enum metro_lang_id untagged_label_for(int tag)
+{
+    switch (tag)
+    {
+    case tag_artist: return LANG_UNKNOWN_ARTIST;
+    case tag_genre:  return LANG_UNKNOWN_GENRE;
+    case tag_title:  return LANG_UNKNOWN_TITLE;
+    default:         return LANG_UNKNOWN_ALBUM;
+    }
+}
+
+/* Filename without path or extension -- title fallback for a track
+ * with no tag_title (real-world case: CD rips with no ID3 at all). */
+static bool title_from_filename(struct tagcache_search *tcs, char *out, size_t outsz)
+{
+    char path[MAX_PATH];
+    const char *base;
+    char *dot;
+
+    if (!tagcache_retrieve(tcs, tcs->idx_id, tag_filename, path, sizeof(path)))
+        return false;
+
+    base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+    if (!base[0])
+        return false;
+
+    strlcpy(out, base, outsz);
+    dot = strrchr(out, '.');
+    if (dot && dot != out)
+        *dot = '\0';
+    return out[0] != '\0';
+}
+
+/* Case-insensitive; digits already sort below letters in ASCII once
+ * both sides are uppercased, so no separate digits-first rule is
+ * needed (same comparison Aura-Firmware uses for its A-Z rail). */
+static int label_cmp(const char *a, const char *b)
+{
+    while (*a && *b)
+    {
+        unsigned char ca = (unsigned char)*a, cb = (unsigned char)*b;
+        if (ca >= 'a' && ca <= 'z') ca -= 32;
+        if (cb >= 'a' && cb <= 'z') cb -= 32;
+        if (ca != cb)
+            return (int)ca - (int)cb;
+        a++; b++;
+    }
+    return (int)(unsigned char)*a - (int)(unsigned char)*b;
+}
+
+static void format_duration(char *out, size_t outsz, long ms)
+{
+    int total_s = ms > 0 ? (int)(ms / 1000) : 0;
+    snprintf(out, outsz, "%d:%02d", total_s / 60, total_s % 60);
+}
+
+/* Scratch for run_search()'s two sort orders -- static, not on the
+ * 8KB UI thread stack (same D-226 concern Aura-Firmware documents for
+ * its own equivalent buffers). */
+static long s_tracknum[METRO_MUSIC_MAX_ITEMS];
+
+static void sort_by_label(metro_music_item_t *items, int n)
+{
+    int a, b;
+
+    for (a = 1; a < n; a++)
+    {
+        metro_music_item_t key = items[a];
+        b = a - 1;
+        while (b >= 0 && label_cmp(items[b].label, key.label) > 0)
+        {
+            items[b + 1] = items[b];
+            b--;
+        }
+        items[b + 1] = key;
+    }
+}
+
+static void sort_by_tracknum(metro_music_item_t *items, int n)
+{
+    int a, b;
+
+    for (a = 1; a < n; a++)
+    {
+        metro_music_item_t key = items[a];
+        long key_num = s_tracknum[a];
+        b = a - 1;
+        while (b >= 0 && s_tracknum[b] > key_num)
+        {
+            items[b + 1] = items[b];
+            s_tracknum[b + 1] = s_tracknum[b];
+            b--;
+        }
+        items[b + 1] = key;
+        s_tracknum[b + 1] = key_num;
+    }
+}
+
+/* Single-filter tagcache search -- Metro's page tree is only ever two
+ * levels deep (artist -> albums, album/genre -> songs), so unlike
+ * Aura-Firmware's run_search() (which combines up to four filters for
+ * its deeper composer/genre hierarchy) this only ever needs one.
+ * filter_tag < 0 means unfiltered. */
+static int run_search(int tag, int filter_tag, int32_t filter_seek,
+                       metro_music_item_t *out, int max)
+{
+    struct tagcache_search tcs;
+    char buf[TAGCACHE_BUFSZ];
+    int n = 0;
+    bool album_order = (tag == tag_title && filter_tag == tag_album);
+
+    if (!tagcache_is_usable())
+        return 0;
+    if (!tagcache_search(&tcs, tag))
+        return 0;
+
+    tagcache_search_set_uniqbuf(&tcs, s_uniqbuf, sizeof(s_uniqbuf));
+    if (filter_tag >= 0)
+        tagcache_search_add_filter(&tcs, filter_tag, filter_seek);
+
+    while (n < max && tagcache_get_next(&tcs, buf, sizeof(buf)))
+    {
+        if (!strcmp(buf, UNTAGGED))
+        {
+            if (tag == tag_title && title_from_filename(&tcs, out[n].label, METRO_MUSIC_ITEM_LEN))
+                ; /* filename already written */
+            else
+                strlcpy(out[n].label, metro_lang_str(untagged_label_for(tag)),
+                        METRO_MUSIC_ITEM_LEN);
+        }
+        else
+            strlcpy(out[n].label, buf, METRO_MUSIC_ITEM_LEN);
+
+        out[n].seek = (tag == tag_title) ? tcs.idx_id : tcs.result_seek;
+        out[n].subtitle[0] = '\0';
+        if (tag == tag_title)
+        {
+            format_duration(out[n].subtitle, sizeof(out[n].subtitle),
+                             tagcache_get_numeric(&tcs, tag_length));
+            s_tracknum[n] = tagcache_get_numeric(&tcs, tag_tracknumber);
+            if (s_tracknum[n] <= 0)
+                s_tracknum[n] = 0x7fffffff; /* untracked: after everything, stable */
+        }
+        n++;
+    }
+
+    tagcache_search_finish(&tcs);
+
+    /* Album songs keep disc order (same criterion metro_music_play_songs_of_album()
+     * uses to build the playback playlist -- the row picked on screen and the
+     * track that starts playing always match). Everything else is alphabetical. */
+    if (album_order)
+        sort_by_tracknum(out, n);
+    else
+        sort_by_label(out, n);
+
+    return n;
+}
+
+/* Artist label shown under an album row. Prefers tag_albumartist (the
+ * correct grouping tag for a compilation whose tracks carry different
+ * tag_artist values but one shared album artist); falls back to
+ * tag_artist when the track never set it, which is most personal
+ * libraries. PLAN_MAESTRO.md S5 F4. [ESTIMADO: no compilation fixture
+ * exercises the fallback path end to end, only unit-level confidence
+ * that both filters resolve through the same seek mechanism as
+ * metro_music_albums_of_artist(), already proven.] */
+static void album_artist_label(int32_t album_seek, char *out, size_t outsz)
+{
+    struct tagcache_search tcs;
+    bool found = false;
+
+    out[0] = '\0';
+    if (!tagcache_is_usable())
+        return;
+
+    if (tagcache_search(&tcs, tag_albumartist))
+    {
+        tagcache_search_add_filter(&tcs, tag_album, album_seek);
+        if (tagcache_get_next(&tcs, out, outsz) && strcmp(out, UNTAGGED) != 0)
+            found = true;
+        tagcache_search_finish(&tcs);
+    }
+
+    if (!found && tagcache_search(&tcs, tag_artist))
+    {
+        tagcache_search_add_filter(&tcs, tag_album, album_seek);
+        if (tagcache_get_next(&tcs, out, outsz))
+            found = true;
+        tagcache_search_finish(&tcs);
+    }
+
+    if (!found)
+        out[0] = '\0';
+    else if (!strcmp(out, UNTAGGED))
+        strlcpy(out, metro_lang_str(LANG_UNKNOWN_ARTIST), outsz);
+}
+
+int metro_music_artists(metro_music_item_t *out, int max)
+{
+    return run_search(tag_artist, -1, 0, out, max);
+}
+
+int metro_music_albums(metro_music_item_t *out, int max)
+{
+    int n = run_search(tag_album, -1, 0, out, max);
+    int i;
+
+    for (i = 0; i < n; i++)
+        album_artist_label(out[i].seek, out[i].subtitle, sizeof(out[i].subtitle));
+    return n;
+}
+
+int metro_music_songs(metro_music_item_t *out, int max)
+{
+    return run_search(tag_title, -1, 0, out, max);
+}
+
+int metro_music_genres(metro_music_item_t *out, int max)
+{
+    return run_search(tag_genre, -1, 0, out, max);
+}
+
+int metro_music_albums_of_artist(int32_t artist_seek, metro_music_item_t *out, int max)
+{
+    int n = run_search(tag_album, tag_artist, artist_seek, out, max);
+    int i;
+
+    for (i = 0; i < n; i++)
+        album_artist_label(out[i].seek, out[i].subtitle, sizeof(out[i].subtitle));
+    return n;
+}
+
+int metro_music_songs_of_album(int32_t album_seek, metro_music_item_t *out, int max)
+{
+    return run_search(tag_title, tag_album, album_seek, out, max);
+}
+
+int metro_music_songs_of_genre(int32_t genre_seek, metro_music_item_t *out, int max)
+{
+    return run_search(tag_title, tag_genre, genre_seek, out, max);
+}
+
+/* Builds the dynamic playlist for one of the play_* entry points below
+ * and inserts every matching track -- same two orderings as
+ * run_search() above (disc order for one album, alphabetical
+ * otherwise), so the row index chosen on screen is always the track
+ * that starts playing. Static scratch: up to 300 tracks' worth of ids
+ * (1.2KB) or titles (18.75KB) doesn't fit the 8KB UI thread stack
+ * (D-226, same as Aura-Firmware). */
+static bool insert_matching_tracks(int filter_tag, int32_t filter_seek, bool album_order)
+{
+    struct tagcache_search tcs;
+    char path[MAX_PATH];
+    static int32_t s_ids[METRO_MUSIC_MAX_ITEMS];
+    static long s_nums[METRO_MUSIC_MAX_ITEMS];
+    static char s_titles[METRO_MUSIC_MAX_ITEMS][METRO_MUSIC_ITEM_LEN];
+    int n = 0, a, b, inserted = 0;
+
+    if (!tagcache_is_usable())
+        return false;
+    if (!tagcache_search(&tcs, tag_title))
+        return false;
+
+    tagcache_search_set_uniqbuf(&tcs, s_uniqbuf, sizeof(s_uniqbuf));
+    if (filter_tag >= 0)
+        tagcache_search_add_filter(&tcs, filter_tag, filter_seek);
+
+    playlist_create(NULL, NULL);
+
+    while (n < METRO_MUSIC_MAX_ITEMS && tagcache_get_next(&tcs, path, sizeof(path)))
+    {
+        s_ids[n] = tcs.idx_id;
+        if (album_order)
+        {
+            s_nums[n] = tagcache_get_numeric(&tcs, tag_tracknumber);
+            if (s_nums[n] <= 0)
+                s_nums[n] = 0x7fffffff;
+        }
+        else
+            strlcpy(s_titles[n], path, METRO_MUSIC_ITEM_LEN);
+        n++;
+    }
+    /* Search stays open on purpose: tagcache_retrieve() below still
+     * needs it to resolve each idx_id to a real path. */
+
+    for (a = 1; a < n; a++)
+    {
+        int32_t key_id = s_ids[a];
+
+        if (album_order)
+        {
+            long key_num = s_nums[a];
+            b = a - 1;
+            while (b >= 0 && s_nums[b] > key_num)
+            {
+                s_ids[b + 1] = s_ids[b];
+                s_nums[b + 1] = s_nums[b];
+                b--;
+            }
+            s_ids[b + 1] = key_id;
+            s_nums[b + 1] = key_num;
+        }
+        else
+        {
+            char key_title[METRO_MUSIC_ITEM_LEN];
+            strlcpy(key_title, s_titles[a], METRO_MUSIC_ITEM_LEN);
+            b = a - 1;
+            while (b >= 0 && label_cmp(s_titles[b], key_title) > 0)
+            {
+                s_ids[b + 1] = s_ids[b];
+                strlcpy(s_titles[b + 1], s_titles[b], METRO_MUSIC_ITEM_LEN);
+                b--;
+            }
+            s_ids[b + 1] = key_id;
+            strlcpy(s_titles[b + 1], key_title, METRO_MUSIC_ITEM_LEN);
+        }
+    }
+
+    for (a = 0; a < n; a++)
+    {
+        if (tagcache_retrieve(&tcs, s_ids[a], tag_filename, path, sizeof(path)))
+        {
+            playlist_insert_track(NULL, path, PLAYLIST_INSERT_LAST, false, true);
+            inserted++;
+        }
+    }
+
+    tagcache_search_finish(&tcs);
+    return inserted > 0;
+}
+
+bool metro_music_play_all_songs(int start_index)
+{
+    if (!insert_matching_tracks(-1, 0, false))
+        return false;
+    playlist_start(start_index, 0, 0);
+    return true;
+}
+
+bool metro_music_play_songs_of_album(int32_t album_seek, int start_index)
+{
+    if (!insert_matching_tracks(tag_album, album_seek, true))
+        return false;
+    playlist_start(start_index, 0, 0);
+    return true;
+}
+
+bool metro_music_play_songs_of_genre(int32_t genre_seek, int start_index)
+{
+    if (!insert_matching_tracks(tag_genre, genre_seek, false))
+        return false;
+    playlist_start(start_index, 0, 0);
+    return true;
+}
+
+bool metro_music_shuffle_all(void)
+{
+    if (!insert_matching_tracks(-1, 0, false))
+        return false;
+    playlist_randomise(NULL, current_tick, true);
+    playlist_start(0, 0, 0);
+    return true;
+}
+
+int metro_music_list_playlists(char labels[][METRO_MUSIC_ITEM_LEN], int max)
+{
+    char dir[MAX_PATH];
+    DIR *d;
+    struct DIRENT *entry;
+    int n = 0;
+
+    catalog_get_directory(dir, sizeof(dir));
+
+    d = opendir(dir);
+    if (!d)
+        return 0;
+
+    while (n < max && (entry = readdir(d)) != NULL)
+    {
+        size_t len = strlen(entry->d_name);
+        bool is_m3u = (len > 4 && !strcasecmp(entry->d_name + len - 4, ".m3u"));
+        bool is_m3u8 = (len > 5 && !strcasecmp(entry->d_name + len - 5, ".m3u8"));
+
+        if (!is_m3u && !is_m3u8)
+            continue;
+
+        strlcpy(labels[n], entry->d_name, METRO_MUSIC_ITEM_LEN);
+        n++;
+    }
+    closedir(d);
+
+    return n;
+}
+
+void metro_music_playlist_display_name(const char *filename, char *out, size_t outsz)
+{
+    size_t len;
+
+    strlcpy(out, filename, outsz);
+    len = strlen(out);
+    if (len > 4 && !strcasecmp(out + len - 4, ".m3u"))
+        out[len - 4] = '\0';
+    else if (len > 5 && !strcasecmp(out + len - 5, ".m3u8"))
+        out[len - 5] = '\0';
+}
+
+bool metro_music_play_playlist(int index)
+{
+    char dir[MAX_PATH];
+    /* static: 300*64 = 18.75KB, same D-226 stack concern as above. */
+    static char labels[METRO_MUSIC_MAX_ITEMS][METRO_MUSIC_ITEM_LEN];
+    int n;
+
+    catalog_get_directory(dir, sizeof(dir));
+    n = metro_music_list_playlists(labels, METRO_MUSIC_MAX_ITEMS);
+    if (index < 0 || index >= n)
+        return false;
+
+    if (playlist_create(dir, labels[index]) == -1)
+        return false;
+
+    playlist_start(0, 0, 0);
+    return true;
+}

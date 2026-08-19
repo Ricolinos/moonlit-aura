@@ -150,7 +150,7 @@ static const struct metro_pivot pivots[] = {
 };
 
 static const struct metro_page settings_page = {
-    LANG_HUB_SETTINGS, pivots, 3
+    LANG_HUB_SETTINGS, pivots, 3, NULL
 };
 
 const struct metro_page *metro_screen_settings_page(void)

@@ -323,3 +323,4 @@ metro/metro_widgets.c
 metro/metro_screen_list.c
 metro/metro_screen_hub.c
 metro/metro_screen_settings.c
+metro/metro_music.c

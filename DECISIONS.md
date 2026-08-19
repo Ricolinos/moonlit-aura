@@ -338,3 +338,45 @@ conoce `MCTX_HUB`/`MCTX_LIST`/`MCTX_DIALOG` y devolvería `NULL`).
 vez de caer a `CONTEXT_STD` — el espacio de acciones de Metro
 (`MACT_*`, arrancando en `LAST_ACTION_PLACEHOLDER+1`) es disjunto del
 del core, no hay nada útil a lo que encadenar.
+
+## M-030 — F4: `config.h` antes que `tagcache.h` en cualquier archivo nuevo que use tagcache
+
+`tagcache.h` comprueba `#ifdef HAVE_TAGCACHE` antes de incluir `config.h`
+él mismo (esa macro la define `config.h` vía `config/ipod6g.h`). Si
+`tagcache.h` es el primer header de un archivo, `HAVE_TAGCACHE` todavía
+no existe y todo el contenido del header desaparece en silencio -- el
+archivo compila "bien" pero cada función de tagcache queda sin
+declarar, con errores de compilación confusos y lejos de la causa real.
+Mismo gotcha ya documentado por Aura-Firmware (su D-021); `metro_music.c`
+lo replica con `#include "config.h"` primero. Cualquier archivo nuevo de
+`apps/metro/` que use tagcache respeta este orden.
+
+## M-031 — `metro_page.h`: `title_dynamic` para encabezados que nombran datos del usuario
+
+Extensión de M-009/F3-1 necesaria en F4 (detalle completo en
+`docs/DESVIACIONES.md` F4-1): `struct metro_page.title` sigue siendo
+`enum metro_lang_id` (cadena de UI, resuelta en tiempo de dibujo), pero
+una página cuyo encabezado nombra un artista/álbum/género real de la
+biblioteca del usuario no puede usar ese campo -- no es una cadena de
+UI traducible. `title_dynamic` (un `const char *`, NULL por defecto)
+la sustituye cuando no es NULL. Cualquier pantalla futura cuyo
+encabezado necesite mostrar un dato del usuario (F7 fotos/videos por
+categoría, etc.) usa este mismo mecanismo en vez de inventar uno
+nuevo.
+
+## M-032 — F4: `metro_music_db_ready()` también dispara `tagcache_start_scan()` sobre una base ya usable
+
+Encontrado verificando C8 (`docs/COMPAT_STUDIO.md`): una base de
+tagcache construida en una sesión anterior del simulador no se enteraba
+de pistas agregadas después (mismo bug real que Aura-Firmware documentó
+en D-206: "archivos copiados por USB, biblioteca vacía en el
+aparato") -- Rockbox solo refresca la base desde la pantalla
+"Base de datos > Actualizar ahora" del navegador de carpetas, que
+Metro no tiene por diseño. `metro_music_db_ready()` ahora dispara
+`tagcache_start_scan()` una vez por arranque cuando la base YA es
+usable (además de `tagcache_rebuild()` para el caso de base
+inexistente, ya presente desde el primer commit de F4) -- mismo patrón
+que `aura_music_db_ready()`, con el mismo cuidado de esperar a
+`tagcache_is_fully_initialized()` antes de decidir (D-206: `is_usable()`
+puede volverse verdadero antes de que la determinación de fondo
+termine).

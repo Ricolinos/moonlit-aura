@@ -71,6 +71,13 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_DIALOG_RESET_TITLE] = "restablecer ajustes?",
     [LANG_DIALOG_YES]         = "si",
     [LANG_DIALOG_NO]          = "no",
+
+    [LANG_MUSIC_DB_UPDATING] = "actualizando biblioteca...",
+    [LANG_HUB_NOWPLAYING]    = "reproduciendo",
+    [LANG_UNKNOWN_ARTIST]    = "artista desconocido",
+    [LANG_UNKNOWN_ALBUM]     = "album desconocido",
+    [LANG_UNKNOWN_GENRE]     = "genero desconocido",
+    [LANG_UNKNOWN_TITLE]     = "titulo desconocido",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -123,6 +130,13 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_DIALOG_RESET_TITLE] = "reset settings?",
     [LANG_DIALOG_YES]         = "yes",
     [LANG_DIALOG_NO]          = "no",
+
+    [LANG_MUSIC_DB_UPDATING] = "updating library...",
+    [LANG_HUB_NOWPLAYING]    = "now playing",
+    [LANG_UNKNOWN_ARTIST]    = "unknown artist",
+    [LANG_UNKNOWN_ALBUM]     = "unknown album",
+    [LANG_UNKNOWN_GENRE]     = "unknown genre",
+    [LANG_UNKNOWN_TITLE]     = "unknown title",
 };
 
 void metro_lang_set(enum metro_language lang)

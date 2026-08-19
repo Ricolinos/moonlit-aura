@@ -86,6 +86,78 @@ ffmpeg -y -loglevel error -f lavfi -i "testsrc=size=320x240:rate=15:duration=2" 
   -f lavfi -i "sine=frequency=440:duration=2" \
   -c:v mpeg2video -q:v 5 -c:a mp2 "$OUT_DIR/Videos/test.mpg"
 
+# F4: biblioteca musical de prueba para metro_music.c (proveedores sobre
+# tagcache_search*) -- 2 artistas, 3 albumes, 12 pistas, 3 generos en el
+# layout Artista/Album/archivo (mas dos pistas sueltas mas abajo para
+# los otros dos layouts del contrato, ver el comentario junto a ellas).
+# Cada pista lleva ALBUMARTIST igual a ARTIST (ejercita la ruta
+# principal de metro_music_album_artist_label(): preferir
+# tag_albumartist, con tag_artist como respaldo si una pista no lo
+# trae -- ningun fixture aqui ejercita ese respaldo, ver el comentario
+# [ESTIMADO] junto a esa funcion en metro_music.c). TRACKNUMBER fija el
+# orden de disco de cada album (metro_music_songs_of_album() ordena por
+# el, no alfabetico).
+echo "==> Generando biblioteca musical de prueba (test-media/Music)"
+MUSIC_DIR="$OUT_DIR/Music"
+rm -rf "$MUSIC_DIR"
+
+gen_track() {
+  local artist="$1" album="$2" genre="$3" track="$4" title="$5" freq="$6"
+  local dir="$MUSIC_DIR/$artist/$album"
+  local out
+  mkdir -p "$dir"
+  out="$dir/$(printf '%02d' "$track") $title.mp3"
+  ffmpeg -y -loglevel error \
+    -f lavfi -i "sine=frequency=${freq}:duration=2" \
+    -metadata title="$title" -metadata artist="$artist" \
+    -metadata album_artist="$artist" -metadata album="$album" \
+    -metadata genre="$genre" -metadata track="$track" \
+    -c:a libmp3lame -b:a 96k "$out"
+}
+
+gen_track "Aura Test Combo" "First Light" "Electronic" 1 "Sunrise" 220
+gen_track "Aura Test Combo" "First Light" "Electronic" 2 "Horizon" 247
+gen_track "Aura Test Combo" "First Light" "Electronic" 3 "Glow" 262
+gen_track "Aura Test Combo" "First Light" "Electronic" 4 "Daybreak" 294
+
+gen_track "Aura Test Combo" "Night Drive" "Synthwave" 1 "Overpass" 330
+gen_track "Aura Test Combo" "Night Drive" "Synthwave" 2 "Neon Mile" 349
+gen_track "Aura Test Combo" "Night Drive" "Synthwave" 3 "Rearview" 392
+gen_track "Aura Test Combo" "Night Drive" "Synthwave" 4 "Static Coast" 440
+
+gen_track "Wheel & Click" "Analog Dreams" "Ambient" 1 "Slow Turn" 165
+gen_track "Wheel & Click" "Analog Dreams" "Ambient" 2 "Ferrite" 175
+gen_track "Wheel & Click" "Analog Dreams" "Ambient" 3 "Idle Hum" 185
+gen_track "Wheel & Click" "Analog Dreams" "Ambient" 4 "Wind Down" 196
+
+# COMPAT_STUDIO.md C8: tagcache escanea todo el disco sin importar la
+# profundidad de carpetas (docs/contracts/library-layout-v1.md SS "/Music/",
+# Aura-Firmware, "no depende del layout") -- estas dos pistas ejercitan
+# los otros dos layouts que Studio puede elegir ademas del por defecto
+# (Artista/Album/archivo, ya cubierto arriba): Album/archivo (sin
+# carpeta de artista) y Artista/archivo (sin carpeta de album).
+mkdir -p "$MUSIC_DIR/Flat Album Test"
+ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=210:duration=2" \
+  -metadata title="Flat Song" -metadata artist="Flat Artist" \
+  -metadata album_artist="Flat Artist" -metadata album="Flat Album Test" \
+  -metadata genre="Electronic" -metadata track=1 \
+  -c:a libmp3lame -b:a 96k "$MUSIC_DIR/Flat Album Test/01 Flat Song.mp3"
+
+mkdir -p "$MUSIC_DIR/Flat Artist Test"
+ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=280:duration=2" \
+  -metadata title="Loose Track" -metadata artist="Flat Artist Test" \
+  -metadata album_artist="Flat Artist Test" -metadata album="Singles" \
+  -metadata genre="Ambient" -metadata track=1 \
+  -c:a libmp3lame -b:a 96k "$MUSIC_DIR/Flat Artist Test/01 Loose Track.mp3"
+
+echo "==> Generando lista de prueba (test-media/Playlists)"
+mkdir -p "$OUT_DIR/Playlists"
+cat > "$OUT_DIR/Playlists/QA Favorites.m3u8" <<'EOF'
+/Music/Aura Test Combo/First Light/01 Sunrise.mp3
+/Music/Aura Test Combo/Night Drive/02 Neon Mile.mp3
+/Music/Wheel & Click/Analog Dreams/03 Idle Hum.mp3
+EOF
+
 SIMDISK="$ROOT_DIR/firmware/build-sim/simdisk"
 if [[ -d "$SIMDISK" ]]; then
   echo "==> Instalando fixtures en $SIMDISK"
@@ -93,13 +165,14 @@ if [[ -d "$SIMDISK" ]]; then
   cp "$OUT_DIR"/Photos/* "$SIMDISK/Photos/"
   cp "$OUT_DIR"/Videos/*.mpg "$SIMDISK/Videos/"
   # Fixtures de MUSICA: solo bajo peticion explicita
-  # (AURA_INSTALL_MUSIC_FIXTURES=1). Desde 2026-08-12 el simulador
-  # trabaja contra la biblioteca REAL del dueno del diseno (symlink
-  # simdisk/Musica -> "/Volumes/Ricolinos/Música/Exports CD") para ver
-  # caratulas reales en Cover Flow -- instalar los tonos sinteticos por
-  # defecto contaminaria esa biblioteca con albumes de prueba.
-  if [[ "${AURA_INSTALL_MUSIC_FIXTURES:-0}" == "1" ]]; then
-    mkdir -p "$SIMDISK/Music"
+  # (METRO_INSTALL_MUSIC_FIXTURES=1), para no ensuciar el simulador con
+  # una biblioteca de prueba cuando alguien solo necesita probar
+  # Videos/Fotos, o cuando simdisk/Music ya apunta (symlink manual del
+  # dueno del checkout) a una biblioteca real.
+  if [[ "${METRO_INSTALL_MUSIC_FIXTURES:-0}" == "1" ]]; then
+    mkdir -p "$SIMDISK/Music" "$SIMDISK/Playlists"
+    cp -R "$MUSIC_DIR"/. "$SIMDISK/Music/"
+    cp "$OUT_DIR/Playlists"/*.m3u8 "$SIMDISK/Playlists/"
     cp "$OUT_DIR"/metro-test.* "$SIMDISK/Music/"
     cp "$OUT_DIR"/cover.jpg "$SIMDISK/Music/"
     # En la RAIZ del disco, no bajo Music/: find_albumart tambien busca

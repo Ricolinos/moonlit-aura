@@ -23,10 +23,14 @@
 /* Root of the twist (PLAN_MAESTRO.md S1.4 "Hub"): a plain vertical
  * list in MFONT_DISPLAY, no pivots. Always nav depth 1 -- shares
  * metro_screen_nav()'s depth-1 frame for its own selection/windowing
- * instead of owning a separate metro_nav_t. Selecting music/videos/
- * photos pushes a page of dummy 30-row data (F3 -- F4 replaces the
- * providers with real tagcache-backed ones, nothing else changes);
- * selecting settings pushes metro_screen_settings_page(). */
+ * instead of owning a separate metro_nav_t. Selecting music pushes
+ * either metro_music's real tagcache-backed page or a plain "updating
+ * library..." placeholder while metro_music_db_ready() is still
+ * false (F4); videos/photos still push dummy 30-row data (F7 replaces
+ * those). Selecting settings pushes metro_screen_settings_page(). A
+ * 5th row ("now playing") appears above the other four whenever
+ * metro_music_is_playing() -- selecting it pushes a plain-text now
+ * playing placeholder (F5 replaces it with the real screen). */
 void metro_screen_hub_show(void);
 void metro_screen_hub_handle(int action, int steps);
 
