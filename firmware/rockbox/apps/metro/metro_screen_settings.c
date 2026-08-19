@@ -35,10 +35,17 @@
 
 /* --- general: language, library update, reset settings ---------------- */
 
+static const enum metro_lang_id anim_names[METRO_ANIM_COUNT] = {
+    LANG_ANIM_OFF, LANG_ANIM_MINIMAL, LANG_ANIM_ALL,
+};
+static const enum metro_lang_id gfx_names[METRO_GFX_COUNT] = {
+    LANG_GFX_LITE, LANG_GFX_FULL,
+};
+
 static int general_count(void *ctx)
 {
     (void)ctx;
-    return 3;
+    return 5;
 }
 
 static void general_get_row(void *ctx, int index, struct metro_row *out)
@@ -55,6 +62,16 @@ static void general_get_row(void *ctx, int index, struct metro_row *out)
             out->kind = METRO_ROW_SETTING;
             break;
         case 1:
+            out->title = metro_lang_str(LANG_SETTING_ANIMATIONS);
+            out->subtitle = metro_lang_str(anim_names[metro_settings.animations]);
+            out->kind = METRO_ROW_SETTING;
+            break;
+        case 2:
+            out->title = metro_lang_str(LANG_SETTING_GRAPHICS);
+            out->subtitle = metro_lang_str(gfx_names[metro_settings.graphics]);
+            out->kind = METRO_ROW_SETTING;
+            break;
+        case 3:
             out->title = metro_lang_str(LANG_SETTING_LIBRARY);
             out->subtitle = NULL;
             out->kind = METRO_ROW_ACTION;
@@ -81,6 +98,18 @@ static void general_on_select(void *ctx, int index)
             break;
 
         case 1:
+            metro_settings.animations =
+                (enum metro_anim_level)((metro_settings.animations + 1) % METRO_ANIM_COUNT);
+            metro_settings_save();
+            break;
+
+        case 2:
+            metro_settings.graphics =
+                (enum metro_gfx_level)((metro_settings.graphics + 1) % METRO_GFX_COUNT);
+            metro_settings_save();
+            break;
+
+        case 3:
             if (metro_widgets_confirm(metro_lang_str(LANG_HUB_SETTINGS),
                                        metro_lang_str(LANG_DIALOG_LIBRARY_TITLE)))
             {
@@ -96,8 +125,8 @@ static void general_on_select(void *ctx, int index)
                 metro_settings.theme = METRO_THEME_DEFAULT;
                 metro_settings.accent = METRO_ACCENT_DEFAULT;
                 metro_settings.language = METRO_LANG_ES;
-                metro_settings.animations = 1;
-                metro_settings.graphics = 1;
+                metro_settings.animations = METRO_ANIM_DEFAULT;
+                metro_settings.graphics = METRO_GFX_DEFAULT;
                 metro_settings_save();
 
                 metro_theme_set(metro_settings.theme);

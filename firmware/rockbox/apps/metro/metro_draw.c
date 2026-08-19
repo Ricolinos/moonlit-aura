@@ -59,8 +59,21 @@ void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
      * in practice corrupted the LCD state and made later
      * screen_dump() calls (FBADDR() -> buffer->get_address_fn) jump
      * into random code. viewport_set_defaults() zeroes vp->buffer first,
-     * which is why every core caller uses it. See DECISIONS.md M-027. */
+     * which is why every core caller uses it. See DECISIONS.md M-027.
+     *
+     * F11: vp.buffer is overwritten right after with whatever buffer
+     * lcd_current_viewport is ACTUALLY drawing into -- NULL (real
+     * screen) normally, but an offscreen metro_fb.c buffer while
+     * metro_transitions.c is pre-rendering a destination frame. Left
+     * at viewport_set_defaults()'s NULL, this function always drew
+     * into the real LCD regardless -- row titles never made it into
+     * an offscreen "to" frame, so a completed SLIDE composited a
+     * blank row area (found visually: rows present with
+     * animations=off, gone with animations=all). Still well-defined
+     * either way -- never the M-027 stack-garbage case, just a
+     * pointer copy of an already-valid buffer. */
     viewport_set_defaults(&vp, SCREEN_MAIN);
+    vp.buffer = lcd_current_viewport->buffer;
     vp.x = x;
     vp.width = clip_w;
     vp.font = metro_font_id(role);

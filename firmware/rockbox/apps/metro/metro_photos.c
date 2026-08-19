@@ -25,6 +25,11 @@
 #include "string-extra.h"
 
 #include "metro_photos.h"
+#include "metro_transitions.h"
+
+/* See metro_video.c's identical comment: avoids pulling metro_lang.h
+ * into a TU that also needs apps/plugin.h (LANG_* collision). */
+void metro_screen_list_show(void);
 
 #define PHOTOS_DIR "/Photos"
 
@@ -56,4 +61,7 @@ void metro_photos_view(const char *filename)
     snprintf(path, sizeof(path), "%s/%s", PHOTOS_DIR, filename);
     plugin_set_silent_open_errors(true);
     plugin_load(VIEWERS_DIR "/imageviewer.rock", path);
+
+    /* F11: see metro_video_play()'s identical comment. */
+    metro_transitions_fade(metro_screen_list_show);
 }

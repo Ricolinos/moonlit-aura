@@ -549,3 +549,92 @@ superpuesto cuando `REPEAT_ONE` está activo) -- ambos construidos solo
 con primitivas `lcd_drawline`/`lcd_drawrect`/`lcd_fillrect` (M-018:
 nunca se lee un bitmap de disco), verificados visualmente en
 `docs/screenshots/F10-np-icons.png`.
+
+## M-043 — F11: qué transición corre se decide diffeando `metro_nav_t` en `metro_main.c`, no con llamadas explícitas desde cada pantalla
+
+`PLAN_MAESTRO.md` F11 lista `metro_screen_list/hub/nowplaying` como
+"mod: llaman a transiciones", sugiriendo que cada pantalla anuncia su
+propia transición en el sitio donde empuja/saca una página. En cambio,
+`metro_main.c` captura `metro_nav_depth()`/`metro_nav_pivot()`/"¿es
+Now Playing la página actual?" ANTES de llamar al `*_handle()` de
+turno, y vuelve a leer los tres DESPUÉS -- la diferencia decide sola
+qué transición corre (profundidad sube y la página nueva es el
+centinela de NP -> FADE; profundidad sube sin más -> PUSH; profundidad
+baja saliendo específicamente de NP -> FADE; profundidad baja sin más
+-> POP; misma profundidad con el pivot cambiado -> SLIDE; nada de lo
+anterior -> redibujo instantáneo). `metro_screen_hub.c`,
+`metro_screen_list.c` y `metro_screen_nowplaying.c` quedan intocados
+salvo por lo que ya tenían de F1-F10 -- ninguno sabe que
+`metro_transitions.c` existe.
+
+**Por qué**: la lógica "¿esto fue un push, un pop, o solo cambiar de
+pivot?" ya vive por completo en `metro_nav_t` (F3, `metro_nav.c`) --
+triplicarla como una llamada explícita en cada uno de los ~15 sitios
+que empujan o sacan una página (contando `metro_screen_hub.c` solo)
+sería repetir la misma pregunta que `metro_nav_t` ya puede responder
+por diferencia de estado, y cada sitio nuevo (un pivot futuro, una
+página nueva) tendría que acordarse de anotarlo. Un único punto de
+diff no puede desincronizarse del comportamiento real del stack de
+navegación porque LEE ese stack, no lo declara aparte.
+
+**Caso límite real, resuelto por el orden de las comparaciones**: el
+centinela de Now Playing SÍ se empuja como cualquier otra página
+(F5, `metro_screen_nowplaying_push()` llama a
+`metro_screen_list_push()`), así que entrar a NP sube la profundidad
+Y cambia a NP en el mismo evento -- de ahí que el chequeo específico
+de NP tenga que ganarle al genérico de "profundidad subió" en el
+orden de `if`, o "push(NP)" saldría con SLIDE en vez de FADE.
+`MACT_OPTIONS` desde NP tiene la relación inversa: profundidad sube,
+pero la página nueva NO es el centinela (es la lista de opciones) --
+cae al PUSH genérico a propósito, ver `docs/DESVIACIONES.md` F11-1.
+
+## M-044 — F11: `metro_draw_text_cut_right()` (F10) ignoraba el framebuffer redirigido de una transición, dejando filas en blanco
+
+`metro_fb_render()` redirige todo el dibujo de `lcd_*` a un buffer
+fuera de pantalla (`viewport_set_buffer(NULL, &fb, SCREEN_MAIN)`) para
+prerrenderizar el destino de una transición ANTES de animarla.
+`metro_draw_text_cut_right()` (F10, recorte de títulos largos) crea su
+propio viewport temporal para el recorte con
+`viewport_set_defaults(&vp, SCREEN_MAIN)`, que deja `vp.buffer = NULL`
+-- resuelto SIEMPRE contra el framebuffer real de la pantalla
+(`lcd_init_viewport()`), sin importar qué buffer esté activo en ese
+momento. Mientras `metro_draw_text_cut_right()` solo se llamaba
+durante un dibujo normal (pantalla real == framebuffer real) esto era
+invisible; F11 lo expuso porque el primer llamador real fuera de ese
+caso es exactamente el prerrenderizado offscreen de una transición --
+el título de cada fila se dibujaba contra la pantalla real (invisible
+en ese instante, luego pisado por los cuadros de la animación) en vez
+del framebuffer offscreen, así que el `to` capturado nunca tenía
+texto de fila. Encontrado comparando capturas con `animations=off`
+(filas visibles) contra `animations=all` (filas en blanco tras un
+PUSH/SLIDE ya asentado) -- mismo síntoma en cualquier pantalla de
+lista, no específico de música. Fix: una línea,
+`vp.buffer = lcd_current_viewport->buffer;` justo después de
+`viewport_set_defaults()`, heredando el buffer que esté activo de
+verdad en vez de forzar el real -- sigue siendo la misma garantía de
+M-027 (nunca un puntero de basura de stack), solo que ahora copia uno
+ya válido en vez de inventar `NULL`.
+
+## M-045 — F11: matriz `animations` (off/minimal/all) × `graphics` (lite/full) -- semántica real, no solo persistencia
+
+`metro_settings.animations`/`.graphics` existían desde F6/F8 como
+enteros persistidos "sin efecto visual hasta F11+" (comentario textual
+en `metro_settings.h`). F11 les da tipo (`enum metro_anim_level`,
+`enum metro_gfx_level`) y efecto real:
+`metro_transitions_slide()`/`_fade()` calculan un nivel EFECTIVO
+(`metro_settings.animations` menos las muescas de auto-degradación de
+sesión, M-015) y lo traducen a cuadros/retardo
+(`all`=8×3 ticks, `minimal`=4×3, `off`=instantáneo, sin animación).
+`graphics` solo importa para FADE: `metro_fb_present_fade()` (blend
+por píxel) está reservado a `graphics=full`
+(`PLAN_MAESTRO.md` S3.1: "Solo con `graphics=full`") -- con
+`graphics=lite`, incluso con `animations=all`, FADE cae al mismo
+SLIDE que ya usa PUSH/POP/twist en vez de un segundo mecanismo de
+respaldo. Verificado visualmente: `docs/screenshots/F11-anim-off.png`
+(mismo tick que F11-push-mid.png, destino ya asentado),
+`docs/screenshots/F11-fade-lite-mid.png` (borde nítido de slide, no
+mezcla de píxeles, con `graphics=lite`). Default cambiado de las
+constantes provisionales de F8 (`animations=1`, `graphics=1`) a
+`METRO_ANIM_DEFAULT`=ALL/`METRO_GFX_DEFAULT`=FULL (M-015: "canon =
+máxima fidelidad") en `metro_settings.c` y en "restablecer ajustes"
+(`metro_screen_settings.c`).

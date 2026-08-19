@@ -38,8 +38,8 @@ static const metro_settings_t defaults = {
     .theme = METRO_THEME_DEFAULT,
     .accent = METRO_ACCENT_DEFAULT,
     .language = METRO_LANG_ES,
-    .animations = 1,
-    .graphics = 1,
+    .animations = METRO_ANIM_DEFAULT,
+    .graphics = METRO_GFX_DEFAULT,
     .tz_local_quarters = 0,
     .first_boot_done = false,
 };
@@ -77,9 +77,9 @@ void metro_settings_load(void)
             else if (!strcmp(name, "language"))
                 metro_settings.language = (enum metro_language)clamp_enum(v, METRO_LANG_COUNT);
             else if (!strcmp(name, "animations"))
-                metro_settings.animations = v;
+                metro_settings.animations = (enum metro_anim_level)clamp_enum(v, METRO_ANIM_COUNT);
             else if (!strcmp(name, "graphics"))
-                metro_settings.graphics = v;
+                metro_settings.graphics = (enum metro_gfx_level)clamp_enum(v, METRO_GFX_COUNT);
             else if (!strcmp(name, "tz_local_quarters"))
                 metro_settings.tz_local_quarters = v;
             else if (!strcmp(name, "first_boot_done"))

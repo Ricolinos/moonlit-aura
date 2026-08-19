@@ -30,12 +30,33 @@
 #include "metro_theme.h"
 #include "metro_lang.h"
 
+/* F11: FX level matrix (PLAN_MAESTRO.md M-015/S3) -- animations is
+ * "how it moves" (metro_transitions.c's frame count), graphics is
+ * "what gets drawn" (currently just whether FADE does a real per-pixel
+ * blend or falls back to a slide, metro_fb.c's own doc comment).
+ * Canon = maximum fidelity (ALL/FULL); lower levels are subtractions
+ * on the same code, never a different code path. */
+enum metro_anim_level {
+    METRO_ANIM_OFF = 0,
+    METRO_ANIM_MINIMAL,
+    METRO_ANIM_ALL,
+    METRO_ANIM_COUNT
+};
+#define METRO_ANIM_DEFAULT METRO_ANIM_ALL
+
+enum metro_gfx_level {
+    METRO_GFX_LITE = 0,
+    METRO_GFX_FULL,
+    METRO_GFX_COUNT
+};
+#define METRO_GFX_DEFAULT METRO_GFX_FULL
+
 typedef struct {
     enum metro_theme_kind theme;
     enum metro_accent accent;
     enum metro_language language;
-    int animations;  /* persisted only -- no visual effect until F11+ */
-    int graphics;     /* persisted only -- no visual effect until F11+ */
+    enum metro_anim_level animations;
+    enum metro_gfx_level graphics;
     int tz_local_quarters; /* quarter-hours from UTC, D.4 of the contract */
     bool first_boot_done;
 } metro_settings_t;

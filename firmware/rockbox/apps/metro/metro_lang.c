@@ -107,6 +107,14 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_SHUTTING_DOWN] = "apagando...",
 
     [LANG_EMPTY_LIST] = "aun no hay nada aqui -- sincroniza con aura studio",
+
+    [LANG_SETTING_ANIMATIONS] = "animacion",
+    [LANG_SETTING_GRAPHICS]   = "graficos",
+    [LANG_ANIM_ALL]     = "completa",
+    [LANG_ANIM_MINIMAL] = "minima",
+    [LANG_ANIM_OFF]     = "apagada",
+    [LANG_GFX_FULL] = "completos",
+    [LANG_GFX_LITE] = "ligeros",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -195,6 +203,14 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_SHUTTING_DOWN] = "shutting down...",
 
     [LANG_EMPTY_LIST] = "nothing here yet -- sync with aura studio",
+
+    [LANG_SETTING_ANIMATIONS] = "animation",
+    [LANG_SETTING_GRAPHICS]   = "graphics",
+    [LANG_ANIM_ALL]     = "full",
+    [LANG_ANIM_MINIMAL] = "minimal",
+    [LANG_ANIM_OFF]     = "off",
+    [LANG_GFX_FULL] = "full",
+    [LANG_GFX_LITE] = "lite",
 };
 
 void metro_lang_set(enum metro_language lang)

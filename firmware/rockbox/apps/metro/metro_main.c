@@ -45,6 +45,7 @@
 #include "metro_settings.h"
 #include "metro_sync.h"
 #include "metro_device.h"
+#include "metro_transitions.h"
 
 /* See metro_main.h for why this must be called from apps/main.c's
  * init(), not from here. None of these settings are exposed anywhere
@@ -300,13 +301,50 @@ void metro_main(void)
             continue;
         }
 
-        if (at_root)
-            metro_screen_hub_handle(action, steps);
-        else if (at_player)
-            metro_screen_nowplaying_handle(action, steps);
-        else
-            metro_screen_list_handle(action, steps);
+        {
+            /* F11: transitions are picked by diffing metro_nav_t
+             * before/after the action instead of each screen module
+             * announcing "I just pushed" -- one place knows the nav
+             * stack shape, metro_screen_hub/list/nowplaying.c stay
+             * exactly as they were before this phase. Order matters:
+             * entering/leaving the sentinel Now Playing page also
+             * changes depth (it's pushed like any other page, F5), so
+             * the player-specific checks must win over the generic
+             * push/pop ones, or "push(NP)" would slide instead of
+             * fade. A push that lands on a LIST page while ALREADY
+             * on NP (MACT_OPTIONS) falls through to the generic push
+             * case on purpose -- see metro_transitions.h. */
+            metro_nav_t *nav = metro_screen_nav();
+            int depth_before = metro_nav_depth(nav);
+            int pivot_before = metro_nav_pivot(nav);
+            bool player_before = at_player;
+            int depth_after, pivot_after;
+            bool root_after, player_after;
 
-        redraw_current();
+            if (at_root)
+                metro_screen_hub_handle(action, steps);
+            else if (at_player)
+                metro_screen_nowplaying_handle(action, steps);
+            else
+                metro_screen_list_handle(action, steps);
+
+            depth_after = metro_nav_depth(nav);
+            pivot_after = metro_nav_pivot(nav);
+            root_after = metro_nav_is_root(nav);
+            player_after = !root_after && metro_screen_nowplaying_is_current();
+
+            if (depth_after > depth_before && player_after)
+                metro_transitions_fade(redraw_current);
+            else if (depth_after > depth_before)
+                metro_transitions_slide(redraw_current, 1);
+            else if (depth_after < depth_before && player_before && !player_after)
+                metro_transitions_fade(redraw_current);
+            else if (depth_after < depth_before)
+                metro_transitions_slide(redraw_current, -1);
+            else if (!root_after && pivot_after != pivot_before)
+                metro_transitions_slide(redraw_current, pivot_after > pivot_before ? 1 : -1);
+            else
+                redraw_current();
+        }
     }
 }
