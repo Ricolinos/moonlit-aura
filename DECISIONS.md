@@ -257,3 +257,37 @@ dueño debe intentar la captura en una sesión interactiva propia (no en
 segundo plano) — si el problema persiste ahí, amerita una fase de
 investigación dedicada antes de F3, dado que F3+ depende de captura
 con botones inyectados.
+
+**Actualización — confirmado en sesión interactiva**: el dueño
+reprodujo el mismo crash corriendo `sim_shot.sh` directamente en
+Terminal.app. No es un artefacto de sesión en segundo plano — es un
+problema real de este entorno (macOS 26.5.2 + SDL3 + Rockbox).
+
+### M-026 — F2: intento de mover `screen_dump()` al hilo de `metro_main()`, revertido (cambia el crash por un deadlock)
+
+Ver `docs/DESVIACIONES.md` F2-3. Se separó el disparo del volcado
+(`sim_thread`, sin cambios) de su ejecución real (`screen_dump()`/
+`exit()`, movidos a una función nueva llamada desde el propio loop de
+`metro_main()`, el único hilo que ya pasa de forma segura por
+`button_get_w_tmo()`). Eliminó el crash de AppKit, pero introdujo un
+**deadlock nuevo, 100% determinista** — el volcado queda colgado a
+mitad del bucle de copia de píxeles del framebuffer (antes de la
+primera escritura de línea), incluso en los ticks bajos que antes sí
+funcionaban. Diagnosticado con instrumentación `DEBUGF` temporal
+(revertida) hasta ubicar el punto exacto del cuelgue; descarta que sea
+el `exit()` (el mismo cuelgue ocurre sin `METRO_SIM_AUTODUMP_QUIT`).
+**Revertido por completo** (`git checkout --` sobre los 4 archivos:
+`uisimulator/common/sim_tasks.c`/`.h`, `apps/metro/metro_main.c`,
+`firmware/screendump.c`) — un deadlock del 100% de las veces es
+estrictamente peor que un crash parcial. El árbol de F2 quedó
+exactamente como en su commit, ningún cambio de este intento llegó a
+comitearse.
+
+**Pista para quien retome esto**: hay una segunda condición de carrera
+independiente de la de M-025, en la capa de filesystem simulado de
+Rockbox (`firmware/target/hosted/filesystem-unix.c`, sin tocar por
+Metro ni Aura) — se dispara específicamente al llamar `screen_dump()`
+desde el hilo "device" en vez de `sim_thread`. Una solución real
+necesita depurar ambos hilos con `lldb`/Instruments en una sesión
+interactiva (no disponible en esta sesión por falta de autorización
+de macOS), no solo resolver el problema de AppKit de M-025.
