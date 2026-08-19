@@ -73,7 +73,16 @@ void metro_sync_postpone(void);
 /* MENU on an error screen (unsupported version / too many attempts):
  * dismisses it, back to idle. The marker itself is untouched -- an
  * unsupported-version marker waits for a newer firmware; a
- * too-many-attempts one waits for the user's manual retry (F8). */
+ * too-many-attempts one waits for the user's manual retry (F8, this
+ * function). */
 void metro_sync_dismiss(void);
+
+/* F8: Settings -> "library" row. Writes a fresh marker with all three
+ * sections marked and attempts reset to 0 (same shape
+ * aura_sync_request_manual() writes), superseding any error currently
+ * on screen, and immediately calls metro_sync_check_pending() so the
+ * job starts on the same redraw cycle that follows. Returns true if a
+ * job is now active/queued (the caller should show the sync screen). */
+bool metro_sync_request_manual(void);
 
 #endif /* METRO_SYNC_H */

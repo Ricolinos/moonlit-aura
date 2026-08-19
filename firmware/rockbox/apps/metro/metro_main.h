@@ -42,4 +42,12 @@ void metro_main(void) NORETURN_ATTR;
  * already shows through every lcd_clear_display() call. */
 void metro_apply_hygiene(void);
 
+/* Blocks showing the one full-screen sync wait state (S4.3) for as
+ * long as metro_sync_needs_screen() is true, same loop
+ * metro_disk_handoff() uses at boot/USB-return -- exposed so Settings'
+ * "library" row (F8) can drive the same screen after
+ * metro_sync_request_manual() instead of the job running invisibly in
+ * the background. No-op if nothing needs the screen right now. */
+void metro_run_sync_screen_if_needed(void);
+
 #endif /* METRO_MAIN_H */

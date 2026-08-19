@@ -91,6 +91,17 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_SYNC_ERROR_VERSION]  = "esta version de metro es mas vieja que aura studio",
     [LANG_SYNC_ERROR_ATTEMPTS] = "no se pudo actualizar la biblioteca",
     [LANG_SYNC_DISMISS_HINT]   = "menu para continuar",
+
+    [LANG_SETTING_LIBRARY]      = "biblioteca",
+    [LANG_SETTING_BRIGHTNESS]   = "brillo",
+    [LANG_SETTING_BACKLIGHT]    = "retroiluminacion",
+    [LANG_VALUE_NEVER]          = "nunca",
+    [LANG_DIALOG_LIBRARY_TITLE] = "actualizar biblioteca ahora?",
+    [LANG_LIBRARY_UPDATING]     = "actualizando...",
+
+    [LANG_ABOUT_DEVICE_DEFAULT] = "mi ipod",
+    [LANG_ABOUT_SONGS]          = "canciones",
+    [LANG_ABOUT_NOT_SYNCED]     = "sin sincronizar todavia",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -163,6 +174,17 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_SYNC_ERROR_VERSION]  = "this metro version is older than aura studio",
     [LANG_SYNC_ERROR_ATTEMPTS] = "could not update the library",
     [LANG_SYNC_DISMISS_HINT]   = "menu to continue",
+
+    [LANG_SETTING_LIBRARY]      = "library",
+    [LANG_SETTING_BRIGHTNESS]   = "brightness",
+    [LANG_SETTING_BACKLIGHT]    = "backlight",
+    [LANG_VALUE_NEVER]          = "never",
+    [LANG_DIALOG_LIBRARY_TITLE] = "update library now?",
+    [LANG_LIBRARY_UPDATING]     = "updating...",
+
+    [LANG_ABOUT_DEVICE_DEFAULT] = "my ipod",
+    [LANG_ABOUT_SONGS]          = "songs",
+    [LANG_ABOUT_NOT_SYNCED]     = "not synced yet",
 };
 
 void metro_lang_set(enum metro_language lang)

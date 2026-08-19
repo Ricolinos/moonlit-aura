@@ -107,7 +107,7 @@ static void draw_sync_screen(void)
     lcd_update();
 }
 
-static void run_sync_screen_if_needed(void)
+void metro_run_sync_screen_if_needed(void)
 {
     if (!metro_sync_needs_screen())
         return;
@@ -146,7 +146,7 @@ static void metro_disk_handoff(void)
     metro_settings_apply_pending_clock();
     metro_device_reload();
     metro_sync_check_pending();
-    run_sync_screen_if_needed();
+    metro_run_sync_screen_if_needed();
 }
 
 void metro_main(void)

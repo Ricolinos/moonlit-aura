@@ -229,3 +229,15 @@ Durante la captura de las evidencias de F4 (`docs/screenshots/F4-*.png`), UNA co
 **Por qué**: Metro nunca ha mostrado una imagen fuera de la carátula de Now Playing (F5) — no hay ningún carrusel visual tipo CoverDrift en el árbol de navegación de Metro (`PLAN_MAESTRO.md` §2.2, el árbol de Videos/Fotos es una lista de pivots, no un carrusel), así que no hay ningún lugar donde un póster o una miniatura se mostrarían. Construir el pipeline de decodificación+caché+display para algo que no tiene consumidor sería trabajo especulativo.
 
 **Impacto en `PLAN_MAESTRO.md`**: ninguno en el comportamiento de C12-C14 (todos verificados sin pósters/miniaturas). Si una fase futura agrega un componente visual a Videos/Fotos (fuera del plan actual de fases F0-F13), el póster ya está documentado en el contrato y solo falta leerlo — no hace falta que Aura Studio cambie nada de su lado.
+
+---
+
+## F8-1 — About sin `sync_summary.cfg`: un mensaje, no 3 filas de guiones
+
+**Plan decía** (checklist C15, `PLAN_MAESTRO.md` §4): "`sync_summary.cfg`: presente → conteos; ausente → guiones" — sugiere mostrar cada fila de conteo (canciones/videos/fotos) con un guion como valor cuando el archivo no existe.
+
+**Qué se hizo**: `metro_screen_about.c` muestra una única fila "sin sincronizar todavía" en vez de 3 filas "canciones: -", "videos: -", "fotos: -".
+
+**Por qué**: en una lista de Metro (pitch 28px, texto grande) 3 filas idénticas salvo por la etiqueta, todas con el mismo valor "-", leen como una lista rota o a medio cargar más que como un estado intencional — un solo mensaje en español/inglés claro ("sin sincronizar todavía"/"not synced yet") comunica lo mismo con menos ambigüedad visual. [ESTIMADO: preferencia de legibilidad, no una limitación técnica — revertir a 3 filas con guion es un cambio de `about_count()`/`about_get_row()` de unas pocas líneas si se prefiere pixel-parity con el texto literal del plan.]
+
+**Impacto en `PLAN_MAESTRO.md`**: ninguno funcional — la distinción "hay datos reales" vs. "nunca se sincronizó" sigue siendo inequívoca para el usuario, solo cambia CÓMO se comunica "ausente".

@@ -335,3 +335,5 @@ metro/metro_fsutil.c
 metro/metro_media_categories.c
 metro/metro_video.c
 metro/metro_photos.c
+metro/metro_manifest.c
+metro/metro_screen_about.c

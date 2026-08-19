@@ -18,12 +18,14 @@
  *
  ****************************************************************************/
 #include <string.h>
+#include <stdio.h>
 
 /* config.h before tagcache.h -- see DECISIONS.md M-030. */
 #include "config.h"
 #include "tagcache.h"
 #include "file.h"
 #include "dir.h"
+#include "timefuncs.h"
 
 #include "metro_sync.h"
 #include "metro_sync_marker.h"
@@ -339,4 +341,34 @@ void metro_sync_dismiss(void)
 {
     if (s_state == METRO_SYNC_ERROR_VERSION || s_state == METRO_SYNC_ERROR_ATTEMPTS)
         go_idle();
+}
+
+bool metro_sync_request_manual(void)
+{
+    metro_sync_marker_t m;
+    struct tm *now;
+
+    if (metro_sync_job_active())
+        return true; /* already running: the screen already shows it */
+
+    metro_sync_marker_init(&m);
+    m.version = METRO_SYNC_MARKER_VERSION_SUPPORTED;
+    m.music = m.video = m.images = true;
+    m.attempts = 0;
+    now = get_time();
+    if (now && valid_time(now))
+        snprintf(m.timestamp, sizeof(m.timestamp), "%04d-%02d-%02dT%02d:%02d:%02d",
+                 now->tm_year + 1900, now->tm_mon + 1, now->tm_mday,
+                 now->tm_hour, now->tm_min, now->tm_sec);
+    else
+        strcpy(m.timestamp, "1970-01-01T00:00:00");
+
+    if (!write_marker(&m))
+        return false;
+
+    /* A pending error on screen (version/attempts) is superseded by
+     * the marker just written. */
+    go_idle();
+    metro_sync_check_pending();
+    return metro_sync_needs_screen();
 }
