@@ -80,7 +80,7 @@ static int s_probed_w, s_probed_h;
  * real decode requires knowing the source dimensions first (unlike
  * the photo grid's thumbnails, R2-F2/DD-9, which are small enough to
  * get away with a single KEEP_ASPECT decode + a cheap nearest-neighbour
- * re-crop instead -- see metro_photo_thumbs.c's own comment on why
+ * re-crop instead -- see metro_thumbs.c's own comment on why
  * that shortcut isn't precise enough here at full screen size). */
 typedef enum {
     METRO_JPEG_PROBE_UNKNOWN = 0, /* unrecognized header -- let the decoder try anyway */

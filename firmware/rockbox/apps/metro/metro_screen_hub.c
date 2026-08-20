@@ -22,6 +22,7 @@
 #include <string.h>
 #include "lcd.h"
 #include "string-extra.h"
+#include "fs_defines.h"
 
 #include "metro_screen_hub.h"
 #include "metro_screen_list.h"
@@ -30,7 +31,7 @@
 #include "metro_music.h"
 #include "metro_video.h"
 #include "metro_photos.h"
-#include "metro_photo_thumbs.h"
+#include "metro_thumbs.h"
 #include "metro_screen_photo_viewer.h"
 #include "metro_draw.h"
 #include "metro_theme.h"
@@ -171,13 +172,38 @@ static void photo_pivot_on_select(void *ctx, int index)
     metro_screen_photo_viewer_push(c->items, *c->count, index);
 }
 
-/* R2-F2/DD-7/DD-9: bitmap for the grid's get_tile() -- delegates
- * straight to the thumbnail engine, keyed by filename+mtime (the same
- * pair metro_photo_thumbs.c uses to invalidate a stale cache entry). */
-static const fb_data *photo_pivot_get_tile(void *ctx, int index)
+/* R3-F1/DD-1: Photos' own metro_thumb_source -- key is "<filename>.
+ * <mtime>" (the same pair the old metro_photo_thumbs.c used to
+ * invalidate a stale cache entry), decode is a plain JPEG-cover read
+ * from /Photos/<filename> via the engine's shared helper. */
+#define PHOTOS_DIR "/Photos"
+
+static bool photo_thumb_cache_key(void *ctx, int index, char *out, size_t out_len)
 {
     struct photo_pivot_ctx *c = ctx;
-    return metro_photo_thumbs_get(c->items[index].filename, c->items[index].mtime);
+    if (index < 0 || index >= *c->count)
+        return false;
+    snprintf(out, out_len, "%s.%ld", c->items[index].filename, c->items[index].mtime);
+    return true;
+}
+
+static bool photo_thumb_decode(void *ctx, int index, fb_data *dst)
+{
+    struct photo_pivot_ctx *c = ctx;
+    char path[MAX_PATH];
+    snprintf(path, sizeof(path), "%s/%s", PHOTOS_DIR, c->items[index].filename);
+    return metro_thumbs_decode_jpeg_cover(path, dst);
+}
+
+static const struct metro_thumb_source photo_thumb_source = {
+    "photos", photo_thumb_cache_key, photo_thumb_decode
+};
+
+/* R2-F2/DD-7/DD-9: bitmap for the grid's get_tile() -- delegates
+ * straight to the (now generic) thumbnail engine. */
+static const fb_data *photo_pivot_get_tile(void *ctx, int index)
+{
+    return metro_thumbs_get(&photo_thumb_source, ctx, index);
 }
 
 static struct metro_pivot photo_pivots[4];
@@ -192,7 +218,7 @@ static void build_photos_page(void)
      * still be serving or decoding for a pivot the user isn't even
      * looking at anymore (e.g. left "ia" scrolled deep, came back into
      * "todos"). */
-    metro_photo_thumbs_reset();
+    metro_thumbs_reset();
 
     s_photo_all_n = metro_photos_list(s_photo_all, METRO_PHOTOS_MAX);
     s_photo_photos_n = s_photo_images_n = s_photo_ai_n = 0;

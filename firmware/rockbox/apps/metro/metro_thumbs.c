@@ -26,25 +26,29 @@
 #include "bmp.h"
 #include "string-extra.h"
 
-#include "metro_photo_thumbs.h"
+#include "metro_thumbs.h"
 #include "metro_settings.h"
 #include "metro_draw.h"
 #include "metro_fsutil.h"
 
-#define PHOTOS_DIR "/Photos"
 #define THUMB_PX (METRO_TILE_SIZE * METRO_TILE_SIZE)
 
 /* R2-F2/DD-9: 16 thumbnails (~2 grid screens) resident in RAM at once
- * -- 16 * 80*80*sizeof(fb_data) = 16 * 12800 = 204800 bytes, matching
- * the plan's own estimate. Plain ring eviction (not true LRU): simple,
- * and with a window this much bigger than one screen (8 tiles) it
- * takes real back-and-forth scrolling to evict something still on
- * screen. */
+ * -- 16 * 80*80*sizeof(fb_data) = 16 * 12800 = 204800 bytes. Plain ring
+ * eviction (not true LRU): simple, and with a window this much bigger
+ * than one screen (8 tiles) it takes real back-and-forth scrolling to
+ * evict something still on screen. R3-F1/DD-1: this window is now
+ * SHARED across every source (photos/artists/albums) -- only one grid
+ * is ever on screen, so there's no reason to pay for three windows. */
 #define WINDOW_N 16
 #define PENDING_MAX 16
 
+/* Cache-key stems are filename-shaped ("<name>.<mtime>") -- reuse the
+ * same length budget metro_fsutil.c already uses for source names. */
+#define KEY_LEN METRO_FSUTIL_NAME_LEN
+
 struct thumb_slot {
-    char filename[METRO_FSUTIL_NAME_LEN];
+    char key[KEY_LEN];
     bool valid;
     fb_data pixels[THUMB_PX];
 };
@@ -52,73 +56,101 @@ struct thumb_slot {
 static struct thumb_slot s_window[WINDOW_N];
 static int s_window_ring = 0;
 
-static char s_pending[PENDING_MAX][METRO_FSUTIL_NAME_LEN];
-static long s_pending_mtime[PENDING_MAX];
+/* R3-F1/DD-1: a pending entry remembers WHICH source queued it (not
+ * just a filename+mtime, R2-F2's original shape) -- metro_thumbs_tick()
+ * needs (source, ctx, index) to call back into that source's own
+ * decode(). The cache key is captured once, at metro_thumbs_get() time,
+ * and carried along so tick() never has to recompute it (and so a
+ * dedup check against the pending queue is a plain string compare). */
+struct pending_entry {
+    const struct metro_thumb_source *source;
+    void *ctx;
+    int index;
+    char key[KEY_LEN];
+};
+
+static struct pending_entry s_pending[PENDING_MAX];
 static int s_pending_n = 0;
 
 /* Oversized scratch for read_jpeg_file()'s own decode overhead + the
  * pre-crop KEEP_ASPECT decode -- same x2 margin rule as metro_albumart.c
  * (DECISIONS.md M-033): undersizing this doesn't fail loudly, it
- * writes past the buffer before the decoder's own bounds check
- * catches it. */
+ * writes past the buffer before the decoder's own bounds check catches
+ * it. Shared by every caller of metro_thumbs_decode_jpeg_cover() --
+ * safe because only one decode ever runs at a time (metro_thumbs_tick()
+ * budgets exactly one per call). */
 #define SCRATCH_SIZE (METRO_TILE_SIZE * METRO_TILE_SIZE * 2 * 2)
 static unsigned char s_scratch[SCRATCH_SIZE];
 
-static struct thumb_slot *find_slot(const char *filename)
+static struct thumb_slot *find_slot(const char *key)
 {
     int i;
     for (i = 0; i < WINDOW_N; i++)
-        if (s_window[i].valid && !strcmp(s_window[i].filename, filename))
+        if (s_window[i].valid && !strcmp(s_window[i].key, key))
             return &s_window[i];
     return NULL;
 }
 
-static void cache_dir(char *out, size_t outsz)
+static void cache_dir_for(const struct metro_thumb_source *source, char *out, size_t outsz)
 {
-    metro_settings_metro_cache_dir(out, outsz);
+    metro_settings_metro_cache_dir(source->cache_subdir, out, outsz);
 }
 
-static void cache_path(const char *filename, long mtime, char *out, size_t outsz)
+static void cache_path(const struct metro_thumb_source *source, const char *key,
+                        char *out, size_t outsz)
 {
     char dir[MAX_PATH];
-    cache_dir(dir, sizeof(dir));
-    snprintf(out, outsz, "%s/%s.%ld.mth", dir, filename, mtime);
+    cache_dir_for(source, dir, sizeof(dir));
+    snprintf(out, outsz, "%s/%s.mth", dir, key);
 }
 
-static void ensure_cache_dir(void)
+static void ensure_cache_dir(const struct metro_thumb_source *source)
 {
     char dir[MAX_PATH], parent[MAX_PATH];
     char *slash;
 
-    cache_dir(dir, sizeof(dir));
+    cache_dir_for(source, dir, sizeof(dir));
     strlcpy(parent, dir, sizeof(parent));
     slash = strrchr(parent, '/');
     if (slash)
         *slash = '\0';
 
     /* .../aura already exists (metro_settings_save() creates it on
-     * first boot, C1) -- only "metrocache" and "metrocache/photos"
-     * are ever missing here. */
+     * first boot) -- only "metrocache" (parent) and
+     * "metrocache/<subdir>" (dir) are ever missing here. */
     if (!dir_exists(parent))
         mkdir(parent);
     if (!dir_exists(dir))
         mkdir(dir);
 }
 
-/* R2-F2/DD-9: drops any other cached .mth for this same source
- * filename -- the mtime-in-the-name scheme means a re-synced photo
- * with new content picks a new cache filename, leaving the old one an
- * orphan pointing at content nobody will ever ask for by that exact
- * (filename, mtime) pair again. Cheap: one directory scan, only run on
- * an actual decode (already the slow path). */
-static void remove_stale(const char *filename, const char *keep_path)
+/* R2-F2/DD-9, generalized R3-F1: drops any other cached .mth that
+ * shares this key's stem (the part before the *last* '.', i.e. the
+ * "<stable-name>" half of "<stable-name>.<mtime>") -- the mtime-in-
+ * the-key scheme means a changed source item picks a new cache
+ * filename, leaving the old one an orphan pointing at content nobody
+ * will ever ask for by that exact key again. Cheap: one directory
+ * scan, only run on an actual decode (already the slow path). Generic
+ * over all three sources because all three follow the same
+ * "<name>.<mtime>" key convention (metro_thumb_source.cache_key's own
+ * contract). */
+static void remove_stale(const struct metro_thumb_source *source, const char *key,
+                          const char *keep_path)
 {
     char dir[MAX_PATH];
+    char prefix[KEY_LEN];
+    char *dot;
+    size_t prefix_len;
     DIR *d;
     struct DIRENT *entry;
-    size_t name_len = strlen(filename);
 
-    cache_dir(dir, sizeof(dir));
+    strlcpy(prefix, key, sizeof(prefix));
+    dot = strrchr(prefix, '.');
+    if (dot)
+        *dot = '\0';
+    prefix_len = strlen(prefix);
+
+    cache_dir_for(source, dir, sizeof(dir));
     d = opendir(dir);
     if (!d)
         return;
@@ -127,9 +159,9 @@ static void remove_stale(const char *filename, const char *keep_path)
     {
         char full[MAX_PATH];
 
-        if (strncmp(entry->d_name, filename, name_len) != 0 ||
-            entry->d_name[name_len] != '.')
-            continue; /* not "<filename>.<mtime>.mth" for THIS filename */
+        if (strncmp(entry->d_name, prefix, prefix_len) != 0 ||
+            entry->d_name[prefix_len] != '.')
+            continue; /* not "<prefix>.<...>.mth" for THIS key's stem */
 
         snprintf(full, sizeof(full), "%s/%s", dir, entry->d_name);
         if (strcmp(full, keep_path) != 0)
@@ -146,10 +178,10 @@ static void remove_stale(const char *filename, const char *keep_path)
  * then samples the centered METRO_TILE_SIZE x METRO_TILE_SIZE crop
  * straight out of `src` (never materializes the upscaled bitmap).
  * Trades a little sharpness on the cropped axis for staying a single
- * cheap decode -- acceptable at 80x80. DD-10's own "cubrir" (the
- * photo viewer, full 320x240) needs real precision instead, hence
- * that one *does* read Aura's Q16.16 algorithm as reference; a
- * thumbnail this small doesn't call for the same machinery. */
+ * cheap decode -- acceptable at 80x80. The photo VIEWER's own "cubrir"
+ * (full 320x240) needs real precision instead, hence that one reads
+ * Aura's Q16.16 algorithm as reference; a thumbnail this small doesn't
+ * call for the same machinery. */
 static void cover_crop(const fb_data *src, int sw, int sh, fb_data *out)
 {
     int scale_den = (sw < sh) ? sw : sh; /* the dimension short of METRO_TILE_SIZE */
@@ -180,13 +212,10 @@ static void cover_crop(const fb_data *src, int sw, int sh, fb_data *out)
     }
 }
 
-static bool decode_thumb(const char *filename, fb_data *out)
+bool metro_thumbs_decode_jpeg_cover(const char *path, fb_data *out)
 {
-    char path[MAX_PATH];
     struct bitmap bm;
     int ret;
-
-    snprintf(path, sizeof(path), "%s/%s", PHOTOS_DIR, filename);
 
     bm.width = METRO_TILE_SIZE;
     bm.height = METRO_TILE_SIZE;
@@ -203,21 +232,26 @@ static bool decode_thumb(const char *filename, fb_data *out)
     return true;
 }
 
-const fb_data *metro_photo_thumbs_get(const char *filename, long mtime)
+const fb_data *metro_thumbs_get(const struct metro_thumb_source *source,
+                                 void *ctx, int index)
 {
     struct thumb_slot *s;
+    char key[KEY_LEN];
     char path[MAX_PATH];
     int fd;
     ssize_t got;
     int i;
 
-    s = find_slot(filename);
+    if (!source->cache_key(ctx, index, key, sizeof(key)))
+        return NULL;
+
+    s = find_slot(key);
     if (s)
         return s->pixels;
 
     /* Disk cache is a raw read (no decode) -- cheap enough to try
-     * synchronously, unlike an actual JPEG decode. */
-    cache_path(filename, mtime, path, sizeof(path));
+     * synchronously, unlike an actual decode. */
+    cache_path(source, key, path, sizeof(path));
     fd = open(path, O_RDONLY);
     if (fd >= 0)
     {
@@ -226,7 +260,7 @@ const fb_data *metro_photo_thumbs_get(const char *filename, long mtime)
         if (got == (ssize_t)(THUMB_PX * sizeof(fb_data)))
         {
             s = &s_window[s_window_ring];
-            strlcpy(s->filename, filename, sizeof(s->filename));
+            strlcpy(s->key, key, sizeof(s->key));
             s->valid = true;
             s_window_ring = (s_window_ring + 1) % WINDOW_N;
             return s->pixels;
@@ -234,22 +268,23 @@ const fb_data *metro_photo_thumbs_get(const char *filename, long mtime)
     }
 
     for (i = 0; i < s_pending_n; i++)
-        if (!strcmp(s_pending[i], filename))
+        if (!strcmp(s_pending[i].key, key))
             return NULL; /* already queued */
 
     if (s_pending_n < PENDING_MAX)
     {
-        strlcpy(s_pending[s_pending_n], filename, sizeof(s_pending[0]));
-        s_pending_mtime[s_pending_n] = mtime;
+        s_pending[s_pending_n].source = source;
+        s_pending[s_pending_n].ctx = ctx;
+        s_pending[s_pending_n].index = index;
+        strlcpy(s_pending[s_pending_n].key, key, sizeof(s_pending[0].key));
         s_pending_n++;
     }
     return NULL;
 }
 
-bool metro_photo_thumbs_tick(void)
+bool metro_thumbs_tick(void)
 {
-    char filename[METRO_FSUTIL_NAME_LEN];
-    long mtime;
+    struct pending_entry entry;
     char path[MAX_PATH];
     struct thumb_slot *s;
     int fd;
@@ -258,26 +293,22 @@ bool metro_photo_thumbs_tick(void)
     if (s_pending_n == 0)
         return false;
 
-    strlcpy(filename, s_pending[0], sizeof(filename));
-    mtime = s_pending_mtime[0];
+    entry = s_pending[0];
     for (i = 1; i < s_pending_n; i++)
-    {
-        strlcpy(s_pending[i - 1], s_pending[i], sizeof(s_pending[0]));
-        s_pending_mtime[i - 1] = s_pending_mtime[i];
-    }
+        s_pending[i - 1] = s_pending[i];
     s_pending_n--;
 
     s = &s_window[s_window_ring];
-    if (!decode_thumb(filename, s->pixels))
+    if (!entry.source->decode(entry.ctx, entry.index, s->pixels))
         return true; /* budget spent either way -- don't retry this tick */
 
-    strlcpy(s->filename, filename, sizeof(s->filename));
+    strlcpy(s->key, entry.key, sizeof(s->key));
     s->valid = true;
     s_window_ring = (s_window_ring + 1) % WINDOW_N;
 
-    ensure_cache_dir();
-    cache_path(filename, mtime, path, sizeof(path));
-    remove_stale(filename, path);
+    ensure_cache_dir(entry.source);
+    cache_path(entry.source, entry.key, path, sizeof(path));
+    remove_stale(entry.source, entry.key, path);
     fd = creat(path, 0666);
     if (fd >= 0)
     {
@@ -288,7 +319,7 @@ bool metro_photo_thumbs_tick(void)
     return true;
 }
 
-void metro_photo_thumbs_reset(void)
+void metro_thumbs_reset(void)
 {
     int i;
     for (i = 0; i < WINDOW_N; i++)

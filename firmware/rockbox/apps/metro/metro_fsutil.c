@@ -33,7 +33,7 @@
 #define METRO_FSUTIL_SCAN_CEILING 4096
 
 static char s_scan[METRO_FSUTIL_SCAN_CEILING][METRO_FSUTIL_NAME_LEN];
-/* R2-F2/DD-9: mtime alongside each name, same scan -- metro_photo_thumbs.c
+/* R2-F2/DD-9: mtime alongside each name, same scan -- metro_thumbs.c
  * needs it as the thumbnail cache's invalidation key, and dir_get_info()
  * is already called per entry below for the ATTR_DIRECTORY check
  * (M-053), so this is free. */

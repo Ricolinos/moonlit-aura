@@ -17,6 +17,7 @@
  * KIND, either express or implied.
  *
  ****************************************************************************/
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -181,7 +182,7 @@ void metro_ensure_media_dirs(void)
     }
 }
 
-void metro_settings_metro_cache_dir(char *out, size_t outsz)
+void metro_settings_metro_cache_dir(const char *subdir, char *out, size_t outsz)
 {
-    strlcpy(out, METRO_DIR "/metrocache/photos", outsz);
+    snprintf(out, outsz, "%s/metrocache/%s", METRO_DIR, subdir);
 }

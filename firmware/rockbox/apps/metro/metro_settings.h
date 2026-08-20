@@ -97,14 +97,14 @@ void metro_settings_apply_pending_clock(void);
  * disk mounted. */
 void metro_ensure_media_dirs(void);
 
-/* R2-F2/DD-9 (M-057): .../aura/metrocache/photos/ -- Metro's own
- * on-disk thumbnail cache directory (NOT Aura's photocache/: format
- * and thumbnail size differ, and family-switch cleanup wipes that one
- * anyway). The only function allowed to build this path (CLAUDE.md's
- * compat-path rule) -- metro_photo_thumbs.c calls this instead of
- * composing ROCKBOX_DIR itself. Writes into `out` (does not create the
- * directory -- caller's job, mkdir() if missing, before writing
- * inside it). */
-void metro_settings_metro_cache_dir(char *out, size_t outsz);
+/* R2-F2/DD-9 (M-057), generalized R3-F1/DD-1: .../aura/metrocache/<subdir>/
+ * -- Metro's own on-disk thumbnail cache, one subdirectory per source
+ * (NOT Aura's photocache/: format and thumbnail size differ, and
+ * family-switch cleanup wipes that one anyway). The only function
+ * allowed to build this path (CLAUDE.md's compat-path rule) --
+ * metro_thumbs.c calls this instead of composing ROCKBOX_DIR itself.
+ * Writes into `out` (does not create the directory -- caller's job,
+ * mkdir() if missing, before writing inside it). */
+void metro_settings_metro_cache_dir(const char *subdir, char *out, size_t outsz);
 
 #endif /* METRO_SETTINGS_H */

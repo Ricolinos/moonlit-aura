@@ -1545,3 +1545,78 @@ sim y target; 271 checks de los 4 suites en verde.
 sesión): toda verificación en simulador -- headless o interactiva --
 va precedida de `make install`, no solo `make`. `firmware/tools/sim_shot.sh`
 no lo hace por sí mismo.
+
+## M-062 — R3-F1: motor de miniaturas genérico (`metro_thumbs.c`), base para fotos de artista y quickplay
+
+**Contexto**: primera fase de la ronda 3 (`PLAN-metro-r3-maestro.md` DD-1).
+Fotos de artista (R3-F3) y quickplay (R3-F4) necesitan, cada uno por su
+lado, una caché de N miniaturas pequeñas con ventana en RAM +
+persistencia a disco -- el mismo problema que `metro_photo_thumbs.c`
+(R2-F2/M-057) ya resolvió para `/Photos/`. En vez de triplicarlo, esta
+fase lo generaliza primero, sin ningún cambio de cara al usuario.
+
+**Qué cambió**: `metro_photo_thumbs.c/.h` → `metro_thumbs.c/.h`. La API
+pasó de estar keyed por `(filename, mtime)` -- shape específico de
+fotos -- a `metro_thumbs_get(source, ctx, index)`/`metro_thumbs_tick()`/
+`metro_thumbs_reset()`, con un `struct metro_thumb_source` de dos
+callbacks (`cache_key(ctx, index, ...)`, `decode(ctx, index, dst)`) que
+cada fuente implementa. Se eligió indexar por `(source, ctx, index)` en
+la cola pendiente -- no solo por una clave de texto, como tenía R2-F2
+-- porque `metro_thumbs_tick()` necesita poder volver a llamar al
+`decode()` correcto de la fuente correcta más tarde; una clave de texto
+sola no alcanza para eso.
+
+**Ventana de RAM única y compartida**: los 16 slots (~205 KB) siguen
+siendo los mismos de R2-F2, pero ahora una sola instancia sirve a
+cualquier fuente -- nunca hay más de una cuadrícula en pantalla a la
+vez, así que no hay razón para pagar tres ventanas. Cambiar de fuente
+(dejar Fotos por Artistas, por ejemplo) es un `metro_thumbs_reset()`,
+igual que antes al cambiar de pivot dentro de Fotos.
+
+**Caché en disco por subdirectorio**: `metro_settings_metro_cache_dir()`
+(único punto autorizado a armar esta ruta, regla del `CLAUDE.md`) ganó
+un parámetro `subdir` -- de `.../aura/metrocache/photos` fijo a
+`.../aura/metrocache/<subdir>`, uno por fuente. El esquema de clave
+`<nombre>.<mtime>.mth` se conserva tal cual: `remove_stale()` (que
+antes recibía el nombre de archivo como prefijo explícito) ahora deriva
+el prefijo genéricamente cortando la clave en el **último** punto --
+funciona igual para las tres fuentes porque las tres siguen esa misma
+convención `<estable>.<variable>` en su propio `cache_key()`.
+
+**Decodificación JPEG-a-tile compartida, no parte del motor**: el
+motor en sí (`metro_thumbs.c`) no sabe qué es un JPEG -- `cover_crop()`
+y el `read_jpeg_file()` de R2-F2 se expusieron como
+`metro_thumbs_decode_jpeg_cover(path, out)`, un helper público que
+cualquier fuente cuyo `decode()` sea "leer un JPEG y recortarlo a
+cuadrado" puede llamar (Fotos y, en R3-F3, Artistas -- Quickplay en
+R3-F4 no, porque primero necesita resolver qué track de un álbum tiene
+la carátula antes de decodificar nada). El scratch buffer de decode
+sigue siendo uno solo, estático, compartido -- válido porque el
+presupuesto de una decodificación por tick sigue vigente sin cambios.
+
+**Fotos migradas en la misma fase**: `metro_screen_hub.c` gana un
+`photo_thumb_source` chico (cache_key = `"<filename>.<mtime>"`, decode
+= construir `/Photos/<filename>` y llamar al helper compartido) y
+`photo_pivot_get_tile()` pasa a delegar en `metro_thumbs_get()` con esa
+fuente -- es la única consumidora del motor en esta fase, y sirve de
+prueba de regresión: el comportamiento tiene que ser bit a bit el
+mismo que R2-F2.
+
+**Verificado**: sim y target compilan limpio (los warnings de
+`tile_cols` que aparecen en el build de target son preexistentes de
+R2-F2 -- confirmado comparando contra el árbol sin estos cambios via
+`git stash`, no algo que esta fase introdujo). 4 suites de test de host
+en verde (271 checks, sin relación directa pero corridos como parte
+del criterio de "nunca dejar el build roto"). Verificación visual en
+el simulador (`make install` primero, regla de M-061): con el
+`metrocache/photos/` previo borrado a mano para forzar el camino
+"nada en caché", la cuadrícula muestra los 8 tiles de acento con
+inicial de "todos" (idéntico a `R2-F2-photos-grid-loading.png`); tras
+dejar correr el ciclo ocioso, los 8 tiles reales aparecen (idéntico a
+`R2-F2-photos-grid.png`); `SCROLL_FWD`×5 mueve el borde de selección a
+la fila 2 (idéntico a `R2-F2-photos-grid-scrolled.png`); y
+`ls metrocache/photos/` vuelve a mostrar 8 `.mth` con el mismo esquema
+`<archivo>.<mtime>.mth`. Al ser una regresión exacta (nada cambia de
+cara al usuario), no se generaron capturas `R3-F1-*.png` nuevas -- las
+tres de R2-F2 siguen siendo la documentación visual vigente de esta
+superficie.
