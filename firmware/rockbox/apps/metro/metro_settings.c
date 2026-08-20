@@ -186,3 +186,19 @@ void metro_settings_metro_cache_dir(const char *subdir, char *out, size_t outsz)
 {
     snprintf(out, outsz, "%s/metrocache/%s", METRO_DIR, subdir);
 }
+
+/* R3-F3/DD-6 (M-064): Studio's own index + photo cache -- distinct
+ * from metro_settings_metro_cache_dir("artists", ...) above, which is
+ * Metro's OWN derived 80x80 tile cache
+ * (.../aura/metrocache/artists/). These two point at
+ * .../aura/artist_images.cfg and .../aura/artists/ respectively --
+ * Studio writes both, Metro only ever reads them. */
+void metro_settings_artist_images_cfg_path(char *out, size_t outsz)
+{
+    strlcpy(out, METRO_DIR "/artist_images.cfg", outsz);
+}
+
+void metro_settings_artists_dir(char *out, size_t outsz)
+{
+    strlcpy(out, METRO_DIR "/artists", outsz);
+}

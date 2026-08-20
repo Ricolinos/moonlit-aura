@@ -8,7 +8,7 @@ BUILD := build
 
 .PHONY: test clean
 
-test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/test_motion $(BUILD)/test_lrc
+test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/test_motion $(BUILD)/test_lrc $(BUILD)/test_artist_images
 	@echo "== test_nav =="
 	@$(BUILD)/test_nav
 	@echo "== test_sync_marker =="
@@ -19,6 +19,8 @@ test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/
 	@$(BUILD)/test_motion
 	@echo "== test_lrc =="
 	@$(BUILD)/test_lrc
+	@echo "== test_artist_images =="
+	@$(BUILD)/test_artist_images
 
 $(BUILD)/test_nav: test_nav.c ../metro_nav.c ../metro_nav.h | $(BUILD)
 	$(CC) $(CFLAGS) test_nav.c ../metro_nav.c -o $@
@@ -34,6 +36,9 @@ $(BUILD)/test_motion: test_motion.c ../metro_motion.c ../metro_motion.h | $(BUIL
 
 $(BUILD)/test_lrc: test_lrc.c ../metro_lrc.c ../metro_lrc.h | $(BUILD)
 	$(CC) $(CFLAGS) test_lrc.c ../metro_lrc.c -o $@
+
+$(BUILD)/test_artist_images: test_artist_images.c ../metro_artist_images.c ../metro_artist_images.h ../metro_artist_images_parse.c ../metro_artist_images_parse.h | $(BUILD)
+	$(CC) $(CFLAGS) test_artist_images.c ../metro_artist_images.c ../metro_artist_images_parse.c -o $@
 
 $(BUILD):
 	mkdir -p $(BUILD)

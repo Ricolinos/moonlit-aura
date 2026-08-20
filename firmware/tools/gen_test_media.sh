@@ -247,6 +247,32 @@ ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=280:duration=2" \
   -metadata genre="Ambient" -metadata track=1 \
   -c:a libmp3lame -b:a 96k "$MUSIC_DIR/Flat Artist Test/01 Loose Track.mp3"
 
+# R3-F3/DD-6: un artista mas, con ':' en el propio tag -- justo el caso
+# que motivo el formato invertido "<archivo>: <artista>" de
+# artist_images.cfg (B.1: el valor SI puede traer ':', la clave nunca).
+mkdir -p "$MUSIC_DIR/Colon Artist Test"
+ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=305:duration=2" \
+  -metadata title="Remix Cut" -metadata artist="DJ Twist: Remix Unit" \
+  -metadata album_artist="DJ Twist: Remix Unit" -metadata album="Colon Test" \
+  -metadata genre="Electronic" -metadata track=1 \
+  -c:a libmp3lame -b:a 96k "$MUSIC_DIR/Colon Artist Test/01 Remix Cut.mp3"
+
+echo "==> Generando fotos de artista de prueba (test-media/aura/artists)"
+mkdir -p "$OUT_DIR/aura/artists"
+# Metro QA y Aura Test Combo SI tienen foto; Wheel & Click deliberadamente
+# NO (ejercita el tile de acento con inicial, DD-6); DJ Twist: Remix Unit
+# prueba que un tag con ':' se resuelve por su valor completo, no solo
+# hasta el primer ':'.
+gen_cover_jpg "0x6B4EFF" "128x128" "$OUT_DIR/aura/artists/metro-qa.jpg"
+gen_cover_jpg "0x2E8B57" "128x128" "$OUT_DIR/aura/artists/aura-test-combo.jpg"
+gen_cover_jpg "0xE0A030" "128x128" "$OUT_DIR/aura/artists/dj-twist.jpg"
+cat > "$OUT_DIR/aura/artist_images.cfg" <<'EOF'
+# artist_images.cfg v1 (CONTRATO-firmware-studio.md SS D.3)
+metro-qa.jpg: Metro QA
+aura-test-combo.jpg: Aura Test Combo
+dj-twist.jpg: DJ Twist: Remix Unit
+EOF
+
 echo "==> Generando lista de prueba (test-media/Playlists)"
 mkdir -p "$OUT_DIR/Playlists"
 cat > "$OUT_DIR/Playlists/QA Favorites.m3u8" <<'EOF'
@@ -279,6 +305,12 @@ if [[ -d "$SIMDISK" ]]; then
     # album que precisamente debe quedar sin arte.
     mkdir -p "$SIMDISK/SinArte"
     cp "$OUT_DIR"/SinArte/*.mp3 "$SIMDISK/SinArte/"
+    # R3-F3/DD-6: solo tiene sentido junto con la biblioteca musical
+    # (los tags de artista tienen que existir para que haya algo que
+    # emparejar) -- mismo gate que Music/Playlists arriba.
+    mkdir -p "$SIMDISK/.rockbox/aura/artists"
+    cp "$OUT_DIR"/aura/artist_images.cfg "$SIMDISK/.rockbox/aura/"
+    cp "$OUT_DIR"/aura/artists/*.jpg "$SIMDISK/.rockbox/aura/artists/"
   fi
 fi
 

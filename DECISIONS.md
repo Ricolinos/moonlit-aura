@@ -1694,3 +1694,78 @@ y `SELECT` sobre esa fila no cambia nada (verificado repitiendo la
 captura). Build limpio en sim y target (warnings de `tile_cols`
 presentes son preexistentes, no de esta fase). 5 suites de test de
 host en verde (316 checks).
+
+## M-064 — R3-F3: fotos de artista como tiles cuadrados
+
+**Contexto**: tercera fase de la ronda 3 (`PLAN-metro-r3-maestro.md`
+DD-6), sobre el motor de miniaturas genérico de R3-F1. El pivot
+Artistas de Música pasa de lista de texto a cuadrícula de tiles, con
+la foto real cuando `artist_images.cfg` la mapea.
+
+**Parser (`metro_artist_images_parse.c/.h`, nuevo, C99 puro,
+host-testeable)**: formato **invertido** a propósito
+(`CONTRATO-firmware-studio.md` §D.3) -- `<archivo>.jpg: <tag de
+artista>`. El archivo es la clave porque es FAT-segura (nunca trae
+`:`); el artista, que sí puede traerlo, es el valor -- por eso cortar
+en el PRIMER `:` funciona sin ambigüedad. Descarta comentarios (`#`),
+líneas en blanco, líneas sin `:`, y cualquier campo que exceda su
+tope (128 B archivo / 64 B artista, los límites del propio contrato --
+el de artista coincide con `METRO_MUSIC_ITEM_LEN`, el mismo tope que
+`metro_music_artists()` ya usa para `tag_artist`).
+
+**Índice (`metro_artist_images.c/.h`, nuevo, también host-testeable)**:
+separado del parser de línea -- mismo split que Aura-Firmware usa de
+verdad (`aura_artist_images_parse.c`, consultado read-only,
+`INVESTIGACION-metro-r3.md` B.2) -- para poder probar las dos reglas
+del contrato sin ninguna dependencia de Rockbox: valor duplicado →
+gana la primera línea (variantes de archivo para el mismo tag de
+artista, la primera mapeada se queda), y tope de 300 entradas
+(coincide con `METRO_MUSIC_MAX_ITEMS`). 358 checks en
+`apps/metro/test/test_artist_images.c`, incluido un caso que agrega
+320 líneas y verifica que el índice se detiene exactamente en 300 sin
+perder ninguna de las primeras 300.
+
+**Integración (`metro_music.c`, `metro_settings.c/.h`,
+`metro_screen_hub.c`)**: dos rutas nuevas y separadas, ambas armadas
+solo en `metro_settings.c` (regla de rutas del `CLAUDE.md`) --
+`.../aura/artist_images.cfg` (el índice de Studio) y `.../aura/artists/`
+(las fotos fuente de Studio, distinto de `metro_thumbs.c`'s propio
+`.../aura/metrocache/artists/`, la caché derivada de 80×80 de Metro).
+`metro_music_reload_artist_images()` lee el `.cfg` línea por línea
+(`read_line()`, mismo patrón de streaming que `metro_media_categories.c`,
+sin cargar el archivo completo a RAM) y escanea `artists/` con
+`metro_fsutil_list_by_ext_mtime()` (ya probado por `metro_photos.c`)
+para el mtime de cada foto -- la clave de caché de `metro_thumbs.c`
+necesita ese mtime, no solo el nombre. Se llama junto al resto de
+`music_lists_refresh()`, mismo "refresca al entrar" que ya seguían
+Artistas/Álbumes/Canciones/Géneros. El pivot Artistas gana
+`tile_cols`/`get_tile` (`artist_thumb_source`, una fuente más del motor
+de R3-F1) -- artista sin foto mapeada cae al tile de acento con
+inicial ya existente, sin código nuevo para ese caso.
+
+**Bug real encontrado y corregido en el camino** (no en el plan): las
+tres fotos de artista mapeadas nunca decodificaban -- ver
+`docs/DESVIACIONES.md` R3-3. Causa: `metro_thumbs_decode_jpeg_cover()`
+(heredado de R2-F2) presupuestaba su scratch contra el tamaño del
+tile (80px), asumiendo -- válido para `/Photos/`, no para fotos de
+artista -- que la fuente siempre sería mucho más grande. Fotos de
+artista están limitadas a ≤128px por contrato, justo en el hueco entre
+los escalones de potencia de 2 del decodificador JPEG (128×1/2=64<80),
+donde el decodificador cae a resolución nativa completa -- el mismo
+`JPEG_DECODE_OVERHEAD` que R2-F3 ya documentó para el visor de fotos.
+Corregido presupuestando el scratch contra el límite del contrato
+(128px) en vez del tamaño del tile.
+
+**Verificado en vivo** (simulador, `make install` primero, tagcache
+reconstruido para que el nuevo track de prueba entrara): cuadrícula de
+7 artistas -- 3 con foto real (incluida "DJ Twist: Remix Unit", el
+caso con `:` en el tag, resuelto por su valor completo) y 4 con tile
+de acento e inicial (uno de ellos, "artista desconocido", el caso sin
+tag en absoluto). Seleccionar un artista con foto sigue entrando a sus
+álbumes sin cambios. Fixtures nuevos en `gen_test_media.sh`: 3 JPEG de
+128×128 vía el mismo pipeline ffmpeg→sips ya probado
+(`gen_cover_jpg()`), `artist_images.cfg` de muestra, y una pista más
+("Colon Artist Test") con artista `DJ Twist: Remix Unit` para ejercitar
+el caso del `:`. Build limpio en sim y target (mismos warnings
+preexistentes de `tile_cols`, nada nuevo). 6 suites de test de host en
+verde (674 checks).

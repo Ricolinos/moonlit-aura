@@ -31,12 +31,17 @@
 #include "playlist_catalog.h"
 #include "audio.h"
 #include "dir.h"
+#include "file.h"
+#include "misc.h" /* read_line() */
 #include "string-extra.h"
 #include "kernel.h" /* current_tick, for playlist_randomise()'s seed */
 
 #include "metro_music.h"
 #include "metro_lang.h"
 #include "metro_sync.h"
+#include "metro_settings.h"
+#include "metro_artist_images.h"
+#include "metro_fsutil.h"
 
 /* Enough unique values for a few thousand artists/albums/genres --
  * same size Aura-Firmware settled on for the same purpose (D-021).
@@ -552,4 +557,63 @@ bool metro_music_play_playlist(int index)
 
     playlist_start(0, 0, 0);
     return true;
+}
+
+/* R3-F3/DD-6 (M-064): artist_images.cfg -- pure index/lookup logic
+ * lives in metro_artist_images.c (host-tested), this is just the
+ * Rockbox-only file I/O feeding it one line at a time, same
+ * streaming-read shape as metro_media_categories.c's load_index()
+ * (no reason to hold the whole file in RAM at once). Paired with a
+ * scan of artists/ itself (metro_fsutil_list_by_ext_mtime(), already
+ * proven by metro_photos.c) so metro_music_artist_image() can also
+ * hand back each file's current mtime -- metro_thumbs.c's cache key. */
+static struct metro_artist_images s_artist_images;
+static char s_artist_image_files[METRO_ARTIST_IMAGES_MAX][METRO_FSUTIL_NAME_LEN];
+static long s_artist_image_mtimes[METRO_ARTIST_IMAGES_MAX];
+static int s_artist_image_files_n;
+
+void metro_music_reload_artist_images(void)
+{
+    char path[MAX_PATH];
+    /* filename (128) + ": " + artist (64) + margin. */
+    char line[256];
+    int fd;
+    static const char *const jpg_ext[] = { ".jpg" };
+
+    metro_artist_images_init(&s_artist_images);
+
+    metro_settings_artist_images_cfg_path(path, sizeof(path));
+    fd = open(path, O_RDONLY);
+    if (fd >= 0)
+    {
+        while (read_line(fd, line, sizeof(line)) > 0)
+            metro_artist_images_add_line(&s_artist_images, line);
+        close(fd);
+    }
+    /* else: no artist_images.cfg -- cfg index stays empty, not an error */
+
+    metro_settings_artists_dir(path, sizeof(path));
+    s_artist_image_files_n = metro_fsutil_list_by_ext_mtime(
+        path, jpg_ext, 1, s_artist_image_files, s_artist_image_mtimes,
+        METRO_ARTIST_IMAGES_MAX);
+}
+
+bool metro_music_artist_image(const char *artist_tag, char *filename_out,
+                               size_t filename_sz, long *mtime_out)
+{
+    const char *filename = metro_artist_images_lookup(&s_artist_images, artist_tag);
+    int i;
+
+    if (!filename)
+        return false;
+
+    for (i = 0; i < s_artist_image_files_n; i++)
+        if (!strcmp(s_artist_image_files[i], filename))
+        {
+            strlcpy(filename_out, filename, filename_sz);
+            *mtime_out = s_artist_image_mtimes[i];
+            return true;
+        }
+
+    return false; /* referenced file doesn't exist on disk right now */
 }

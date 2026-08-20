@@ -21,9 +21,11 @@
  * (apps/playlist.h) -- the screens layer (metro_screen_hub.c) only
  * decides what to query and when, same split as Aura-Firmware's
  * aura_music.c/.h (PLAN_MAESTRO.md S1.1 point 1, S5 F4). Deliberately
- * narrower than Aura's: no composers, no ratings import, no album art
- * precache -- those are out of Metro's F4 scope (art lands in F5,
- * ratings/composers aren't part of this plan at all).
+ * narrower than Aura's at F4: no composers, no ratings import, no
+ * album art precache. Ratings/artist photos were explicitly out of
+ * F4's plan, not out of Metro's forever -- both are backlog items
+ * ronda 3 picks up: artist photos here (R3-F3/DD-6), ratings import
+ * in metro_sync.c (R3-F5/DD-7). Composers remain out of scope.
  */
 #ifndef METRO_MUSIC_H
 #define METRO_MUSIC_H
@@ -89,5 +91,29 @@ int metro_music_list_playlists(char labels[][METRO_MUSIC_ITEM_LEN], int max);
 bool metro_music_play_playlist(int index);
 void metro_music_playlist_display_name(const char *filename, char *out,
                                         size_t outsz);
+
+/* R3-F3/DD-6 (M-064): artist_images.cfg, Studio's index mapping an
+ * artist tag to a cached photo filename under artists/
+ * (CONTRATO-firmware-studio.md §D.3), plus a scan of artists/ itself
+ * for each listed file's current mtime (metro_thumbs.c's cache
+ * invalidation key, DD-1 -- same "<name>.<mtime>" scheme as photos and
+ * quickplay). Re-parses/re-scans fresh from disk -- same "refresh on
+ * enter" rule metro_photos_list() and the rest of this file's lists
+ * already follow (DESVIACIONES.md F6-1) -- call once when the Music
+ * page is entered, before any artist row/tile is drawn. */
+void metro_music_reload_artist_images(void);
+
+/* Resolves `artist_tag` (an exact match against the raw tag string,
+ * same one metro_music_artists() already exposes as
+ * metro_music_item_t.label) to its image: writes the filename
+ * (relative to artists/, NOT a full path) into filename_out and its
+ * current mtime into *mtime_out. Returns false if artist_images.cfg
+ * has no entry for this tag, OR the file it names doesn't exist on
+ * disk right now ("archivo referenciado ausente -> placeholder, no
+ * error", B.1) -- either way the caller falls back to the accent-tile
+ * placeholder, same as metro_thumbs_get() returning NULL for any other
+ * reason. */
+bool metro_music_artist_image(const char *artist_tag, char *filename_out,
+                               size_t filename_sz, long *mtime_out);
 
 #endif /* METRO_MUSIC_H */

@@ -32,6 +32,8 @@
 #include "metro_video.h"
 #include "metro_photos.h"
 #include "metro_thumbs.h"
+#include "metro_fsutil.h"
+#include "metro_settings.h"
 #include "metro_screen_photo_viewer.h"
 #include "metro_draw.h"
 #include "metro_theme.h"
@@ -277,6 +279,14 @@ static void music_lists_refresh(void)
 {
     int i;
 
+    /* R3-F3/DD-6 (M-064): same reason build_photos_page() resets
+     * first -- the thumbnail engine's RAM window is shared across
+     * every tile grid in the app (DD-1), so a fresh visit to Music
+     * (whose Artists pivot is now one) shouldn't keep serving/decoding
+     * for whatever grid the user was looking at before (Photos, most
+     * likely). */
+    metro_thumbs_reset();
+
     s_artists_n = metro_music_artists(s_artists, METRO_MUSIC_MAX_ITEMS);
     s_albums_n  = metro_music_albums(s_albums, METRO_MUSIC_MAX_ITEMS);
     s_songs_n   = metro_music_songs(s_songs, METRO_MUSIC_MAX_ITEMS);
@@ -286,9 +296,62 @@ static void music_lists_refresh(void)
     for (i = 0; i < s_playlists_n; i++)
         metro_music_playlist_display_name(s_playlist_files[i], s_playlist_names[i],
                                            METRO_MUSIC_ITEM_LEN);
+
+    /* R3-F3/DD-6 (M-064): same "refresh on enter" rule as the lists
+     * above -- a photo added/changed by Studio mid-session shows up
+     * next time Music is (re)entered, not stale from boot. */
+    metro_music_reload_artist_images();
 }
 
-/* pivot: artists -> on_select drills into that artist's albums */
+/* pivot: artists -> on_select drills into that artist's albums, same
+ * as before R3-F3. R3-F3/DD-6 (M-064) additionally wires it as a tile
+ * grid: get_tile() resolves each row's tag_artist (s_artists[index].label,
+ * the exact string metro_music_artist_image() matches against) to an
+ * image via the shared thumbnail engine (metro_thumbs.c, DD-1) -- an
+ * artist with no mapped/missing photo returns NULL and the grid falls
+ * back to its usual accent-tile-with-initial placeholder, no special
+ * casing needed here. */
+static bool artist_thumb_cache_key(void *ctx, int index, char *out, size_t out_len)
+{
+    char filename[METRO_FSUTIL_NAME_LEN];
+    long mtime;
+    (void)ctx;
+
+    if (index < 0 || index >= s_artists_n)
+        return false;
+    if (!metro_music_artist_image(s_artists[index].label, filename, sizeof(filename), &mtime))
+        return false;
+
+    snprintf(out, out_len, "%s.%ld", filename, mtime);
+    return true;
+}
+
+static bool artist_thumb_decode(void *ctx, int index, fb_data *dst)
+{
+    char filename[METRO_FSUTIL_NAME_LEN];
+    long mtime;
+    char dir[MAX_PATH], path[MAX_PATH];
+    (void)ctx;
+
+    if (!metro_music_artist_image(s_artists[index].label, filename, sizeof(filename), &mtime))
+        return false; /* changed between the get_tile() and tick() passes -- skip */
+
+    /* metro_settings_artists_dir() (metro_settings.c) is the only
+     * function allowed to build this path -- CLAUDE.md's compat-path
+     * rule. */
+    metro_settings_artists_dir(dir, sizeof(dir));
+    snprintf(path, sizeof(path), "%s/%s", dir, filename);
+    return metro_thumbs_decode_jpeg_cover(path, dst);
+}
+
+static const struct metro_thumb_source artist_thumb_source = {
+    "artists", artist_thumb_cache_key, artist_thumb_decode
+};
+
+static const fb_data *artist_pivot_get_tile(void *ctx, int index)
+{
+    return metro_thumbs_get(&artist_thumb_source, ctx, index);
+}
 
 static int artists_count(void *ctx) { (void)ctx; return s_artists_n; }
 
@@ -410,7 +473,8 @@ static void playlists_on_select(void *ctx, int index)
 }
 
 static const struct metro_pivot music_pivots[] = {
-    { LANG_PIVOT_ARTISTS,   artists_count,   artists_get_row,   artists_on_select,   NULL },
+    { LANG_PIVOT_ARTISTS,   artists_count,   artists_get_row,   artists_on_select,   NULL,
+      METRO_TILE_COLS, artist_pivot_get_tile },
     { LANG_PIVOT_ALBUMS,    albums_count,    albums_get_row,    albums_on_select,    NULL },
     { LANG_PIVOT_SONGS,     songs_count,     songs_get_row,     songs_on_select,     NULL },
     { LANG_PIVOT_GENRES,    genres_count,    genres_get_row,    genres_on_select,    NULL },

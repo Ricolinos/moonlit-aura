@@ -487,3 +487,57 @@ distinto (p. ej. PLAY sostenido, hoy sin uso en `MCTX_PLAYER` más allá
 de play/pausa corto) o resignar una de las dos funciones actuales de
 SELECT -- decisión de producto, no técnica, fuera del alcance de esta
 fase.
+
+---
+
+## R3-3 — Fotos de artista: el motor de miniaturas de R3-F1 fallaba con fuentes cercanas al tamaño del tile
+
+**No estaba en el plan** (DD-6 asumía reusar el motor de R3-F1 tal
+cual) -- se encontró en ejecución, al verificar en vivo que las tres
+fotos de artista con mapeo real en `artist_images.cfg` (Metro QA, Aura
+Test Combo, DJ Twist: Remix Unit) **nunca decodificaban**: siempre
+caían al tile de acento con inicial, igual que un artista sin foto en
+absoluto, sin ningún error visible.
+
+**Causa raíz**: `metro_thumbs_decode_jpeg_cover()` (heredado de
+`metro_photo_thumbs.c`, R2-F2) reserva un scratch de
+`METRO_TILE_SIZE² × 2 × 2` = 25 600 bytes -- suficiente margen (regla
+M-033) mientras la fuente sea comfortablemente más grande que el tile
+de 80px, que es el caso de **todas** las fotos reales de `/Photos/`.
+El decodificador JPEG de Rockbox solo ofrece escalones de potencia de
+2 (1/1, 1/2, 1/4, 1/8): para una fuente de 128px pidiendo un resultado
+≥80px, 128×1/2=64 **no alcanza**, así que el decodificador cae al
+escalón 1/1 -- decodifica a **resolución nativa completa** (128×128) y
+recién ahí reescala por software. Es exactamente el mecanismo
+`JPEG_DECODE_OVERHEAD` que R2-F3 ya tuvo que resolver para el visor de
+fotos (`metro_screen_photo_viewer.c`) -- pero esta vez en el motor de
+miniaturas, que nunca lo necesitó porque ninguna foto de prueba había
+caído antes en ese hueco. Las fotos de artista, por contrato
+(`CONTRATO-firmware-studio.md` §D.3), están **limitadas a ≤128px** --
+justo en ese hueco, siempre, no como caso raro.
+
+**Qué se hizo**: `SCRATCH_SIZE` en `metro_thumbs.c` se recalculó contra
+el límite del propio contrato (128px, no los 80px del tile) con el
+mismo margen ×2 de M-033 -- 65 536 bytes en vez de 25 600. Se prefirió
+esto sobre portar el probe de dimensiones que sí usa el visor de fotos
+(R2-F3/DD-10): es un solo `#define` más simple, y como
+`metro_thumbs_decode_jpeg_cover()` es compartido con fotos, el
+presupuesto más ancho no cuesta nada ahí (las fuentes de `/Photos/`
+son casi siempre mucho más grandes que 128px) y de paso cubre la misma
+falla si alguna vez aparece una foto real cerca de ese límite.
+
+**Cómo se encontró**: `DEBUGF` temporal en `metro_music_reload_artist_images()`,
+`artist_thumb_cache_key()` y `metro_thumbs_tick()` (revertido antes del
+commit) confirmó que el índice cargaba bien (3 entradas de
+`artist_images.cfg`, 3 archivos encontrados en `artists/`, claves de
+caché generadas correctamente) y que `artist_thumb_decode()` se
+llamaba con la ruta correcta -- pero `metro_thumbs_decode_jpeg_cover()`
+devolvía `false` cada vez. Aislado comparando bytes de un JPEG de
+128px contra un `cover.jpg` de 300px ya probado (headers idénticos,
+solo cambia el tamaño), lo que apuntó directo al escalón de DCT.
+
+**Impacto en `PLAN-metro-r3-maestro.md`**: ninguno en el criterio de
+"hecho" de R3-F3, que ya exigía ver fotos reales en la cuadrícula --
+esta corrección es lo que lo hizo posible. Vale la pena que R3-F4
+(quickplay, también sobre este motor) tenga esto presente si sus
+carátulas de álbum llegan a decodificarse cerca del tamaño del tile.

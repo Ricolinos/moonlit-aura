@@ -326,6 +326,8 @@ metro/metro_screen_hub.c
 metro/metro_screen_settings.c
 metro/metro_music.c
 metro/metro_albumart.c
+metro/metro_artist_images.c
+metro/metro_artist_images_parse.c
 metro/metro_screen_nowplaying.c
 metro/metro_settings.c
 metro/metro_sync.c

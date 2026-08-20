@@ -107,4 +107,12 @@ void metro_ensure_media_dirs(void);
  * mkdir() if missing, before writing inside it). */
 void metro_settings_metro_cache_dir(const char *subdir, char *out, size_t outsz);
 
+/* R3-F3/DD-6 (M-064): .../aura/artist_images.cfg (Studio's index) and
+ * .../aura/artists/ (Studio's own source photo cache, the directory
+ * artist_images.cfg's filenames resolve into) -- CONTRATO-firmware-studio.md
+ * §D.3. Distinct from metro_settings_metro_cache_dir("artists", ...)
+ * above, Metro's OWN derived 80x80 tile cache. */
+void metro_settings_artist_images_cfg_path(char *out, size_t outsz);
+void metro_settings_artists_dir(char *out, size_t outsz);
+
 #endif /* METRO_SETTINGS_H */

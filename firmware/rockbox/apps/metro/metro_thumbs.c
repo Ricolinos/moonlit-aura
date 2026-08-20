@@ -72,14 +72,29 @@ struct pending_entry {
 static struct pending_entry s_pending[PENDING_MAX];
 static int s_pending_n = 0;
 
-/* Oversized scratch for read_jpeg_file()'s own decode overhead + the
- * pre-crop KEEP_ASPECT decode -- same x2 margin rule as metro_albumart.c
- * (DECISIONS.md M-033): undersizing this doesn't fail loudly, it
- * writes past the buffer before the decoder's own bounds check catches
- * it. Shared by every caller of metro_thumbs_decode_jpeg_cover() --
- * safe because only one decode ever runs at a time (metro_thumbs_tick()
- * budgets exactly one per call). */
-#define SCRATCH_SIZE (METRO_TILE_SIZE * METRO_TILE_SIZE * 2 * 2)
+/* R3-F3 correction (M-064, docs/DESVIACIONES.md R3-3): R2-F2 sized this
+ * for METRO_TILE_SIZE (80px) x2 margin (M-033) and never hit trouble
+ * because every /Photos/ fixture was comfortably larger than 80px.
+ * Rockbox's JPEG decoder only offers power-of-two DCT scale steps
+ * (1/1, 1/2, 1/4, 1/8); when the smallest step that's still >= the
+ * requested size lands close to the SOURCE's own native resolution,
+ * read_jpeg_file() decodes at that native resolution first and scales
+ * down in software afterward -- the exact JPEG_DECODE_OVERHEAD
+ * mechanism the photo VIEWER already had to account for explicitly
+ * (R2-F3, metro_screen_photo_viewer.c). Artist photos are capped at
+ * <=128px BY CONTRACT (CONTRATO-firmware-studio.md SS D.3) -- squarely
+ * in that gap (128/2=64 < 80, so the decoder falls back to the full
+ * 128x128 native size) -- confirmed live: every artist thumbnail
+ * failed to decode (metro_thumbs_decode_jpeg_cover() returning false)
+ * until this was widened to cover a full 128x128 decode, not just an
+ * 80x80 one. Budgeted against the contract's own upper bound (128px),
+ * same x2 margin rule, rather than adding a dimension probe like the
+ * viewer did -- simpler, and this helper is shared with photos (whose
+ * sources are typically far larger than 128px, so the wider budget
+ * costs nothing there, it just also covers the rare small photo that
+ * would have hit the exact same gap). */
+#define SCRATCH_MAX_SRC_PX 128
+#define SCRATCH_SIZE (SCRATCH_MAX_SRC_PX * SCRATCH_MAX_SRC_PX * 2 * 2)
 static unsigned char s_scratch[SCRATCH_SIZE];
 
 static struct thumb_slot *find_slot(const char *key)
