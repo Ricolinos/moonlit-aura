@@ -191,4 +191,33 @@ const char *metro_lang_str(enum metro_lang_id id);
  * eso como "sin inicial". */
 void metro_lang_initial(const char *s, char *out, size_t outsz);
 
+/* R4 (M-079): comparación para ORDENAR etiquetas de biblioteca, con
+ * acentos plegados. Devuelve <0, 0 o >0 como strcmp().
+ *
+ * El problema que resuelve: la comparación anterior recorría BYTES y
+ * solo pasaba a mayúscula el ASCII, así que cualquier inicial acentuada
+ * (`Á` = 0xC3 0x81) caía **después de la Z**. Una artista "Ángela" se
+ * iba al final de la lista, detrás de "Zoé" -- en una biblioteca en
+ * español eso no es un caso raro.
+ *
+ * Reglas, en orden de aplicación:
+ *   - Mayúsculas/minúsculas no cambian DÓNDE cae una etiqueta:
+ *     "abba" y "ABBA" aterrizan las dos entre "Zzz" y "Beto". Lo que
+ *     sí hacen es desempatar entre ellas (ver la última regla), así
+ *     que la función no devuelve 0 para ese par -- devolverlo dejaría
+ *     su orden relativo a merced del algoritmo de ordenamiento.
+ *   - Las vocales acentuadas pliegan a su vocal base: `á`==`a`,
+ *     `ü`==`u`. Es lo que espera cualquier hispanohablante al buscar
+ *     en una lista.
+ *   - `ñ` NO pliega a `n`: es letra propia y va **entre la N y la O**,
+ *     como manda la RAE. Por eso las claves son enteros y no bytes --
+ *     entre 'N' y 'O' no cabe nada.
+ *   - Si todo empata en ese nivel, se desempata por bytes crudos. Es
+ *     lo que hace el resultado DETERMINISTA: "Ángela"/"Angela" y
+ *     "abba"/"ABBA" son pares que el plegado vuelve indistinguibles, y
+ *     sin desempate su orden relativo quedaría a merced del algoritmo
+ *     de ordenamiento. Solo devuelve 0 para cadenas byte a byte
+ *     idénticas. */
+int metro_lang_collate(const char *a, const char *b);
+
 #endif /* METRO_LANG_H */

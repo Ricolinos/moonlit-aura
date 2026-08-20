@@ -97,6 +97,74 @@ static void test_degenerado(void)
     CHECK(buf[0] == 'Z');
 }
 
+/* R4 (M-079): ordenamiento con acentos plegados. */
+#define LT(a, b) do { \
+    checks++; \
+    if (!(metro_lang_collate((a), (b)) < 0)) { \
+        failures++; \
+        printf("FALLO %s:%d: esperaba \"%s\" < \"%s\"\n", \
+               __FILE__, __LINE__, (a), (b)); \
+    } \
+} while (0)
+
+static void test_collate(void)
+{
+    /* El bug que motivó esto: una inicial acentuada caía tras la Z. */
+    LT("Ángela", "Beto");
+    LT("Ángela", "Zoé");
+    LT("Andrés", "Ángela");     /* And < Áng: la 'd' pliega antes que 'g' */
+    LT("Ángela", "Antonio");    /* Áng < Ant */
+    LT("Éxitos", "Fuego");
+    LT("Último", "Vals");
+
+    /* La caja no cambia DÓNDE cae una etiqueta: ambas formas aterrizan
+     * en el mismo sitio respecto al resto. */
+    LT("abba", "Beto");
+    LT("ABBA", "Beto");
+    LT("abba", "Zzz");
+    /* ...pero sí desempatan entre ellas, de forma determinista: 0 solo
+     * para cadenas idénticas byte a byte. */
+    checks++;
+    if (metro_lang_collate("abba", "ABBA") == 0)
+    {
+        failures++;
+        printf("FALLO %s:%d: abba/ABBA deberían desempatar\n",
+               __FILE__, __LINE__);
+    }
+    checks++;
+    if (metro_lang_collate("abba", "abba") != 0)
+    {
+        failures++;
+        printf("FALLO %s:%d: cadenas idénticas deben dar 0\n",
+               __FILE__, __LINE__);
+    }
+
+    /* La ñ es letra propia: va DESPUÉS de toda la N y ANTES de la O. */
+    LT("Nuevo", "Ñu");
+    LT("Ñu", "Oasis");
+    LT("Nz", "Ñu");             /* incluso tras la última n+consonante */
+
+    /* Los dígitos siguen antes que las letras. */
+    LT("2 Unlimited", "Abba");
+
+    /* Empate al plegar: desempata determinista, sin quedar "igual". */
+    checks++;
+    if (metro_lang_collate("Angela", "Ángela") == 0)
+    {
+        failures++;
+        printf("FALLO %s:%d: Angela/Ángela deberían desempatar\n",
+               __FILE__, __LINE__);
+    }
+
+    /* Prefijo: lo más corto va primero. */
+    LT("Sol", "Solar");
+
+    /* Degenerados: no debe reventar. */
+    checks++;
+    if (metro_lang_collate("", "") != 0) { failures++; printf("FALLO vacias\n"); }
+    LT("", "a");
+}
+
 int main(void)
 {
     test_ascii();
@@ -104,6 +172,7 @@ int main(void)
     test_no_letras_latin1();
     test_multibyte_largo();
     test_degenerado();
+    test_collate();
 
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

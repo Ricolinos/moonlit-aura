@@ -179,21 +179,12 @@ static bool title_from_filename(struct tagcache_search *tcs, char *out, size_t o
     return out[0] != '\0';
 }
 
-/* Case-insensitive; digits already sort below letters in ASCII once
- * both sides are uppercased, so no separate digits-first rule is
- * needed (same comparison Aura-Firmware uses for its A-Z rail). */
+/* R4 (M-079): el plegado de acentos vive en metro_lang.c -- puro y
+ * host-testeable, a diferencia de este archivo. Antes esto recorría
+ * bytes y mandaba cualquier inicial acentuada detrás de la Z. */
 static int label_cmp(const char *a, const char *b)
 {
-    while (*a && *b)
-    {
-        unsigned char ca = (unsigned char)*a, cb = (unsigned char)*b;
-        if (ca >= 'a' && ca <= 'z') ca -= 32;
-        if (cb >= 'a' && cb <= 'z') cb -= 32;
-        if (ca != cb)
-            return (int)ca - (int)cb;
-        a++; b++;
-    }
-    return (int)(unsigned char)*a - (int)(unsigned char)*b;
+    return metro_lang_collate(a, b);
 }
 
 static void format_duration(char *out, size_t outsz, long ms)

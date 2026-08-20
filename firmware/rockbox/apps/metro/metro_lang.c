@@ -17,6 +17,8 @@
  * KIND, either express or implied.
  *
  ****************************************************************************/
+#include <string.h>
+
 #include "metro_lang.h"
 
 static enum metro_language current_lang = METRO_LANG_ES;
@@ -359,4 +361,88 @@ void metro_lang_initial(const char *s, char *out, size_t outsz)
         if (b >= 0xA0 && b <= 0xBE && b != 0xB7)
             out[1] = (char)(b - 0x20);
     }
+}
+
+/* Clave de ordenamiento del primer carácter de *s; avanza *s más allá
+ * de él. Escala x4 para dejar hueco entre letras contiguas (ahí entra
+ * la ñ, entre N y O). */
+static int collate_key(const char **s)
+{
+    const unsigned char *p = (const unsigned char *)*s;
+    unsigned char c = p[0];
+
+    if (c < 0x80)
+    {
+        *s += 1;
+        if (c >= 'a' && c <= 'z')
+            c -= 32;
+        return (int)c * 4;
+    }
+
+    /* Latin-1 en UTF-8: 0xC3 seguido del segundo byte. Es el único
+     * bloque que necesita plegado para español; cualquier otro
+     * multibyte se ordena por su valor crudo, después del ASCII. */
+    if (c == 0xC3 && p[1])
+    {
+        unsigned char b = p[1];
+        unsigned char base;
+
+        *s += 2;
+        /* Normaliza a minúscula dentro del bloque (0x80-0x9E son las
+         * mayúsculas, 0xA0-0xBE las minúsculas: 0x20 de diferencia). */
+        if (b >= 0x80 && b <= 0x9E)
+            b += 0x20;
+
+        switch (b)
+        {
+        case 0xA0: case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xA5:
+            base = 'A'; break;                    /* à á â ã ä å */
+        case 0xA8: case 0xA9: case 0xAA: case 0xAB:
+            base = 'E'; break;                    /* è é ê ë */
+        case 0xAC: case 0xAD: case 0xAE: case 0xAF:
+            base = 'I'; break;                    /* ì í î ï */
+        case 0xB2: case 0xB3: case 0xB4: case 0xB5: case 0xB6:
+            base = 'O'; break;                    /* ò ó ô õ ö */
+        case 0xB9: case 0xBA: case 0xBB: case 0xBC:
+            base = 'U'; break;                    /* ù ú û ü */
+        case 0xA7:
+            base = 'C'; break;                    /* ç */
+        case 0xB1:
+            /* ñ: letra propia, justo después de toda la N. */
+            return (int)'N' * 4 + 1;
+        default:
+            return 0x100 * 4 + (int)b;            /* resto: tras el ASCII */
+        }
+        return (int)base * 4;
+    }
+
+    /* Cualquier otro multibyte (CJK, emoji): valor crudo, después del
+     * ASCII. Se avanza un byte -- no hace falta decodificar bien para
+     * que el orden sea estable y no se lea de más. */
+    *s += 1;
+    return 0x100 * 4 + (int)c;
+}
+
+int metro_lang_collate(const char *a, const char *b)
+{
+    const char *pa = a, *pb = b;
+
+    if (!a || !b)
+        return (a ? 1 : 0) - (b ? 1 : 0);
+
+    while (*pa && *pb)
+    {
+        int ka = collate_key(&pa);
+        int kb = collate_key(&pb);
+
+        if (ka != kb)
+            return ka - kb;
+    }
+
+    if (*pa || *pb)
+        return *pa ? 1 : -1;
+
+    /* Empate en el nivel plegado ("Angela" vs "Ángela"): desempate por
+     * bytes crudos, para que el orden sea determinista. */
+    return strcmp(a, b);
 }

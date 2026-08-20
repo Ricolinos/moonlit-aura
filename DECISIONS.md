@@ -2710,3 +2710,74 @@ no era alcanzable con los fixtures existentes — todo track bajo
 de `find_albumart()`. Se agregó a `gen_test_media.sh` un álbum "Sin
 Portada" bajo un artista que a propósito no tiene foto, en una carpeta
 cuyo padre tampoco tiene `cover.jpg`.
+
+## M-079 — R4: ordenar con acentos plegados (una artista "Ángela" ya no cae tras la Z)
+
+**Anotado como efecto lateral de M-076, ahora resuelto.** `label_cmp()`
+(`metro_music.c`) recorría **bytes** y solo pasaba a mayúscula el ASCII.
+Una inicial acentuada (`Á` = 0xC3 0x81) quedaba por encima de cualquier
+letra, así que ordenaba **después de la Z**.
+
+**No era un problema teórico**: afecta a cualquier biblioteca en
+español. Verificado en vivo con el fixture "Ángela Ñu" — antes salía
+último, tras "Wheel & Click".
+
+**Reglas** (`metro_lang_collate()`, en `metro_lang.c` porque ese módulo
+es puro y host-testeable, a diferencia de `metro_music.c`):
+
+- Las vocales acentuadas pliegan a su base: `á`==`a`, `ü`==`u`. Es lo
+  que espera cualquier hispanohablante al recorrer una lista.
+- **`ñ` NO pliega a `n`**: es letra propia y va entre la N y la O, como
+  manda la RAE. Por eso las claves son enteros escalados ×4 y no bytes
+  — entre `'N'` y `'O'` no cabe nada.
+- Empate en ese nivel → desempate por bytes crudos. Eso es lo que hace
+  el resultado **determinista**: "Ángela"/"Angela" y "abba"/"ABBA" son
+  pares que el plegado vuelve indistinguibles, y sin desempate su orden
+  relativo quedaría a merced del algoritmo de ordenamiento.
+
+**El contrato se corrigió por culpa de un test.** La primera versión de
+la documentación decía "mayúsculas y minúsculas se ignoran (`a` ==
+`A`)" y el test lo afirmaba como `collate("abba","ABBA") == 0`. Falló:
+el desempate por bytes hace que no sea 0. La implementación era la
+correcta y la **descripción** la imprecisa — se reescribió para
+distinguir *dónde cae* una etiqueta (la caja no influye) de *cómo
+desempata* (sí influye, a propósito).
+
+**Verificado**: 23 checks nuevos en `test_lang.c` (Á antes que B y que
+Z, "And" < "Áng" < "Ant", ñ entre N y O, dígitos antes que letras,
+prefijos, degenerados) más la comprobación mecánica end-to-end: un
+`DEBUGF` temporal sobre la lista real de artistas confirmó
+`Ángela Ñu` en el índice **0**, delante de "artista desconocido" y
+"Aura Test Combo".
+
+## M-080 — R4: rótulo del tile seleccionado en las cuadrículas
+
+**Anotado como consecuencia de FA-5b, ahora resuelto.** Una cuadrícula
+no tenía **ningún** texto: `metro_draw_tiles()` solo usaba el título
+para la inicial dentro del tile de respaldo. Con carátulas parecidas
+entre sí los tiles dejaban de ser distinguibles — y no es hipotético:
+cuatro álbumes de los fixtures heredan el mismo `/Music/cover.jpg` por
+el barrido de directorio padre de `find_albumart()` y se ven idénticos.
+
+**Un solo rótulo, para lo seleccionado**, no uno por tile: no hay
+espacio vertical para etiquetas individuales (dos filas de 80 px
+arrancando en y=84 ya se salen de los 240 de alto) y además sería ruido
+— lo que hace falta saber es qué está elegido.
+
+**Franja al pie sobre fondo sólido pintado con `lcd_fillrect()`**, para
+que se lea encima de cualquier carátula. M-051 prohíbe conseguir ese
+fondo vía `DRMODE_SOLID`; pintarlo aparte es justo la salida que esa
+regla contempla. Cuesta los 22 px de abajo de la segunda fila, que ya
+venía cortada por el borde de la pantalla: su función es asomar para
+decir "hay más", y con 54 px la sigue cumpliendo.
+
+**Título a la izquierda, subtítulo a la derecha en terciario** — el
+mismo reparto que `metro_draw_rows_ex()` ya usa para las filas de
+texto, de modo que un álbum se lee igual esté en lista o en cuadrícula
+("Analog Dreams" / "Wheel & Click"). Beneficia a las cuatro cuadrículas
+por igual: Álbumes, Artistas, Quickplay y Fotos.
+
+**Verificado**: `docs/screenshots/R4-tiles-rotulo.png` (álbum con
+subtítulo de artista) y `R4-orden-acentos.png` (artista sin subtítulo —
+y de paso muestra la "Á" en primer lugar, la comprobación visual de
+M-079).

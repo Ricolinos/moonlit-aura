@@ -296,6 +296,66 @@ void metro_draw_tile(int x, int y, int size, const char *label)
  * multiple of METRO_TILE_COLS (metro_nav_move_sel_grid() guarantees
  * this), so slot->index->col/row is a straight linear mapping, no
  * wraparound bookkeeping needed. */
+/* R4 (M-080): rótulo del tile seleccionado.
+ *
+ * Una cuadrícula no tenía NINGÚN texto: metro_draw_tiles() solo usaba
+ * el título para la inicial dentro del tile de respaldo. Con carátulas
+ * parecidas entre sí -- cuatro álbumes heredando el mismo cover.jpg del
+ * directorio padre, que es exactamente lo que pasa con los fixtures --
+ * los tiles dejaban de ser distinguibles. Se notó al convertir Álbumes
+ * a cuadrícula (FA-5b).
+ *
+ * Un solo rótulo para lo seleccionado, no uno por tile: no hay espacio
+ * vertical para etiquetas individuales (dos filas de 80px arrancando en
+ * y=84 ya se salen de los 240 de alto) y además sería ruido -- lo que
+ * hace falta saber es qué está elegido.
+ *
+ * Va en una franja al pie, sobre fondo sólido pintado explícitamente
+ * con lcd_fillrect() para que se lea encima de cualquier carátula.
+ * (M-051 prohíbe conseguir ese fondo vía DRMODE_SOLID; pintarlo aparte
+ * es justo la salida que esa regla contempla.) Tapa los 22px de abajo
+ * de la segunda fila, que de todos modos ya venía cortada por el borde
+ * de la pantalla -- su función es asomar para decir "hay más", y con 54
+ * px sigue haciéndolo.
+ *
+ * Título a la izquierda y subtítulo a la derecha en terciario: el mismo
+ * reparto que metro_draw_rows_ex() ya usa para las filas de texto, de
+ * modo que un álbum se lee igual ("Analog Dreams" / "Wheel & Click")
+ * esté en lista o en cuadrícula. */
+#define METRO_TILE_CAPTION_H 22
+
+static void draw_tile_caption(const struct metro_pivot *pivot, int sel, int count)
+{
+    struct metro_row row;
+    int y = LCD_HEIGHT - METRO_TILE_CAPTION_H;
+    int title_clip_w = LCD_WIDTH - 2 * METRO_ROWS_LEFT_X;
+
+    if (sel < 0 || sel >= count)
+        return;
+
+    pivot->get_row(pivot->ctx, sel, &row);
+    if (!row.title || !row.title[0])
+        return;
+
+    lcd_set_foreground(metro_color_bg());
+    lcd_fillrect(0, y, LCD_WIDTH, METRO_TILE_CAPTION_H);
+
+    if (row.subtitle && row.subtitle[0])
+    {
+        int sub_w, sub_h;
+
+        lcd_setfont(metro_font_id(MFONT_CAPTION));
+        lcd_getstringsize((const unsigned char *)row.subtitle, &sub_w, &sub_h);
+        metro_draw_text(MFONT_CAPTION, LCD_WIDTH - METRO_ROWS_LEFT_X - sub_w,
+                         y + 4, row.subtitle, metro_color_tertiary());
+        title_clip_w = LCD_WIDTH - METRO_ROWS_LEFT_X - sub_w
+                       - METRO_ROWS_LEFT_X - 8;
+    }
+
+    metro_draw_text_cut_right(MFONT_CAPTION, METRO_ROWS_LEFT_X, y + 4,
+                               row.title, metro_color_fg(), title_clip_w);
+}
+
 void metro_draw_tiles(const struct metro_pivot *pivot, int first, int sel,
                        int x_offset)
 {
@@ -334,4 +394,6 @@ void metro_draw_tiles(const struct metro_pivot *pivot, int first, int sel,
                 lcd_drawrect(x + b, y + b, METRO_TILE_SIZE - 2 * b, METRO_TILE_SIZE - 2 * b);
         }
     }
+
+    draw_tile_caption(pivot, sel, count);
 }
