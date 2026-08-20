@@ -8,7 +8,7 @@ BUILD := build
 
 .PHONY: test clean
 
-test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/test_motion
+test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/test_motion $(BUILD)/test_lrc
 	@echo "== test_nav =="
 	@$(BUILD)/test_nav
 	@echo "== test_sync_marker =="
@@ -17,6 +17,8 @@ test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/
 	@$(BUILD)/test_device
 	@echo "== test_motion =="
 	@$(BUILD)/test_motion
+	@echo "== test_lrc =="
+	@$(BUILD)/test_lrc
 
 $(BUILD)/test_nav: test_nav.c ../metro_nav.c ../metro_nav.h | $(BUILD)
 	$(CC) $(CFLAGS) test_nav.c ../metro_nav.c -o $@
@@ -29,6 +31,9 @@ $(BUILD)/test_device: test_device.c ../metro_device_name.c ../metro_device_name.
 
 $(BUILD)/test_motion: test_motion.c ../metro_motion.c ../metro_motion.h | $(BUILD)
 	$(CC) $(CFLAGS) test_motion.c ../metro_motion.c -o $@
+
+$(BUILD)/test_lrc: test_lrc.c ../metro_lrc.c ../metro_lrc.h | $(BUILD)
+	$(CC) $(CFLAGS) test_lrc.c ../metro_lrc.c -o $@
 
 $(BUILD):
 	mkdir -p $(BUILD)

@@ -424,3 +424,66 @@ procedimiento de verificación (todo `sim_shot.sh` o lanzamiento
 interactivo va precedido de `make install`) y quedan corregidas las
 filas/planes que citaban "no verificable en headless" como límite del
 simulador. Ver `DECISIONS.md` M-061.
+
+---
+
+## R3-1 — Letras `.lrc`: modelo de memoria propio, no el de Aura-Firmware
+
+**No es una corrección al plan** (DD-3 ya especificaba este diseño) --
+se documenta aquí, mismo criterio que R2-2 (geometría de la cuadrícula
+de fotos), porque diverge deliberadamente del mecanismo de referencia
+de Aura-Firmware y el porqué importa para quien retome este código.
+
+**Lo que hace Aura**: copia cada línea con marca de tiempo a una
+ranura fija de 128 bytes (`aura_lrc_t.lines[600]`) -- `INVESTIGACION-metro-r3.md`
+A.2 midió esto en ~79-82 KB permanentes en BSS, sin importar cuánto
+texto real tenga el archivo.
+
+**Lo que hace Metro**: conserva los propios bytes del archivo (que de
+todas formas hay que leer a algún buffer) y guarda solo
+`{uint32_t ms; uint16_t offset}` por marca de tiempo -- el parseo
+corta cada línea en su lugar con un `\0` y cada entrada apunta ahí.
+Costo real: 8 KB de buffer + 600×6 B de entradas ≈ 11.6 KB, contra los
+~80 KB de Aura. Como beneficio adicional (no buscado, mecánico): varios
+timestamps en una misma línea (`[00:12.00][00:45.00]texto`) comparten
+el mismo `offset` -- el mismo puntero, verificado en
+`test_lrc.c::test_multiple_timestamps_share_text` -- en vez de que
+Aura duplique el texto en cada ranura.
+
+**Verificado**: 45 checks en `apps/metro/test/test_lrc.c` (formatos de
+timestamp, timestamps múltiples por línea, tags de metadata
+descartados, línea sin marca descartada, tag malformado que no rompe
+el resto de la línea, BOM que rompe solo la primera línea -- mismo
+comportamiento que el parser de Aura, A.1 --, archivo sin ninguna línea
+válida, tope de 600 entradas, búsqueda binaria antes/después de la
+primera marca, ruta hermana derivada). Verificado en vivo en el
+simulador con `metro-test.lrc` (3 líneas reales + 3 tags de metadata
+que se descartan correctamente).
+
+## R3-2 — Letras: el modo se conmuta solo desde Options, no también con SELECT en Now Playing
+
+**Qué decía el plan**: DD-2 pedía "conmutable... con `SELECT|REL` desde
+el propio Now Playing" (además de la fila de Options), y DA-3 ofrecía
+esto como la opción recomendada por default.
+
+**Qué se encontró**: `player_mapping[]` (`metro_keymap.c`) ya tiene
+**ambos** gestos de SELECT ocupados en `MCTX_PLAYER`: `SELECT|REL` →
+`MACT_OPTIONS` (abre la propia página de Options) y `SELECT|REPEAT` →
+`MACT_TOGGLE_SHUFFLE`. No hay un tercer gesto de SELECT disponible en
+el pad de la rueda de clic para un toggle directo de letras sin quitarle
+su función actual a uno de los dos.
+
+**Qué se hizo**: se resolvió a favor de la alternativa que la propia
+DA-3 ya contemplaba -- "solo desde Options". El modo se activa/desactiva
+únicamente desde la fila "letra" de la página de Options (ya alcanzable
+con el SELECT existente); Now Playing no gana ningún gesto nuevo. No se
+reasignó ninguna de las dos funciones de SELECT que ya existían.
+
+**Impacto en `PLAN-metro-r3-maestro.md`**: ninguno en el criterio de
+"hecho" de R3-F2 -- el modo de pantalla completa en sí, el criterio
+central de DD-2, queda intacto y verificado. Un gesto directo desde Now
+Playing (si se quiere en el futuro) necesitaría o bien un botón
+distinto (p. ej. PLAY sostenido, hoy sin uso en `MCTX_PLAYER` más allá
+de play/pausa corto) o resignar una de las dos funciones actuales de
+SELECT -- decisión de producto, no técnica, fuera del alcance de esta
+fase.

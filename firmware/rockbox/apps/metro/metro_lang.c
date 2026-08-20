@@ -125,6 +125,9 @@ static const char *const strings_es[LANG_COUNT] = {
 
     [LANG_PHOTO_LOADING]     = "cargando...",
     [LANG_PHOTO_UNSUPPORTED] = "formato no soportado",
+
+    [LANG_NP_LYRICS]           = "letra",
+    [LANG_VALUE_UNAVAILABLE]   = "no disponible",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -231,6 +234,9 @@ static const char *const strings_en[LANG_COUNT] = {
 
     [LANG_PHOTO_LOADING]     = "loading...",
     [LANG_PHOTO_UNSUPPORTED] = "unsupported format",
+
+    [LANG_NP_LYRICS]           = "lyrics",
+    [LANG_VALUE_UNAVAILABLE]   = "unavailable",
 };
 
 void metro_lang_set(enum metro_language lang)

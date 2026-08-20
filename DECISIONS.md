@@ -1620,3 +1620,77 @@ la fila 2 (idéntico a `R2-F2-photos-grid-scrolled.png`); y
 cara al usuario), no se generaron capturas `R3-F1-*.png` nuevas -- las
 tres de R2-F2 siguen siendo la documentación visual vigente de esta
 superficie.
+
+## M-063 — R3-F2: letras `.lrc` sincronizadas, modo de pantalla completa en Now Playing
+
+**Contexto**: segunda fase de la ronda 3 (`PLAN-metro-r3-maestro.md`
+DD-2/DD-3). Primer ítem grande del backlog de v1. A diferencia de casi
+todo el resto de Metro, no es un port de mecanismo de Aura-Firmware:
+solo la IDEA (letras sincronizadas) viene de ahí, el parser y el
+render son diseño propio -- ver `docs/DESVIACIONES.md` R3-1 para el
+porqué del modelo de memoria distinto.
+
+**Parser (`metro_lrc.c/.h`, nuevo, C99 puro, host-testeable)**: acepta
+`[mm:ss]`/`[mm:ss.f]`/`[mm:ss.ff]`/`[mm:ss.fff]` (normalizado a
+milisegundos: 1 dígito ×100, 2×10, 3+ trunca a milisegundo), múltiples
+timestamps por línea (comparten el mismo `offset` de texto, sin
+duplicar), descarta silenciosamente tags de metadata (`[ar:...]`) y
+líneas sin marca válida (mismo criterio que el parser de Aura,
+`INVESTIGACION-metro-r3.md` A.1). `metro_lrc_parse(lrc, len)` opera
+**en el propio `lrc->buf`** que el llamador ya llenó (lectura de
+archivo real, o un fixture de test escrito directo) -- corta cada
+línea en su lugar con un `\0`, sin buffer intermedio. `metro_lrc_find_active()`
+es búsqueda binaria sobre las entradas (asume orden cronológico, no
+reordena -- mismo supuesto que cualquier reproductor de `.lrc` real).
+`metro_lrc_sibling_path()` deriva la ruta hermana (mismo directorio,
+mismo nombre base, `.lrc`) con la misma convención que
+`derive_sibling_path()` de Aura (consultado read-only) y que
+`library-layout-v1.md` §3 ya documenta. 45 checks en
+`apps/metro/test/test_lrc.c`, cero fallas a la primera corrida.
+
+**Integración (`metro_screen_nowplaying.c`)**: `ensure_lyrics_loaded(id3)`
+es una "caché de 1" keyed por `id3->path`, mismo patrón exacto que
+`load_art()` de `metro_albumart.c` -- recarga solo cuando la pista
+cambió, nunca por redibujo. La fila "letra" de Options (nueva, entre
+Repeat y la cola) muestra "no disponible" si la pista actual no tiene
+`.lrc` (o está vacío/sin líneas válidas) y en ese caso `SELECT` sobre
+ella es un no-op -- la única forma de dejar el modo "no alcanzable sin
+letra" sin agregar un tipo de fila deshabilitada nueva al widget
+compartido de listas (que habría tocado `metro_screen_list.c`/`metro_draw.c`,
+usado por toda la app, fuera del alcance de esta fase).
+
+**Diseño visual (DD-2)**: modo de **pantalla completa**, no un panel
+en el hueco de ~160×56px que `INVESTIGACION-metro-r3.md` A.6 encontró
+libre -- reemplaza TODO el contenido normal de Now Playing (carátula,
+título/artista/álbum, tiempos, barra, íconos de modo), deja el header
+y el overlay de volumen (retroalimentación transitoria de una acción,
+no parte del layout que este modo reemplaza). Línea activa en
+`MFONT_TITLE` (28px) en `metro_color_fg()`, hasta 2 líneas de contexto
+cada lado en `MFONT_LIST` (20px), atenuadas por distancia
+(secundario/terciario). Alineado a la izquierda (x=12) -- Metro no
+centra texto. **No se porta el "vidrio" translúcido de Aura**
+(`INVESTIGACION-metro-r3.md` A.4): es gradiente + translucidez,
+lenguaje Apple2026 ajeno al diseño plano de Metro; el atenuado al 30%
+que Now Playing ya aplica sobre la carátula (F12, `METRO_NP_BG_ALPHA256`)
+es justo lo que hace innecesario ese mecanismo -- Aura compone sobre
+carátula a color pleno, Metro no.
+
+**Desviación real encontrada** (no solo el modelo de memoria, que ya
+estaba en el plan): DD-2/DA-3 pedían que el modo también se conmutara
+con `SELECT` directo en Now Playing -- pero `player_mapping[]` ya tiene
+`SELECT|REL`→Options y `SELECT|REPEAT`→shuffle, sin gesto libre. Se
+resolvió a favor de la alternativa que la propia DA-3 ya ofrecía: **solo
+desde la fila de Options**. Ver `docs/DESVIACIONES.md` R3-2.
+
+**Verificado en vivo** (simulador, `make install` primero): con
+`metro-test.lrc` (3 líneas reales + 3 tags de metadata) reproduciendo
+la pista de prueba, Options muestra "letra: desactivado" → tras
+activarla y volver, Now Playing dibuja el modo de pantalla completa
+con la línea activa en grande y el contexto atenuado por distancia,
+confirmando que el parser descartó correctamente los tres tags de
+metadata sin que aparecieran como líneas. Con una pista sin `.lrc`
+("Wheel & Click/Analog Dreams"), Options muestra "letra: no disponible"
+y `SELECT` sobre esa fila no cambia nada (verificado repitiendo la
+captura). Build limpio en sim y target (warnings de `tile_cols`
+presentes son preexistentes, no de esta fase). 5 suites de test de
+host en verde (316 checks).

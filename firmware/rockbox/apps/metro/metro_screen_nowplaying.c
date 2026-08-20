@@ -31,6 +31,7 @@
 #include "sound.h"
 #include "settings.h"
 #include "string-extra.h"
+#include "file.h"
 
 #include "metro_screen_nowplaying.h"
 #include "metro_screen_list.h"
@@ -43,6 +44,7 @@
 #include "metro_settings.h"
 #include "metro_fb.h"
 #include "metro_keymap.h"
+#include "metro_lrc.h"
 
 #define METRO_SEEK_STEP_MS      5000
 #define METRO_VOL_OVERLAY_TICKS (HZ * 3 / 2)
@@ -129,6 +131,49 @@ static void queue_refresh(void)
     s_queue_n = n;
 }
 
+/* R3-F2/DD-2/DD-3 (M-063): synced lyrics, full-screen mode. "cache of
+ * 1" keyed by id3->path, same shape as metro_albumart.c's own
+ * load_art() -- reload only when the track actually changed, never
+ * per redraw. metro_lrc_parse() works in place on lrc.buf, so the file
+ * is read directly into it (no second buffer). A track with no
+ * sibling .lrc (or an unreadable/empty one) leaves s_lrc.count at 0 --
+ * that's the single source of truth both the Options row and the
+ * full-screen mode itself check before showing anything, so there's
+ * never a blank lyrics screen (same fallback criterion Aura's own
+ * parser follows, INVESTIGACION-metro-r3.md A.3). */
+static struct metro_lrc s_lrc;
+static char s_lrc_loaded_path[MAX_PATH];
+static bool s_lrc_loaded;
+static bool s_lyrics_mode;
+
+static bool ensure_lyrics_loaded(struct mp3entry *id3)
+{
+    char lrc_path[MAX_PATH];
+    int fd;
+    ssize_t n;
+
+    if (s_lrc_loaded && !strcmp(s_lrc_loaded_path, id3->path))
+        return s_lrc.count > 0;
+
+    s_lrc.count = 0;
+    s_lrc_loaded = true;
+    strlcpy(s_lrc_loaded_path, id3->path, sizeof(s_lrc_loaded_path));
+
+    if (!metro_lrc_sibling_path(id3->path, lrc_path, sizeof(lrc_path)))
+        return false;
+
+    fd = open(lrc_path, O_RDONLY);
+    if (fd < 0)
+        return false;
+
+    n = read(fd, s_lrc.buf, sizeof(s_lrc.buf) - 1);
+    close(fd);
+    if (n <= 0)
+        return false;
+
+    return metro_lrc_parse(&s_lrc, (size_t)n);
+}
+
 static void toggle_shuffle(void)
 {
     /* Rockbox has no clean "unshuffle" (real limitation, not a Metro
@@ -161,7 +206,20 @@ static enum metro_lang_id repeat_value_lang(void)
     }
 }
 
-static int options_count(void *ctx) { (void)ctx; return 2 + s_queue_n; }
+/* R3-F2/DD-2: whether the CURRENT track has usable lyrics -- the
+ * single check both this row and metro_screen_nowplaying_show() rely
+ * on so the mode is never reachable (nor stays shown) without them.
+ * ensure_lyrics_loaded() is a cache-of-1 keyed by path (same shape as
+ * metro_albumart.c's load_art()), so calling it every redraw of this
+ * row is as cheap as calling it every redraw of Now Playing itself
+ * already is -- a no-op strcmp() unless the track changed. */
+static bool lyrics_available(void)
+{
+    struct mp3entry *id3 = audio_current_track();
+    return id3 && ensure_lyrics_loaded(id3);
+}
+
+static int options_count(void *ctx) { (void)ctx; return 3 + s_queue_n; }
 
 static void options_get_row(void *ctx, int index, struct metro_row *out)
 {
@@ -180,9 +238,17 @@ static void options_get_row(void *ctx, int index, struct metro_row *out)
         out->subtitle = metro_lang_str(repeat_value_lang());
         out->kind = METRO_ROW_SETTING;
     }
+    else if (index == 2)
+    {
+        out->title = metro_lang_str(LANG_NP_LYRICS);
+        out->subtitle = !lyrics_available() ? metro_lang_str(LANG_VALUE_UNAVAILABLE)
+                         : s_lyrics_mode     ? metro_lang_str(LANG_VALUE_ON)
+                                             : metro_lang_str(LANG_VALUE_OFF);
+        out->kind = METRO_ROW_SETTING;
+    }
     else
     {
-        out->title = s_queue_labels[index - 2];
+        out->title = s_queue_labels[index - 3];
         out->subtitle = NULL;
         out->kind = METRO_ROW_ACTION;
     }
@@ -196,6 +262,8 @@ static void options_on_select(void *ctx, int index)
         toggle_shuffle();
     else if (index == 1)
         cycle_repeat();
+    else if (index == 2 && lyrics_available())
+        s_lyrics_mode = !s_lyrics_mode;
 }
 
 static const struct metro_pivot options_pivots[] = {
@@ -263,6 +331,51 @@ static void draw_mode_indicators(void)
  * docs/screenshots/R2-F1-np-worstcase.png. */
 #define METRO_NP_BG_ALPHA256 77 /* ~30% of 256 */
 
+/* R3-F2/DD-2: full-screen lyrics -- active line in the title face at
+ * screen center, up to 2 lines of context each side in the list face,
+ * dimmed further with distance. Left-aligned at x=12 like every other
+ * NP text (Metro doesn't center text), never the "vidrio" translucent
+ * panel Aura-Firmware uses for the same problem (INVESTIGACION-metro-r3.md
+ * A.4) -- Metro's flat language has no glass, and the 30% cover dim
+ * already applied above (metro_fb_blend_over_color) is what keeps this
+ * legible over a bright cover instead. Y positions are fixed pixels,
+ * same convention as the rest of this screen (and the whole app) --
+ * not computed from font metrics. */
+#define METRO_LYRICS_TOP_Y   40
+#define METRO_LYRICS_PITCH   32
+#define METRO_LYRICS_CONTEXT 2
+
+static void draw_lyrics_mode(struct mp3entry *id3)
+{
+    int active = metro_lrc_find_active(&s_lrc, (uint32_t)id3->elapsed);
+    int center_y = METRO_LYRICS_TOP_Y + (LCD_HEIGHT - METRO_LYRICS_TOP_Y) / 2;
+    int i;
+
+    for (i = -METRO_LYRICS_CONTEXT; i <= METRO_LYRICS_CONTEXT; i++)
+    {
+        int idx = active + i;
+        int dist = (i < 0) ? -i : i;
+        int y = center_y + i * METRO_LYRICS_PITCH;
+        const char *text;
+
+        if (idx < 0 || idx >= s_lrc.count)
+            continue;
+
+        text = metro_lrc_text(&s_lrc, idx);
+        if (!text || !*text)
+            continue;
+
+        if (dist == 0)
+            metro_draw_text_cut_right(MFONT_TITLE, 12, y, text,
+                                       metro_color_fg(), LCD_WIDTH - 24);
+        else
+            metro_draw_text_cut_right(MFONT_LIST, 12, y, text,
+                                       dist == 1 ? metro_color_secondary()
+                                                  : metro_color_tertiary(),
+                                       LCD_WIDTH - 24);
+    }
+}
+
 void metro_screen_nowplaying_show(void)
 {
     struct mp3entry *id3;
@@ -286,35 +399,48 @@ void metro_screen_nowplaying_show(void)
         return;
     }
 
-    if (metro_albumart_load_current())
-        lcd_bitmap(metro_albumart_bitmap(), 12, 40, METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE);
+    if (s_lyrics_mode && ensure_lyrics_loaded(id3) && s_lrc.count > 0)
+    {
+        /* Replaces the whole normal layout (art, title/artist/album,
+         * times, progress bar, mode icons) -- "pantalla completa"
+         * means the whole content area, not an overlay on top of it.
+         * The volume overlay below still applies on top regardless:
+         * it's transient feedback for an action just taken, not part
+         * of the layout this mode replaces. */
+        draw_lyrics_mode(id3);
+    }
     else
-        metro_draw_tile(12, 40, METRO_ALBUMART_SIZE,
-                         id3->album ? id3->album : (id3->title ? id3->title : "?"));
+    {
+        if (metro_albumart_load_current())
+            lcd_bitmap(metro_albumart_bitmap(), 12, 40, METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE);
+        else
+            metro_draw_tile(12, 40, METRO_ALBUMART_SIZE,
+                             id3->album ? id3->album : (id3->title ? id3->title : "?"));
 
-    metro_draw_text_cut_right(MFONT_TITLE, 160, 44, id3->title ? id3->title : "?",
-                               metro_color_fg(), LCD_WIDTH - 160);
-    if (id3->artist)
-        metro_draw_text_cut_right(MFONT_LIST, 160, 80, id3->artist,
-                                   metro_color_secondary(), LCD_WIDTH - 160);
-    if (id3->album)
-        metro_draw_text_cut_right(MFONT_CAPTION, 160, 104, id3->album,
-                                   metro_color_tertiary(), LCD_WIDTH - 160);
+        metro_draw_text_cut_right(MFONT_TITLE, 160, 44, id3->title ? id3->title : "?",
+                                   metro_color_fg(), LCD_WIDTH - 160);
+        if (id3->artist)
+            metro_draw_text_cut_right(MFONT_LIST, 160, 80, id3->artist,
+                                       metro_color_secondary(), LCD_WIDTH - 160);
+        if (id3->album)
+            metro_draw_text_cut_right(MFONT_CAPTION, 160, 104, id3->album,
+                                       metro_color_tertiary(), LCD_WIDTH - 160);
 
-    format_time(elapsed_buf, sizeof(elapsed_buf), (long)id3->elapsed);
-    metro_draw_text(MFONT_CAPTION, 12, 200, elapsed_buf, metro_color_secondary());
+        format_time(elapsed_buf, sizeof(elapsed_buf), (long)id3->elapsed);
+        metro_draw_text(MFONT_CAPTION, 12, 200, elapsed_buf, metro_color_secondary());
 
-    format_time(remaining_buf, sizeof(remaining_buf),
-                (long)(id3->length > id3->elapsed ? id3->length - id3->elapsed : 0));
-    lcd_setfont(metro_font_id(MFONT_CAPTION));
-    lcd_getstringsize((const unsigned char *)remaining_buf, &w, &h);
-    metro_draw_text(MFONT_CAPTION, LCD_WIDTH - 12 - w, 200, remaining_buf,
-                     metro_color_secondary());
+        format_time(remaining_buf, sizeof(remaining_buf),
+                    (long)(id3->length > id3->elapsed ? id3->length - id3->elapsed : 0));
+        lcd_setfont(metro_font_id(MFONT_CAPTION));
+        lcd_getstringsize((const unsigned char *)remaining_buf, &w, &h);
+        metro_draw_text(MFONT_CAPTION, LCD_WIDTH - 12 - w, 200, remaining_buf,
+                         metro_color_secondary());
 
-    pct = id3->length > 0 ? (int)((unsigned long long)id3->elapsed * 100 / id3->length) : 0;
-    metro_draw_progress(0, 214, LCD_WIDTH, 4, pct);
+        pct = id3->length > 0 ? (int)((unsigned long long)id3->elapsed * 100 / id3->length) : 0;
+        metro_draw_progress(0, 214, LCD_WIDTH, 4, pct);
 
-    draw_mode_indicators();
+        draw_mode_indicators();
+    }
 
     if (current_tick < s_vol_overlay_until)
         metro_widgets_draw_volume_overlay(current_volume_pct());

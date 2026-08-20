@@ -135,6 +135,9 @@ enum metro_lang_id {
     LANG_PHOTO_LOADING,
     LANG_PHOTO_UNSUPPORTED,
 
+    LANG_NP_LYRICS,
+    LANG_VALUE_UNAVAILABLE,
+
     LANG_COUNT
 };
 
