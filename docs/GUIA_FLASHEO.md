@@ -101,13 +101,41 @@ soporte exista.
 5. **Copia el firmware al disco**: tras el reinicio, vuelve a
    encender el iPod manteniendo SELECT + RIGHT para entrar al modo
    Bootloader USB — el dispositivo se monta como un disco USB normal.
-   Copia:
-   - `rockbox.ipod` a la raíz del disco.
-   - El contenido de `rockbox.zip` (la carpeta `.rockbox/`) también a
-     la raíz, reemplazando si ya existe.
 
-6. **Expulsa el disco de forma segura** y reinicia el iPod. Sin
-   ningún botón presionado, debería arrancar directo a Metro-Aura.
+   **Hazlo desde Terminal, no arrastrando en Finder:**
+   ```
+   unzip -o rockbox.zip -d /Volumes/NOMBRE_DEL_IPOD/
+   ```
+
+   Eso es todo: el zip ya trae `rockbox.ipod` dentro de `.rockbox/`,
+   que es donde el bootloader lo busca primero. **No** hace falta
+   copiarlo aparte a la raíz.
+
+   > **Por qué Terminal y no Finder.** `.rockbox` empieza con punto,
+   > así que **Finder la esconde**. Al descomprimir y arrastrar es muy
+   > fácil terminar con la carpeta creada pero vacía. Le pasó al dueño
+   > en el primer flasheo real: el iPod arrancó igual —el bootloader
+   > cae a `/rockbox.ipod` en la raíz si no encuentra el de
+   > `.rockbox/`— pero sin fuentes, sin códecs y sin plugins. El
+   > síntoma visible fue solo "las tipografías se ven mal"; la música
+   > directamente no podía sonar.
+
+6. **Verifica antes de expulsar** — dos comandos que atrapan justo ese
+   fallo:
+   ```
+   ls /Volumes/NOMBRE_DEL_IPOD/.rockbox/fonts/metro-*.fnt | wc -l   # 5
+   ls /Volumes/NOMBRE_DEL_IPOD/.rockbox/codecs/*.codec | wc -l      # 43
+   ```
+   Si dan 0, la extracción no llegó: repite el paso 5.
+
+7. **Expulsa el disco con el botón de expulsar** —no desconectes el
+   cable a secas— y reinicia el iPod. Sin ningún botón presionado,
+   debería arrancar directo a Metro-Aura.
+
+   > Arrancar el cable en caliente sobre un FAT montado puede dejar el
+   > sistema de archivos inconsistente. En el primer flasheo real eso
+   > terminó con un volumen que ya no montaba (`fsck_msdos`: *could not
+   > read boot block*).
 
 **Modo single-boot** (destruye el arranque original de Apple —
 **no recomendado** salvo estar seguro de que no lo necesitas): agrega
@@ -116,7 +144,7 @@ soporte exista.
 
 ## Actualizar una instalación existente
 
-Repite los pasos 3-5 con los archivos nuevos — instalar el bootloader
+Repite los pasos 3-7 con los archivos nuevos — instalar el bootloader
 de nuevo sobre uno ya instalado simplemente lo actualiza (mismo
 mecanismo, sin necesidad de desinstalar primero).
 
@@ -153,6 +181,18 @@ bórralos a mano si quieres limpiar el disco por completo.
   — los drivers libusb-win32 (libusb0) no funcionan con `mks5lboot`.
 - **Acceso USB denegado**: corre `mks5lboot` con privilegios elevados
   (`sudo` en macOS/Linux, Administrador en Windows).
+- **"El volumen ya no monta"** (`fsck_msdos: could not read boot
+  block`, o Finder que no lo ve pero `diskutil list` sí muestra la
+  partición): casi siempre es un FAT dejado inconsistente por
+  desconectar el cable sin expulsar. Primero **desconecta y reconecta
+  con otro cable y otro puerto** — el conector de 30 pines y los cables
+  de iPod fallan mucho, y un boot block "ilegible" suele volver a
+  leerse al reestablecer el enlace. Si monta, expúlsalo bien y corre
+  `diskutil verifyVolume` antes de nada. Si no monta ni con cable
+  nuevo, el disco se puede reformatear a FAT32 y reinstalar desde cero
+  (la biblioteca vive en Aura Studio, el iPod es una réplica). Y si
+  vuelve a pasar tras un ciclo limpio, sospecha del disco antes que del
+  software: en un 6G original es un disco de 1.8" de ~2007.
 - **"Olvidé la clave del candado de pantalla"**: el aparato **no**
   queda inservible y no hace falta reflashear nada. Conecta el cable
   (el USB sigue funcionando con el candado puesto, a propósito), abre

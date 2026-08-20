@@ -22,12 +22,18 @@ continuum) con tres niveles de FX.
 De la ronda 3: **letras `.lrc` sincronizadas**, **fotos de artista**,
 **Quickplay** (álbumes recientes), **calificaciones** importadas de
 Aura Studio, **candado de 4 dígitos** y **CONTINUUM** (el título de la
-fila vuela a la página nueva). Detalle completo en
+fila vuela a la página nueva).
+
+De la ronda 4, tras el primer flasheo real: **iconografía Fluent**,
+**PLAY desde cualquier pantalla**, **indicador de reproducción/pausa**,
+**cuadrícula de álbumes**, **fondo del reproductor separado del tile**,
+y el catálogo español **con acentos de verdad**. Detalle completo en
 `docs/ESTADO_FINAL.md`.
 
-> **Todavía sin probar en hardware real.** Las tres rondas se
-> verificaron en el simulador SDL. La lista de verificación pendiente
-> está en `docs/ESTADO_FINAL.md`.
+> **Verificado en el simulador SDL.** El aparato real se flasheó por
+> primera vez en la ronda 4 — de ahí salieron las correcciones de esa
+> ronda — pero la lista de verificación en hardware sigue sin
+> responder. Está en `docs/ESTADO_FINAL.md`.
 
 ## Capturas
 

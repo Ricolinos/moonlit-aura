@@ -1,4 +1,8 @@
-# Estado final — Metro-Aura v0.3.0
+# Estado final — Metro-Aura v0.3.0 (+ ronda 4 sin publicar)
+
+**Lo publicado es `v0.3.0`.** El árbol trae además la **ronda 4**
+completa salvo dos frentes bloqueados — todo lo de la sección "Lo que
+agregó la ronda 4" está en `main` pero **todavía no tiene release**.
 
 Cierre de la **ronda 3**. Acumula las tres rondas de ejecución: la
 ronda 1 construyó el firmware (F0-F13, `docs/plans/PLAN_MAESTRO.md`),
@@ -82,19 +86,65 @@ resume, no reemplaza.
   del mismo módulo, y el volcado de la cola de tagcache al apagar
   (R3-F4), que faltaba y perdía historial de reproducción en silencio.
 
-Suite de tests de host: 678 checks, 0 fallos
-(`firmware/rockbox/apps/metro/test/`, `make -C apps/metro/test`) en 6
+### Lo que agregó la ronda 4
+
+Ronda de correcciones sobre hardware real: el dueño flasheó por primera
+vez y reportó nueve frentes. Siete se cerraron; dos siguen bloqueados
+(ver abajo).
+
+- **Iconografía Fluent** (FA-1): Metro no tenía *ningún* pipeline de
+  iconos — sus cuatro iconos eran trazos geométricos a mano. Se
+  construyó uno (`gen_icons.py` → tabla C commiteada, mismo patrón que
+  la tabla del turnstile) y se adoptó Fluent System Icons (MIT).
+  Reproducible y sin red: los SVG se versionan.
+- **Los residuales de macOS dejan de contaminar las listas** (FA-2):
+  `._IMG_1234.jpg` conserva la extensión y pasaba el filtro por sufijo.
+  También afectaba a las playlists, cosa que no se había reportado.
+- **Español impecable de verdad** (FA-5a): **ninguna** cadena en español
+  llevaba acentos. 30 corregidas, incluida `"temporizador de sueno"`,
+  que no era un typo sino otra palabra.
+- **Cuadrícula de álbumes con carátula real** (FA-5b), reutilizando el
+  motor de Quickplay en vez de duplicarlo.
+- **Indicador de reproducción/pausa** (FA-6): antes la pantalla quedaba
+  idéntica al pausar, salvo que el tiempo dejaba de avanzar.
+- **El fondo del reproductor se separa del tile** (FA-7): foto del
+  artista si la hay, si no la carátula, si no fondo plano.
+- **PLAY funciona desde cualquier pantalla** (FA-8), no solo dentro de
+  Now Playing.
+- **Búsqueda con rampa** (FA-9): el salto era fijo de 5 s por evento.
+- **Ordenamiento con acentos** y **rótulo del tile seleccionado**, dos
+  consecuencias detectadas durante la ronda y resueltas en ella.
+
+Bugs preexistentes que la ronda destapó y corrigió, ninguno reportado:
+la inicial de una etiqueta se cortaba por **byte** (cualquier "Ángela"
+o "Éxitos" renderizaba basura), y el ordenamiento mandaba las iniciales
+acentuadas **detrás de la Z**.
+
+Suite de tests de host: 2250 checks, 0 fallos
+(`firmware/rockbox/apps/metro/test/`, `make -C apps/metro/test`) en 8
 suites. Ambos builds (`firmware/tools/build_sim.sh`,
 `firmware/tools/build_target.sh`) compilan limpio en cada fase desde F0.
 
 ## Qué NO está verificado (pendiente de hardware real)
 
 Todo lo de arriba se verificó **exclusivamente en el simulador SDL**
-(`PLAN_MAESTRO.md` regla transversal #6: "simulador primero"). **Nunca
-se ha conectado un iPod Classic 6G real** — ni en la ronda 1, ni en la
-2, ni en la 3. Es la deuda más vieja del proyecto y la razón de que la
-lista de verificación del final de este documento siga sin respuestas.
-En particular:
+(`PLAN_MAESTRO.md` regla transversal #6: "simulador primero").
+
+**El aparato real sí se flasheó por primera vez en la ronda 4** — y de
+esa sesión salieron los nueve frentes que la ronda atendió. Pero la
+lista de verificación del final de este documento **sigue sin
+responder**, por dos cosas que pasaron en esa misma sesión:
+
+1. La instalación estaba **incompleta**: `.rockbox/` quedó vacía porque
+   Finder no copia carpetas que empiezan con punto. El firmware
+   arrancaba solo por el respaldo `/rockbox.ipod` de la raíz, sin
+   fuentes, sin códecs y sin plugins. Se corrigió extrayendo el zip
+   desde Terminal (ver "Cómo instalar").
+2. El volumen se desconectó sin expulsión limpia y **dejó de montar**:
+   `fsck_msdos` no puede leer siquiera el sector de arranque. Hasta
+   resolver eso, nada del aparato es verificable.
+
+Sigue sin verificarse en hardware, en particular:
 
 - **Arranque real**: el bootloader dual-boot y el arranque de
   Metro-Aura en NOR/disco real nunca se probaron.
@@ -268,6 +318,19 @@ que el resto del proyecto.
 | H16 | **Candado**: configurar clave, apagar, encender, desbloquear. Y probar la salida de emergencia de verdad (borrar las dos líneas por USB) | _(sin responder)_ |
 | H17 | **CONTINUUM**: ¿el título volador se lee bien a 30 fps reales, o se ve a saltos? La curva (`OUT_QUAD`) y el punto de cambio de fuente son fáciles de ajustar si no | _(sin responder)_ |
 
+### Nuevo en la ronda 4
+
+| # | Qué probar | Resultado |
+|---|---|---|
+| H18 | **Iconos Fluent a 16 px en el panel real**: ¿se leen play/pausa/aleatorio/repetir/altavoz, o se empastan? El simulador escala distinto que el LCD | _(sin responder)_ |
+| H19 | **PLAY global**: pausar y reanudar desde el hub y desde una lista, con el botón físico | _(sin responder)_ |
+| H20 | **Rampa de búsqueda**: sostener LEFT/RIGHT. ¿Se siente fluido? Es lo único de la ronda que el simulador **no puede** probar (su inyector nunca llega a `BUTTON_REPEAT`) | _(sin responder)_ |
+| H21 | **`audio_ff_rewind()` en disco real**: ¿el re-seek del búfer añade su propio tirón, aparte del tamaño del paso? Hipótesis no confirmada | _(sin responder)_ |
+| H22 | **Acentos en el panel real**: `música`, `álbumes`, `sueño`, `¿…?` — ¿se ven bien a 48 px y a 14 px? | _(sin responder)_ |
+| H23 | **Fondo del reproductor**: las cuatro filas de la tabla, con biblioteca real | _(sin responder)_ |
+| H24 | **Residuales**: conectar por USB, dejar que macOS escriba sus `._*`, y confirmar que no aparecen en Fotos/Videos/listas | _(sin responder)_ |
+| H25 | **Rótulo del tile**: ¿se lee sobre carátulas claras y oscuras? | _(sin responder)_ |
+
 ### Lo que solo el hardware puede decir
 
 Tres cosas de la ronda 3 están verificadas **por vía indirecta** en el
@@ -280,3 +343,7 @@ simulador y merecen atención especial en la primera sesión real:
    correr 15 minutos.
 3. **El EQ por oído** (H15) — el simulador no tiene salida de audio
    representativa.
+4. **La rampa de búsqueda** (H20) — el inyector de botones del
+   simulador hace press-release corto y **nunca llega a
+   `BUTTON_REPEAT`**, así que la rampa está cubierta por tests de host
+   pero jamás se ha ejercitado sosteniendo un botón de verdad.
