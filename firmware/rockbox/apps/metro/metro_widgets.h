@@ -20,6 +20,8 @@
 #ifndef METRO_WIDGETS_H
 #define METRO_WIDGETS_H
 
+#include "metro_icons.h"
+
 #include <stdbool.h>
 
 /* The system's single modal dialog (PLAN_MAESTRO.md S2.3, MCTX_DIALOG):
@@ -55,21 +57,16 @@ void metro_widgets_draw_empty_state(const char *message);
  * simple line-art, top-left corner at (x, y), METRO_WIDGETS_ICON_SIZE
  * square. Repeat draws a small "1" centered over the loop when `one`
  * is true (REPEAT_ONE vs REPEAT_ALL). */
-#define METRO_WIDGETS_ICON_SIZE 16
+/* Lado de todos los glifos de estado. Coincide con METRO_ICON_SIZE
+ * (metro_icons.h): los de Fluent que se usan son las variantes
+ * dibujadas para 16px. */
+#define METRO_WIDGETS_ICON_SIZE METRO_ICON_SIZE
 
-void metro_widgets_draw_shuffle_icon(int x, int y);
-
-/* R4/FA-6 (M-073): glifos de transporte, METRO_WIDGETS_ICON_SIZE de
- * lado. **Misma geometría exacta** que el OSD del reproductor de video
- * (`draw_status_icon()`/`draw_tri_stepped()`,
- * apps/plugins/mpegplayer/mpegplayer.c:796-845) -- se porta en vez de
- * inventar otra precisamente para que el mismo estado se dibuje igual
- * en música y en video. El triángulo se traza columna por columna (no
- * con una primitiva de polígono, que Rockbox no tiene) y por eso
- * queda "escalonado" a propósito: a 16 px se lee como triángulo y
- * encaja con el lenguaje anguloso de Metro. */
-void metro_widgets_draw_play_icon(int x, int y, unsigned color);
-void metro_widgets_draw_pause_icon(int x, int y, unsigned color);
-void metro_widgets_draw_repeat_icon(int x, int y, bool one);
+/* R4/FA-1 (M-077): dibuja un glifo de metro_icons.h en (x, y) del color
+ * dado, METRO_ICON_SIZE de lado. Sustituye a los iconos trazados a mano
+ * uno por uno; los que quedan geométricos son los que ningún glifo del
+ * set resuelve mejor (la batería, que es un indicador con relleno
+ * proporcional, no un símbolo fijo). */
+void metro_widgets_draw_icon(enum metro_icon_id id, int x, int y, unsigned color);
 
 #endif /* METRO_WIDGETS_H */

@@ -43,7 +43,7 @@
 #                                              necesita un paso manual)
 #   firmware/dist/mks5lboot                -- herramienta de flasheo DFU
 #   firmware/dist/MODIFICATIONS.md         -- listado GPL §2a, para el Release
-#   firmware/dist/THIRD-PARTY-NOTICES.txt  -- licencia de Selawik (SIL OFL 1.1)
+#   firmware/dist/THIRD-PARTY-NOTICES.txt  -- Selawik (SIL OFL 1.1) + Fluent Icons (MIT)
 #   firmware/dist/checksums.txt            -- SHA-256 de todo lo de arriba
 
 set -euo pipefail
@@ -176,7 +176,7 @@ fi
 echo "==> Copiando MODIFICATIONS.md (asset del Release, cumplimiento GPL §2a)"
 cp "$ROOT_DIR/MODIFICATIONS.md" "$DIST_DIR/MODIFICATIONS.md"
 
-echo "==> Generando THIRD-PARTY-NOTICES.txt (licencia de Selawik, asset del Release)"
+echo "==> Generando THIRD-PARTY-NOTICES.txt (Selawik + Fluent Icons, asset del Release)"
 {
   echo "Metro-Aura -- avisos de terceros"
   echo "================================="
@@ -187,9 +187,21 @@ echo "==> Generando THIRD-PARTY-NOTICES.txt (licencia de Selawik, asset del Rele
   echo "marca de Zune/Windows Phone. El texto completo de la licencia"
   echo "sigue abajo."
   echo
+  echo "Los iconos de la interfaz provienen de Fluent System Icons"
+  echo "(Microsoft, MIT) -- ver DECISIONS.md M-077. Se redistribuyen"
+  echo "rasterizados a mapas de bits monocromos de 16x16 dentro del"
+  echo "binario (apps/metro/metro_icons_table.c, generado por"
+  echo "firmware/tools/gen_icons.py); los SVG originales estan en"
+  echo "firmware/assets/icons/. La licencia MIT exige conservar este"
+  echo "aviso, y sigue abajo completo."
+  echo
   echo "-- Selawik (tipografía) ---------------------------------------------"
   echo
   cat "$ROOT_DIR/firmware/assets/fonts-src/LICENSE.txt"
+  echo
+  echo "-- Fluent System Icons (iconografía) --------------------------------"
+  echo
+  cat "$ROOT_DIR/firmware/assets/icons/LICENSE-fluent-system-icons.txt"
 } > "$DIST_DIR/THIRD-PARTY-NOTICES.txt"
 
 echo "==> Generando checksums.txt"

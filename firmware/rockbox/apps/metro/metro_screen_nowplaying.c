@@ -406,9 +406,9 @@ static void draw_transport_indicator(void)
     int status = audio_status();
 
     if (status & AUDIO_STATUS_PAUSE)
-        metro_widgets_draw_pause_icon(x, y, metro_color_accent());
+        metro_widgets_draw_icon(METRO_ICON_PAUSE, x, y, metro_color_accent());
     else if (status & AUDIO_STATUS_PLAY)
-        metro_widgets_draw_play_icon(x, y, metro_color_secondary());
+        metro_widgets_draw_icon(METRO_ICON_PLAY, x, y, metro_color_secondary());
 }
 
 static void draw_mode_indicators(void)
@@ -419,12 +419,21 @@ static void draw_mode_indicators(void)
     if (global_settings.repeat_mode == REPEAT_ALL ||
         global_settings.repeat_mode == REPEAT_ONE)
     {
-        metro_widgets_draw_repeat_icon(x, y, global_settings.repeat_mode == REPEAT_ONE);
+        metro_widgets_draw_icon(METRO_ICON_REPEAT_ALL, x, y, metro_color_accent());
+        /* R4/FA-1 (M-077): el "1" va AL LADO del lazo, no encima.
+         * Fluent sí trae un `arrow_repeat_1`, pero su insignia se
+         * apelmaza en una mancha ilegible a 16px (se probaron tres
+         * variantes) -- así que se usa el lazo de Fluent y el dígito se
+         * dibuja aparte, que es el mecanismo que Metro ya usaba y sí se
+         * lee. */
+        if (global_settings.repeat_mode == REPEAT_ONE)
+            metro_draw_text(MFONT_CAPTION, x + METRO_WIDGETS_ICON_SIZE + 2, y,
+                             "1", metro_color_accent());
         x -= METRO_WIDGETS_ICON_SIZE + 12;
     }
 
     if (global_settings.playlist_shuffle)
-        metro_widgets_draw_shuffle_icon(x, y);
+        metro_widgets_draw_icon(METRO_ICON_SHUFFLE, x, y, metro_color_accent());
 }
 
 /* F12: 30% of the track's own art, scaled to fill the screen, behind

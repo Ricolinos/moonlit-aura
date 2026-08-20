@@ -23,6 +23,7 @@
 #include "lcd.h"
 
 #include "metro_widgets.h"
+#include "metro_icons.h"
 #include "metro_draw.h"
 #include "metro_theme.h"
 #include "metro_input.h"
@@ -76,10 +77,18 @@ bool metro_widgets_confirm(const char *title, const char *question)
 void metro_widgets_draw_volume_overlay(int pct)
 {
     char label[24];
+    /* R4/FA-1 (M-077): el overlay era texto puro ("volumen 42%"). Con
+     * el glifo de altavoz, el porcentaje solo ya dice qué es y la
+     * palabra sobra -- se gana claridad y se acorta la línea. El icono
+     * se alinea con el texto: METRO_ICON_SIZE (16) contra la caja de
+     * MFONT_CAPTION (14), así que un píxel abajo lo centra. */
+    int icon_y = METRO_VOLUME_OVERLAY_Y - 15;
+    int text_x = 12 + METRO_ICON_SIZE + 6;
 
     metro_draw_progress(0, METRO_VOLUME_OVERLAY_Y, LCD_WIDTH, 6, pct);
-    snprintf(label, sizeof(label), "%s %d%%", metro_lang_str(LANG_NP_VOLUME), pct);
-    metro_draw_text(MFONT_CAPTION, 12, METRO_VOLUME_OVERLAY_Y - 14, label,
+    metro_widgets_draw_icon(METRO_ICON_SPEAKER, 12, icon_y, metro_color_secondary());
+    snprintf(label, sizeof(label), "%d%%", pct);
+    metro_draw_text(MFONT_CAPTION, text_x, METRO_VOLUME_OVERLAY_Y - 14, label,
                      metro_color_secondary());
 }
 
@@ -112,81 +121,43 @@ void metro_widgets_draw_empty_state(const char *message)
                      message, metro_color_secondary());
 }
 
-/* F10: crossed paths with arrowheads at both right-hand ends -- the
- * "shuffle" metaphor, contained within a METRO_WIDGETS_ICON_SIZE
- * square starting at (x, y). */
-void metro_widgets_draw_shuffle_icon(int x, int y)
+void metro_widgets_draw_icon(enum metro_icon_id id, int x, int y, unsigned color)
 {
-    int s = METRO_WIDGETS_ICON_SIZE;
+    const struct metro_icon *icon;
+    int row;
 
-    lcd_set_foreground(metro_color_accent());
+    if ((unsigned)id >= METRO_ICON_COUNT)
+        return;
 
-    lcd_drawline(x, y, x + s, y + s);
-    lcd_drawline(x, y + s, x + s, y);
-
-    lcd_drawline(x + s - 4, y - 3, x + s, y);
-    lcd_drawline(x + s - 4, y + 3, x + s, y);
-    lcd_drawline(x + s - 4, y + s - 3, x + s, y + s);
-    lcd_drawline(x + s - 4, y + s + 3, x + s, y + s);
-}
-
-/* F10: square loop outline with a small arrowhead breaking its
- * top-right corner -- the "repeat" metaphor. `one` overlays a small
- * "1" (REPEAT_ONE vs REPEAT_ALL), same square as
- * metro_widgets_draw_shuffle_icon() for side-by-side alignment on the
- * Now Playing screen. */
-void metro_widgets_draw_repeat_icon(int x, int y, bool one)
-{
-    int s = METRO_WIDGETS_ICON_SIZE;
-
-    lcd_set_foreground(metro_color_accent());
-    lcd_drawrect(x, y, s, s);
-
-    lcd_drawline(x + s - 5, y - 3, x + s + 1, y - 3);
-    lcd_drawline(x + s + 1, y - 3, x + s - 2, y + 1);
-
-    if (one)
-    {
-        char digit[2] = { '1', '\0' };
-        int w, h;
-
-        lcd_setfont(metro_font_id(MFONT_CAPTION));
-        lcd_getstringsize((const unsigned char *)digit, &w, &h);
-        metro_draw_text(MFONT_CAPTION, x + (s - w) / 2, y + (s - h) / 2,
-                         digit, metro_color_accent());
-    }
-}
-
-/* Portado de draw_tri_stepped() (mpegplayer.c:796-807): una columna de
- * 1 px por paso, alto decreciente, centrada verticalmente. */
-static void draw_tri_stepped(int x, int y, int w, int h, int dir)
-{
-    int s;
-
-    for (s = 0; s < w; s++)
-    {
-        int col = (dir > 0) ? s : (w - 1 - s);
-        int hh = h - (h * col) / w;
-        if (hh < 1)
-            hh = 1;
-        lcd_fillrect(x + s, y + (h - hh) / 2, 1, hh);
-    }
-}
-
-void metro_widgets_draw_play_icon(int x, int y, unsigned color)
-{
-    int s = METRO_WIDGETS_ICON_SIZE;
-
+    icon = &metro_icons[id];
     lcd_set_foreground(color);
-    draw_tri_stepped(x, y, s, s, 1);
-}
 
-void metro_widgets_draw_pause_icon(int x, int y, unsigned color)
-{
-    int s = METRO_WIDGETS_ICON_SIZE;
-    int bar_w = s / 4 > 2 ? s / 4 : 2;   /* MAX(size/4, 2), igual que el OSD */
+    for (row = 0; row < METRO_ICON_SIZE; row++)
+    {
+        unsigned mask = icon->rows[row];
+        int col = 0;
 
-    lcd_set_foreground(color);
-    lcd_fillrect(x, y, bar_w, s);
-    lcd_fillrect(x + s - bar_w, y, bar_w, s);
+        /* Por CORRIDAS horizontales, no pixel por pixel: un icono de
+         * 16x16 son hasta 256 lcd_drawpixel() sueltos, y estos glifos
+         * son siluetas rellenas donde una fila suele ser una o dos
+         * corridas. Mismo criterio que el resto del dibujo de Metro,
+         * que usa lcd_fillrect() para todo lo que sea un bloque. */
+        while (col < METRO_ICON_SIZE)
+        {
+            int run;
+
+            if (!(mask & (1u << (METRO_ICON_SIZE - 1 - col))))
+            {
+                col++;
+                continue;
+            }
+            run = 0;
+            while (col + run < METRO_ICON_SIZE &&
+                   (mask & (1u << (METRO_ICON_SIZE - 1 - (col + run)))))
+                run++;
+
+            lcd_fillrect(x + col, y + row, run, 1);
+            col += run;
+        }
+    }
 }

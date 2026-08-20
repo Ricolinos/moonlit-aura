@@ -79,7 +79,6 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_UNKNOWN_GENRE]     = "género desconocido",
     [LANG_UNKNOWN_TITLE]     = "título desconocido",
 
-    [LANG_NP_VOLUME]        = "volumen",
     [LANG_NP_OPTIONS_TITLE] = "opciones",
     [LANG_NP_SHUFFLE]       = "aleatorio",
     [LANG_NP_REPEAT]        = "repetir",
@@ -211,7 +210,6 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_UNKNOWN_GENRE]     = "unknown genre",
     [LANG_UNKNOWN_TITLE]     = "unknown title",
 
-    [LANG_NP_VOLUME]        = "volume",
     [LANG_NP_OPTIONS_TITLE] = "options",
     [LANG_NP_SHUFFLE]       = "shuffle",
     [LANG_NP_REPEAT]        = "repeat",

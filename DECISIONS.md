@@ -2571,3 +2571,79 @@ desconocido" pasó de primero a último en la lista de álbumes. Afecta
 igual a contenido real de biblioteca ("Ángela" cae tras "Zoé"), es
 independiente de esta fase, y ordenar con plegado de acentos es trabajo
 aparte — queda anotado, no resuelto.
+
+## M-077 — R4/FA-1: iconografía Fluent, y el pipeline de assets que no existía
+
+**Corrección a la premisa del encargo**: se pidió "sustituir los iconos
+actuales por el set elegido". **No había un set que sustituir.** Los
+cuatro iconos del firmware (batería, aleatorio, repetir, punto del PIN)
+eran trazos geométricos escritos a mano con `lcd_drawline`/`lcd_fillrect`,
+y en `apps/metro/` no existía **ni un solo archivo de icono**. El
+trabajo real de esta fase fue construir el pipeline, no elegir el set.
+
+**Set: Fluent System Icons** (decisión del dueño, Q2). MIT — verificado
+contra el repositorio, no de memoria — y compatible con redistribución
+embebida en GPL v2. Es además el descendiente directo de Metro.
+
+### Por qué una tabla C generada, y no las dos alternativas obvias
+
+- **Una fuente de iconos no cabe.** `gen_fonts.sh` genera el rango
+  `0x20`-`0x17F` (Latin-1 + Extended-A). No hay zona de uso privado,
+  que es donde vive el glifo de cualquier icon font.
+- **Un `.bmp` por icono en `.rockbox/` obligaría a leer disco** para
+  dibujarlos, y `CLAUDE.md` prohíbe lectura de disco dentro de un bucle
+  de animación — los iconos de modo se dibujan en cada cuadro de Now
+  Playing.
+
+Así que se sigue el patrón que el proyecto ya tenía para datos
+precalculados: `firmware/tools/gen_icons.py` → `metro_icons_table.c`,
+generado offline y **commiteado**, con su generador versionado al lado
+— idéntico a `gen_turnstile_table.py` → `metro_turnstile_table.c`. Los
+`.svg` originales también se commitean (`firmware/assets/icons/`), así
+que regenerar **no necesita red**.
+
+**Formato**: un `unsigned short` por fila, bit 15 = píxel izquierdo. 32
+bytes por icono, 5 iconos = 160 bytes en el binario. **Monocromo a
+propósito**: el color lo pone quien dibuja, que es lo único compatible
+con la regla de cero RGB fuera de `metro_palette.h` — y de paso permite
+que el mismo glifo sirva en acento o secundario según el estado.
+
+**Dibujo por corridas horizontales**, no píxel por píxel: un glifo de
+16×16 serían hasta 256 `lcd_drawpixel()` sueltos, y estas siluetas
+suelen ser una o dos corridas por fila.
+
+### El icono que no entró, y por qué
+
+`arrow_repeat_1` **se descartó tras probarlo**. Su insignia del "1" se
+apelmaza en una mancha ilegible a 16 px, y se comprobaron tres
+variantes antes de rendirse: 16 filled con umbral alto rompe el lazo en
+píxeles sueltos; 20 filled reescalado y 16 regular quedan igual de
+densos. Es un límite del icono a ese tamaño, no del pipeline.
+
+Solución: se usa el lazo de `arrow_repeat_all` y el dígito se dibuja
+**al lado**, que es el mecanismo que Metro ya usaba (y sí se lee) — solo
+que antes el "1" iba *encima* de un lazo dibujado a mano y ahora va
+junto a un glifo de Fluent.
+
+**Lo que sigue siendo geométrico, a propósito**: la batería. No es un
+símbolo fijo sino un indicador con relleno proporcional al nivel;
+ningún glifo estático la resuelve.
+
+**Ganancia colateral**: el overlay de volumen era texto puro
+("volumen 42%"). Con el glifo de altavoz, el porcentaje solo ya dice
+qué es — la palabra sobra, la línea se acorta, y `LANG_NP_VOLUME` se
+eliminó del catálogo en vez de dejarlo muerto.
+
+**Cumplimiento MIT**: `package_dist.sh` agrega el aviso y el texto
+completo de la licencia de Fluent a `THIRD-PARTY-NOTICES.txt`, junto al
+de Selawik que ya estaba. La licencia también se commitea en
+`firmware/assets/icons/`.
+
+**Verificado**: el generador es **reproducible** — dos corridas
+producen bytes idénticos (SHA-256 comprobado), criterio que la Fase 1
+había propuesto. Cada glifo se inspeccionó como arte ASCII **antes** de
+integrarlo (`gen_icons.py --preview`), que es lo que permitió detectar
+el problema de `repeat_1` sin llegar a compilarlo.
+`docs/screenshots/R4-FA1-iconos-fluent.png` muestra pausa, aleatorio y
+repetir-uno reales en pantalla; `R4-FA1-volumen.png`, el altavoz.
+Builds limpios en sim y target; 2231 checks de host.
