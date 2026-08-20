@@ -128,6 +128,9 @@ static const char *const strings_es[LANG_COUNT] = {
 
     [LANG_NP_LYRICS]           = "letra",
     [LANG_VALUE_UNAVAILABLE]   = "no disponible",
+
+    [LANG_PIVOT_QUICKPLAY]     = "reproducir ya",
+    [LANG_QUICKPLAY_EMPTY]     = "sin historial todavia -- reproduce algo primero",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -237,6 +240,9 @@ static const char *const strings_en[LANG_COUNT] = {
 
     [LANG_NP_LYRICS]           = "lyrics",
     [LANG_VALUE_UNAVAILABLE]   = "unavailable",
+
+    [LANG_PIVOT_QUICKPLAY]     = "quickplay",
+    [LANG_QUICKPLAY_EMPTY]     = "nothing played yet -- play something first",
 };
 
 void metro_lang_set(enum metro_language lang)

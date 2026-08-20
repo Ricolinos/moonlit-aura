@@ -1769,3 +1769,117 @@ tag en absoluto). Seleccionar un artista con foto sigue entrando a sus
 el caso del `:`. Build limpio en sim y target (mismos warnings
 preexistentes de `tile_cols`, nada nuevo). 6 suites de test de host en
 verde (674 checks).
+
+## M-065 — R3-F4: Quickplay (álbumes recientes) + runtime DB en la higiene
+
+**Contexto**: cuarta fase de la ronda 3 (`PLAN-metro-r3-maestro.md`
+DD-4/DD-5), sobre el motor de miniaturas de R3-F1. Música gana un
+pivot nuevo, primero de la lista (DA-1, la opción recomendada por el
+plan): los álbumes reproducidos más recientemente, al estilo "landing
+surface" de Zune HD.
+
+**`global_settings.runtimedb = true`** (`metro_apply_hygiene()`,
+`metro_main.c`): Rockbox nunca escribe `tag_lastplayed` a menos que
+este flag esté encendido -- default `false`, y Metro no tiene menú
+propio para exponerlo (`INVESTIGACION-metro-r3.md` D.1 ya había
+ubicado esto: los escritores, `tagtree_buffer_event()`/
+`tagtree_track_finish_event()`, ya se registran incondicionalmente
+desde el propio `tagtree_init()` de `apps/main.c` -- solo faltaba la
+bandera que los habilita). Puramente local (historial de reproducción
+del propio dispositivo, en su propio disco, nunca sale a ningún lado)
+-- misma clase de "decidirlo por el usuario" que el resto de la
+higiene ya fuerza.
+
+**`METRO_NAV_MAX_PIVOTS` 6→8** (`metro_nav.h`): Música pasa de 5 a 6
+pivots (Quickplay + Artistas/Álbumes/Canciones/Géneros/Playlists); se
+dejó un pivot extra de margen sobre el mínimo exacto para que el
+siguiente pivot nuevo no necesite otro cambio de una línea de
+inmediato.
+
+**Consulta (`metro_music_recent_albums()`, `metro_music.c`)**: no
+existe una query agrupada para "los álbumes con el `tag_lastplayed`
+más reciente" -- ese tag es por-PISTA, no algo que tagcache pueda
+agrupar/ordenar por álbum directamente (`INVESTIGACION-metro-r3.md`
+D.2). Se resolvió escaneando **todas** las pistas por `tag_filename`
+(no `tag_title`, a propósito -- ver más abajo), agregando el
+`max(tag_lastplayed)` por nombre de álbum, y resolviendo cada pick de
+vuelta a un `tag_album` real de `metro_music_albums()` por coincidencia
+de nombre (necesario para que `on_select()` pueda filtrar canciones
+por ese álbum). `metro_music_track_path()` (nueva, junto a la anterior)
+resuelve la ruta real de un `idx_id` vía `tagcache_retrieve()`, para
+que la resolución de carátula tenga un path real que leer.
+
+**Por qué `tag_filename` y no `tag_title`** (como sí hace el patrón
+"reproducir todo" ya existente en este archivo): `tagcache_search_set_uniqbuf()`
+deduplica por VALOR -- dos pistas con el mismo título en álbumes
+distintos colapsarían en una sola bajo `tag_title`, subcontando
+reproducciones reales. `tag_filename` es inherentemente único por
+archivo físico, así que no hay ese riesgo (confirmado leyendo
+`add_uniqbuf()` en `apps/tagcache.c`: un buffer de uniqbuf lleno deja
+de deduplicar, nunca excluye resultados de forma incorrecta -- seguro
+igual para un escaneo de biblioteca completa con el `s_uniqbuf` de
+2048 entradas que ya existía).
+
+**Carátula por track arbitrario (`metro_albumart_decode_track_cover()`,
+`metro_albumart.c/.h`)**: Quickplay necesita la carátula de un track
+representativo del álbum, no la del track que esté sonando ahora mismo
+(`audio_current_track()` puede no aplicar -- quizás no está sonando
+nada). Se usa `get_metadata()` (`lib/rbcodec/metadata/metadata.h`),
+NO `get_temp_mp3entry()` (`playback.h`): ese es scratch memory del
+motor de reproducción, con su propio locking, pensado para otra cosa
+(espiar el siguiente track) -- usarlo aquí competiría con el hilo de
+audio por algo que no tiene relación. `get_metadata()` es un utility
+independiente; `tagcache.c` mismo lo usa igual, para leer tags de un
+archivo arbitrario sin relación con lo que esté sonando. El
+`mp3entry` de trabajo es `static` (no en el stack): la struct pesa
+~1.5-2.4KB (`ID3V2_BUF_SIZE` hasta 1800B + `id3v1buf[4][92]`=368B +
+`toc[100]`), demasiado para un stack frame cómodo en los hilos
+pequeños de Rockbox.
+
+**Downscale, no un segundo decode JPEG** (`downscale_to_tile()`,
+mismo archivo): decodifica una vez a 136×136 (el tamaño ya probado que
+usa Now Playing) y reescala los píxeles YA decodificados a 80×80 por
+nearest-neighbour -- deliberadamente NO un segundo decode JPEG a 80px,
+que arriesgaría el mismo hueco `JPEG_DECODE_OVERHEAD` que R3-F3
+encontró para fotos de artista (`docs/DESVIACIONES.md` R3-3) para
+cualquier carátula que caiga cerca de ese tamaño. Ambos tamaños son
+cuadrados, así que es un escalado simple, sin recorte "cover".
+
+**Bug real encontrado y corregido en el camino (no en el plan)**: `metro_albumart_decode_track_cover()`
+comparte `s_scratch`/`METRO_ALBUMART_SCRATCH_SIZE` con la caché-de-1 de
+`metro_albumart_load_current()` (`s_loaded_path`/`s_loaded`, la de Now
+Playing). Sin invalidación, decodificar la carátula de un álbum de
+Quickplay sobrescribiría el contenido de ese buffer sin que la
+caché-de-1 de Now Playing se enterara -- volver a Now Playing sobre la
+MISMA pista que ya estaba cacheada antes de visitar Quickplay serviría
+la carátula equivocada (la última que Quickplay decodificó), no la
+real. Corregido con `s_loaded = false;` al entrar a la función nueva,
+forzando un redecode real la próxima vez que se llame a
+`metro_albumart_load_current()`.
+
+**Segundo bug real, más grave, encontrado verificando el criterio de
+"el orden se conserva tras reiniciar el simulador"**: ver
+`docs/DESVIACIONES.md` R3-4 -- Metro nunca llama `tagcache_shutdown()`
+en ningún apagado, así que las escrituras encoladas (`playcount`/
+`playtime`/`lastplayed`, la cola async de `tagcache.c`) se perdían en
+cualquier apagado normal salvo que la cola se llenara sola (32
+entradas). Corregido en `metro_main.c`, en el propio manejo de
+`SYS_POWEROFF`/`SYS_REBOOT` que este archivo ya tenía.
+
+**Verificado en vivo** (simulador, `make install` primero): biblioteca
+sin historial → `LANG_QUICKPLAY_EMPTY` ("sin historial todavía --
+reproduce algo primero"), no un pivot vacío genérico ni tiles falsos.
+Tras reproducir tres álbumes reales en orden (First Light, Night
+Drive, Analog Dreams -- lo suficiente para que la cola de tagcache se
+desbordara sola y se volcara a disco), Quickplay los muestra en orden
+inverso de reproducción (más reciente primero) con su carátula real
+-- "Night Drive" (deliberadamente sin `cover.jpg` en los fixtures de
+prueba) cae al tile de acento con inicial "N", el fallback correcto,
+no un fallo. Seleccionar un tile entra a las canciones de ese álbum
+sin cambios respecto al pivot Álbumes existente. El mismo grid,
+byte-idéntico, aparece tras reiniciar el simulador de cero (sin tocar
+ningún botón salvo entrar a Música) -- confirma persistencia real en
+disco, no solo en RAM de ese proceso. Build limpio en sim y target
+(mismos warnings preexistentes de `tile_cols`/`empty_message`, nada
+nuevo). 6 suites de test de host en verde (678 checks), incluido un
+caso nuevo para el tope de pivots (`test_max_pivots_is_respected`).

@@ -130,7 +130,8 @@ void metro_screen_list_show(void)
     metro_draw_pivots(page, active, 0);
 
     if (pivot->count(pivot->ctx) == 0)
-        metro_widgets_draw_empty_state(metro_lang_str(LANG_EMPTY_LIST));
+        metro_widgets_draw_empty_state(metro_lang_str(
+            pivot->empty_message ? pivot->empty_message : LANG_EMPTY_LIST));
     else if (pivot->tile_cols > 0)
         metro_draw_tiles(pivot, metro_nav_first_visible(&s_nav), metro_nav_sel(&s_nav), 0);
     else

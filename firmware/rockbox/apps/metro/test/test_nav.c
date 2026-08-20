@@ -73,6 +73,21 @@ static void test_max_depth_is_respected(void)
     CHECK(metro_nav_depth(&nav) == METRO_NAV_MAX_DEPTH);
 }
 
+/* R3-F4/DD-5 (M-065): METRO_NAV_MAX_PIVOTS 6->8 -- Música's own pivot
+ * count (6, with Quickplay) now fits without clamping; this only
+ * guards the clamp itself still works at the new ceiling. */
+static void test_max_pivots_is_respected(void)
+{
+    metro_nav_t nav;
+    metro_nav_init(&nav, 1);
+
+    CHECK(metro_nav_push(&nav, METRO_NAV_MAX_PIVOTS));
+    CHECK(metro_nav_pivot_count(&nav) == METRO_NAV_MAX_PIVOTS);
+
+    CHECK(metro_nav_push(&nav, METRO_NAV_MAX_PIVOTS + 1)); /* still succeeds... */
+    CHECK(metro_nav_pivot_count(&nav) == METRO_NAV_MAX_PIVOTS); /* ...clamped */
+}
+
 static void test_pop_to_root(void)
 {
     metro_nav_t nav;
@@ -291,6 +306,7 @@ int main(void)
     test_push_pop();
     test_pop_at_root_is_noop();
     test_max_depth_is_respected();
+    test_max_pivots_is_respected();
     test_pop_to_root();
     test_pivot_no_wrap();
     test_selection_and_window_move();

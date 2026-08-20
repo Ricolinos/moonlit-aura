@@ -32,6 +32,7 @@
 #include "metro_video.h"
 #include "metro_photos.h"
 #include "metro_thumbs.h"
+#include "metro_albumart.h" /* R3-F4/DD-5 -- metro_albumart_decode_track_cover() */
 #include "metro_fsutil.h"
 #include "metro_settings.h"
 #include "metro_screen_photo_viewer.h"
@@ -263,6 +264,14 @@ static void build_photos_page(void)
  * cache overwritten by open_album_songs()/open_genre_songs() right
  * before each push. */
 
+/* R3-F4/DD-5 (M-065), DA-2: 8 tiles -- two full METRO_TILE_COLS rows,
+ * the plan's recommended default over 4 (one row, feels thin for a
+ * landing pivot) or 12 (a third partial row most screens won't even
+ * scroll to). */
+#define METRO_QUICKPLAY_MAX 8
+static metro_music_item_t s_quickplay[METRO_QUICKPLAY_MAX];
+static int s_quickplay_n;
+
 static metro_music_item_t s_artists[METRO_MUSIC_MAX_ITEMS];
 static int s_artists_n;
 static metro_music_item_t s_albums[METRO_MUSIC_MAX_ITEMS];
@@ -287,6 +296,11 @@ static void music_lists_refresh(void)
      * likely). */
     metro_thumbs_reset();
 
+    /* R3-F4/DD-5 (M-065): empty (0) on a library with no play history
+     * yet -- quickplay_pivot's empty_message (LANG_QUICKPLAY_EMPTY)
+     * covers that case, not a placeholder row. */
+    s_quickplay_n = metro_music_recent_albums(s_quickplay, METRO_QUICKPLAY_MAX);
+
     s_artists_n = metro_music_artists(s_artists, METRO_MUSIC_MAX_ITEMS);
     s_albums_n  = metro_music_albums(s_albums, METRO_MUSIC_MAX_ITEMS);
     s_songs_n   = metro_music_songs(s_songs, METRO_MUSIC_MAX_ITEMS);
@@ -301,6 +315,70 @@ static void music_lists_refresh(void)
      * above -- a photo added/changed by Studio mid-session shows up
      * next time Music is (re)entered, not stale from boot. */
     metro_music_reload_artist_images();
+}
+
+/* pivot: quickplay -> the most-recently-played albums (DA-1: first
+ * pivot of Música, the plan's recommended default -- the Zune-style
+ * "you'll probably want to keep listening to this" landing surface).
+ * on_select drills into that album's songs, same as the albums pivot
+ * below. R3-F4/DD-5 (M-065): tile art is resolved from a REPRESENTATIVE
+ * track of the album (its first song, alphabetically -- same order
+ * metro_music_songs_of_album() already returns), not
+ * audio_current_track() (nothing may even be playing right now). */
+static bool quickplay_thumb_cache_key(void *ctx, int index, char *out, size_t out_len)
+{
+    (void)ctx;
+
+    if (index < 0 || index >= s_quickplay_n)
+        return false;
+
+    /* Album seek alone, not a track path -- stable for as long as the
+     * album itself doesn't change, so a re-decode isn't forced just
+     * because quickplay's ORDER shifted (a different album moving to
+     * this same grid slot after more listening). */
+    snprintf(out, out_len, "album-%ld", (long)s_quickplay[index].seek);
+    return true;
+}
+
+static bool quickplay_thumb_decode(void *ctx, int index, fb_data *dst)
+{
+    metro_music_item_t track;
+    char path[MAX_PATH];
+    (void)ctx;
+
+    if (index < 0 || index >= s_quickplay_n)
+        return false;
+    if (metro_music_songs_of_album(s_quickplay[index].seek, &track, 1) < 1)
+        return false;
+    if (!metro_music_track_path(track.seek, path, sizeof(path)))
+        return false;
+
+    return metro_albumart_decode_track_cover(path, dst);
+}
+
+static const struct metro_thumb_source quickplay_thumb_source = {
+    "albums", quickplay_thumb_cache_key, quickplay_thumb_decode
+};
+
+static const fb_data *quickplay_pivot_get_tile(void *ctx, int index)
+{
+    return metro_thumbs_get(&quickplay_thumb_source, ctx, index);
+}
+
+static int quickplay_count(void *ctx) { (void)ctx; return s_quickplay_n; }
+
+static void quickplay_get_row(void *ctx, int index, struct metro_row *out)
+{
+    (void)ctx;
+    out->title = s_quickplay[index].label;
+    out->subtitle = s_quickplay[index].subtitle[0] ? s_quickplay[index].subtitle : NULL;
+    out->kind = METRO_ROW_NAV;
+}
+
+static void quickplay_on_select(void *ctx, int index)
+{
+    (void)ctx;
+    open_album_songs(s_quickplay[index].seek, s_quickplay[index].label);
 }
 
 /* pivot: artists -> on_select drills into that artist's albums, same
@@ -473,6 +551,10 @@ static void playlists_on_select(void *ctx, int index)
 }
 
 static const struct metro_pivot music_pivots[] = {
+    /* R3-F4/DD-5 (M-065), DA-1: first pivot -- the plan's recommended
+     * default (open for the owner to flip at this phase's PARADA). */
+    { LANG_PIVOT_QUICKPLAY, quickplay_count, quickplay_get_row, quickplay_on_select, NULL,
+      METRO_TILE_COLS, quickplay_pivot_get_tile, LANG_QUICKPLAY_EMPTY },
     { LANG_PIVOT_ARTISTS,   artists_count,   artists_get_row,   artists_on_select,   NULL,
       METRO_TILE_COLS, artist_pivot_get_tile },
     { LANG_PIVOT_ALBUMS,    albums_count,    albums_get_row,    albums_on_select,    NULL },
@@ -480,7 +562,7 @@ static const struct metro_pivot music_pivots[] = {
     { LANG_PIVOT_GENRES,    genres_count,    genres_get_row,    genres_on_select,    NULL },
     { LANG_PIVOT_PLAYLISTS, playlists_count, playlists_get_row, playlists_on_select, NULL },
 };
-static const struct metro_page music_page = { LANG_HUB_MUSIC, music_pivots, 5, NULL };
+static const struct metro_page music_page = { LANG_HUB_MUSIC, music_pivots, 6, NULL };
 
 /* Shared "songs of one album" subpage -- reached from either the
  * top-level albums pivot or an artist's albums (only one such page can

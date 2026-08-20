@@ -26,8 +26,10 @@
 #include "jpeg_load.h"
 #include "bmp.h"
 #include "string-extra.h"
+#include "metadata.h" /* get_metadata() -- R3-F4/DD-5 */
 
 #include "metro_albumart.h"
+#include "metro_draw.h" /* METRO_TILE_SIZE */
 
 /* NOT just width*height*sizeof(fb_data) -- FORMAT_RESIZE needs real
  * working room beyond the final bitmap (JPEG_DECODE_OVERHEAD,
@@ -167,4 +169,77 @@ bool metro_albumart_load_background(void)
 const fb_data *metro_albumart_background_bitmap(void)
 {
     return (const fb_data *)s_bg_scratch;
+}
+
+/* R3-F4/DD-5 (M-065): nearest-neighbour downscale of an ALREADY-DECODED
+ * METRO_ALBUMART_SIZE x METRO_ALBUMART_SIZE bitmap to a
+ * METRO_TILE_SIZE x METRO_TILE_SIZE one -- pure pixel resampling, no
+ * JPEG involved, so it can't hit the JPEG_DECODE_OVERHEAD gap a second
+ * from-JPEG decode at 80px would risk for a cover near that size
+ * (docs/DESVIACIONES.md R3-3). Both sizes are square, so this is a
+ * plain scale, no cover-crop math needed. */
+static void downscale_to_tile(const fb_data *src, fb_data *out)
+{
+    int oy, ox;
+
+    for (oy = 0; oy < METRO_TILE_SIZE; oy++)
+    {
+        int sy = oy * METRO_ALBUMART_SIZE / METRO_TILE_SIZE;
+        for (ox = 0; ox < METRO_TILE_SIZE; ox++)
+        {
+            int sx = ox * METRO_ALBUMART_SIZE / METRO_TILE_SIZE;
+            out[oy * METRO_TILE_SIZE + ox] = src[sy * METRO_ALBUMART_SIZE + sx];
+        }
+    }
+}
+
+/* Own static mp3entry -- struct mp3entry is ~1.5-2KB (ID3V2_BUF_SIZE
+ * alone is up to 1800B, lib/rbcodec/metadata/metadata.h), too big for
+ * a comfortable stack frame on Rockbox's small per-thread stacks (same
+ * "D-226 stack concern" class of buffer metro_music.c already avoids
+ * putting on the stack). Deliberately NOT get_temp_mp3entry()
+ * (playback.h): that one is playback-engine scratch memory with its
+ * own locking, for a different purpose (peeking at the next track) --
+ * using it here would mean contending with the audio thread for
+ * something that has nothing to do with it. get_metadata() itself is
+ * a standalone utility, not tied to that machinery -- tagcache.c calls
+ * it the same way, for the same reason (reading tags from an arbitrary
+ * file, independent of what's playing). */
+static struct mp3entry s_track_id3;
+
+bool metro_albumart_decode_track_cover(const char *track_path, fb_data *out)
+{
+    char art_path[MAX_PATH];
+    struct dim dim = { METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE };
+    bool ok;
+
+    /* Shares s_scratch with metro_albumart_load_current()'s own "cache
+     * of 1" (Now Playing's screens and Quickplay's grid are never on
+     * screen at once, so there's no *concurrent* use) -- but its
+     * bookkeeping (s_loaded/s_loaded_path) has no way to know this
+     * function just overwrote the buffer's CONTENTS for an unrelated
+     * track. Without this, returning to Now Playing on the same track
+     * that was already cached before a Quickplay visit would trust the
+     * stale flag and serve whatever album cover Quickplay decoded
+     * last, not the real one -- force a real redecode next time
+     * instead. */
+    s_loaded = false;
+
+    if (!get_metadata(&s_track_id3, -1, track_path))
+        return false;
+
+    if (find_albumart(&s_track_id3, art_path, sizeof(art_path), &dim))
+        ok = decode_file_into(art_path, s_scratch, sizeof(s_scratch),
+                              METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE,
+                              FORMAT_NATIVE | FORMAT_RESIZE | FORMAT_KEEP_ASPECT);
+    else
+        ok = decode_embedded_into(&s_track_id3, s_scratch, sizeof(s_scratch),
+                                  METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE,
+                                  FORMAT_NATIVE | FORMAT_RESIZE | FORMAT_KEEP_ASPECT);
+
+    if (!ok)
+        return false;
+
+    downscale_to_tile((const fb_data *)s_scratch, out);
+    return true;
 }

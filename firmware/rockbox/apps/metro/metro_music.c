@@ -346,6 +346,110 @@ int metro_music_albums(metro_music_item_t *out, int max)
     return n;
 }
 
+/* R3-F4/DD-5 (M-065): Quickplay's own query -- "the N albums with the
+ * most recent tag_lastplayed among any of their tracks". No agrupada
+ * query exists for this (INVESTIGACION-metro-r3.md D.2): tag_lastplayed
+ * is a per-TRACK numeric tag, not something tagcache can group/sort
+ * albums by directly. Scans every track -- keyed by tag_filename, not
+ * tag_title, on purpose: filenames are inherently unique, so there's
+ * no risk of two different tracks silently colliding into one result
+ * the way a uniqbuf'd tag_title scan (run_search()'s own pattern)
+ * would for two same-named songs on different albums, which would
+ * undercount real plays. Aggregates max(lastplayed) per album NAME in
+ * a local table (no cap on the SCAN itself, only on how many distinct
+ * albums it can hold -- D.2's own concern about METRO_MUSIC_MAX_ITEMS
+ * biasing toward the first tracks in index order doesn't apply here,
+ * every track gets visited), then resolves each of the top `max`
+ * picks back to a real metro_music_albums() entry (its actual
+ * tag_album seek, needed for on_select() to filter tracks by it) by
+ * matching the album name -- reuses that function's own proven
+ * grouping instead of reaching into tagcache's internal seek scheme
+ * directly. */
+struct metro_music_recent_agg {
+    char album[METRO_MUSIC_ITEM_LEN];
+    long lastplayed;
+};
+
+int metro_music_recent_albums(metro_music_item_t *out, int max)
+{
+    struct tagcache_search tcs;
+    char buf[MAX_PATH];
+    /* static: 300 * ~72 =~ 21KB, same D-226 stack concern as the other
+     * large tables in this file. */
+    static struct metro_music_recent_agg agg[METRO_MUSIC_MAX_ITEMS];
+    static metro_music_item_t all_albums[METRO_MUSIC_MAX_ITEMS];
+    int agg_n = 0;
+    int all_n, i, a, b, out_n;
+
+    if (!tagcache_is_usable())
+        return 0;
+
+    if (!tagcache_search(&tcs, tag_filename))
+        return 0;
+    tagcache_search_set_uniqbuf(&tcs, s_uniqbuf, sizeof(s_uniqbuf));
+
+    while (tagcache_get_next(&tcs, buf, sizeof(buf)))
+    {
+        long lastplayed = tagcache_get_numeric(&tcs, tag_lastplayed);
+        char album[METRO_MUSIC_ITEM_LEN];
+
+        if (lastplayed <= 0)
+            continue; /* never played -- doesn't affect "most recent" */
+        if (!tagcache_retrieve(&tcs, tcs.idx_id, tag_album, album, sizeof(album)) ||
+            !strcmp(album, UNTAGGED))
+            continue; /* no meaningful album to resume into */
+
+        for (i = 0; i < agg_n; i++)
+            if (!strcmp(agg[i].album, album))
+                break;
+
+        if (i == agg_n)
+        {
+            if (agg_n >= METRO_MUSIC_MAX_ITEMS)
+                continue; /* distinct-album index full -- same 300 cap as everywhere else */
+            strlcpy(agg[i].album, album, sizeof(agg[i].album));
+            agg[i].lastplayed = lastplayed;
+            agg_n++;
+        }
+        else if (lastplayed > agg[i].lastplayed)
+        {
+            agg[i].lastplayed = lastplayed;
+        }
+    }
+    tagcache_search_finish(&tcs);
+
+    /* Insertion sort by lastplayed descending -- agg_n capped at 300,
+     * same shape as the sort insert_matching_tracks() already does
+     * above for a whole library's worth of tracks. */
+    for (a = 1; a < agg_n; a++)
+    {
+        struct metro_music_recent_agg key = agg[a];
+        b = a - 1;
+        while (b >= 0 && agg[b].lastplayed < key.lastplayed)
+        {
+            agg[b + 1] = agg[b];
+            b--;
+        }
+        agg[b + 1] = key;
+    }
+
+    /* Resolve each pick's real tag_album seek -- see the function's
+     * own doc comment above for why. */
+    all_n = metro_music_albums(all_albums, METRO_MUSIC_MAX_ITEMS);
+    out_n = 0;
+    for (i = 0; i < agg_n && out_n < max; i++)
+    {
+        for (a = 0; a < all_n; a++)
+            if (!strcmp(all_albums[a].label, agg[i].album))
+            {
+                out[out_n] = all_albums[a];
+                out_n++;
+                break;
+            }
+    }
+    return out_n;
+}
+
 int metro_music_songs(metro_music_item_t *out, int max)
 {
     return run_search(tag_title, -1, 0, out, max);
@@ -369,6 +473,21 @@ int metro_music_albums_of_artist(int32_t artist_seek, metro_music_item_t *out, i
 int metro_music_songs_of_album(int32_t album_seek, metro_music_item_t *out, int max)
 {
     return run_search(tag_title, tag_album, album_seek, out, max);
+}
+
+bool metro_music_track_path(int32_t idx_id, char *out, size_t outsz)
+{
+    struct tagcache_search tcs;
+    bool ok;
+
+    if (!tagcache_is_usable())
+        return false;
+    if (!tagcache_search(&tcs, tag_filename))
+        return false;
+
+    ok = tagcache_retrieve(&tcs, idx_id, tag_filename, out, outsz);
+    tagcache_search_finish(&tcs);
+    return ok;
 }
 
 int metro_music_songs_of_genre(int32_t genre_seek, metro_music_item_t *out, int max)

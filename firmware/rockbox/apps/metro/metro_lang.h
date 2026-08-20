@@ -138,6 +138,9 @@ enum metro_lang_id {
     LANG_NP_LYRICS,
     LANG_VALUE_UNAVAILABLE,
 
+    LANG_PIVOT_QUICKPLAY,
+    LANG_QUICKPLAY_EMPTY,
+
     LANG_COUNT
 };
 

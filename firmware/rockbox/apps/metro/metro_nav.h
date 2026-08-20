@@ -36,7 +36,10 @@
  * user was (pivot + selection), per level -- matching the Zune 30. */
 
 #define METRO_NAV_MAX_DEPTH  8
-#define METRO_NAV_MAX_PIVOTS 6
+/* R3-F4/DD-5 (M-065): 6->8 -- Música gana un 6to pivot (Quickplay), and
+ * a little headroom past exactly-6 so a future pivot doesn't need
+ * another one-line bump right away. */
+#define METRO_NAV_MAX_PIVOTS 8
 
 struct metro_nav_frame {
     int npivots;

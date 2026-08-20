@@ -64,6 +64,16 @@ void metro_apply_hygiene(void)
     global_settings.talk_menu = false;
     global_settings.clear_settings_on_hold = false;
     global_settings.tagcache_ram = true;
+    /* R3-F4/DD-4 (M-065): Quickplay needs tag_lastplayed, and Rockbox
+     * never writes it unless this is on -- default is false, and
+     * Metro has no menu of its own to expose it (INVESTIGACION-metro-r3.md
+     * D.1: the writers, tagtree_buffer_event()/tagtree_track_finish_event(),
+     * are already registered unconditionally from apps/main.c's own
+     * tagtree_init() -- only the flag gating them was ever missing).
+     * Purely local (the device's own playback history, on its own
+     * disk, never sent anywhere) -- same "decide it for the user"
+     * class as every other setting forced here. */
+    global_settings.runtimedb = true;
     global_settings.keyclick = 0;              /* M-008: piezo off by default */
 #ifdef USB_ENABLE_HID
     global_settings.usb_hid = false;
@@ -280,7 +290,25 @@ void metro_main(void)
             if (action == SYS_USB_CONNECTED)
                 metro_screen_usb_show();
             else if (action == SYS_POWEROFF || action == SYS_REBOOT)
+            {
                 draw_shutdown_screen();
+                /* R3-F4/DD-5 (M-065): stock Rockbox flushes tagcache's
+                 * async command queue (queued playcount/lastplayed/
+                 * rating writes, tagcache.c's CMD_UPDATE_NUMERIC) via
+                 * tree_flush() -> tagcache_shutdown(), called from deep
+                 * inside root_menu()'s own shutdown path. Metro replaces
+                 * root_menu() entirely (main.c's own comment, apps/tree.c
+                 * is off-limits per this file's header) so that call
+                 * never happened -- found while verifying Quickplay's
+                 * "order survives a restart" criterion: a normal
+                 * shutdown was silently dropping whatever hadn't been
+                 * force-flushed yet (the queue only self-flushes at 32
+                 * pending entries, tagcache.c's
+                 * TAGCACHE_COMMAND_QUEUE_LENGTH). Same risk for R3-F5's
+                 * ratings import, next phase -- fixing here, once, in
+                 * Metro's own shutdown handling rather than per-feature. */
+                tagcache_shutdown();
+            }
 
             if (default_event_handler(action) == SYS_USB_CONNECTED)
             {

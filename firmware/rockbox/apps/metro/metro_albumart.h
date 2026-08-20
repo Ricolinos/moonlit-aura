@@ -17,13 +17,14 @@
  * KIND, either express or implied.
  *
  ****************************************************************************/
-/* Album art for the currently playing track only (PLAN_MAESTRO.md S1.4,
- * S1.2 "cache de 1"). Deliberately narrower than Aura-Firmware's
- * aura_albumart.c: no disk-cached .pfraw, no precache pass, no
- * per-album lookups from tagcache seeks -- Metro only ever needs the
- * ONE track audio_current_track() is pointing at, so there is nothing
- * to precompute ahead of time and no cache-invalidation problem beyond
- * "did the path change".
+/* Album art for the currently playing track (PLAN_MAESTRO.md S1.4,
+ * S1.2 "cache de 1"), plus (R3-F4/DD-5, M-065) a standalone resolver
+ * for an ARBITRARY track's art -- Quickplay needs a representative
+ * cover per album, not just the one audio_current_track() points at.
+ * Still narrower than Aura-Firmware's aura_albumart.c: no disk-cached
+ * .pfraw, no precache pass -- metro_thumbs.c's own RAM window + disk
+ * cache (DD-1) already covers that for whichever tiles are on screen,
+ * there's no reason to duplicate it here.
  */
 #ifndef METRO_ALBUMART_H
 #define METRO_ALBUMART_H
@@ -58,5 +59,22 @@ bool metro_albumart_load_background(void);
 /* Valid only right after metro_albumart_load_background() returned
  * true -- LCD_WIDTH x LCD_HEIGHT, row-major, native LCD format. */
 const fb_data *metro_albumart_background_bitmap(void);
+
+/* R3-F4/DD-5 (M-065): resolves and decodes art for `track_path` (any
+ * real track file, not necessarily the one playing) straight into
+ * `out` -- METRO_TILE_SIZE x METRO_TILE_SIZE (metro_draw.h), ready for
+ * metro_thumbs.c's "albums" source. Reads the track's own tags via
+ * get_metadata() (folder art needs id3->path/album, embedded art needs
+ * the real has_embedded_albumart/albumart.* fields -- a hand-built
+ * stand-in mp3entry with just a path would silently never find
+ * embedded art). Decodes at METRO_ALBUMART_SIZE first (the same
+ * already-proven-safe target metro_albumart_load_current() uses for
+ * covers of any real-world size) and downscales the ALREADY-DECODED
+ * PIXELS to the tile size -- not a second JPEG decode at 80px, which
+ * would risk the exact JPEG_DECODE_OVERHEAD gap R3-F3 hit for artist
+ * photos (docs/DESVIACIONES.md R3-3) for any cover landing near that
+ * size. Returns false if the track has no metadata Rockbox can read,
+ * or no art at all -- caller falls back to the usual accent tile. */
+bool metro_albumart_decode_track_cover(const char *track_path, fb_data *out);
 
 #endif /* METRO_ALBUMART_H */

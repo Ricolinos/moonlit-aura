@@ -76,6 +76,16 @@ struct metro_pivot {
      * needed because they don't have a "picture"). */
     int tile_cols;
     const fb_data *(*get_tile)(void *ctx, int index);
+
+    /* R3-F4/DD-5 (M-065): appended at the end, same reasoning as
+     * tile_cols/get_tile above -- every existing positional
+     * initializer keeps working (defaults to 0). 0 means "no custom
+     * message, use the generic LANG_EMPTY_LIST" (metro_screen_list.c).
+     * A pivot whose emptiness means something more specific than "not
+     * synced yet" -- Quickplay's "sin historial todavía" would be
+     * actively wrong advice if it said "sincroniza con Aura Studio" --
+     * sets this to its own lang id instead. */
+    enum metro_lang_id empty_message;
 };
 
 struct metro_page {

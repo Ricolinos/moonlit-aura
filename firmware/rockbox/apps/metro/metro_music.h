@@ -72,6 +72,21 @@ int metro_music_albums(metro_music_item_t *out, int max);
 int metro_music_songs(metro_music_item_t *out, int max);
 int metro_music_genres(metro_music_item_t *out, int max);
 
+/* R3-F4/DD-5 (M-065): the `max` albums with the most recent
+ * tag_lastplayed among any of their tracks, most recent first --
+ * requires global_settings.runtimedb (metro_apply_hygiene() turns it
+ * on) to have anything to return at all. Empty (0) on a library with
+ * no play history yet, never a partially-wrong guess. */
+int metro_music_recent_albums(metro_music_item_t *out, int max);
+
+/* R3-F4/DD-5 (M-065): resolves the real file path for `idx_id` (a
+ * metro_music_item_t.seek from a tag_title search, e.g. one
+ * metro_music_songs_of_album() returned) -- Quickplay's tile decode
+ * needs a real path to hand to metro_albumart_decode_track_cover(),
+ * which reads the track's tags itself via get_metadata() rather than
+ * trusting anything tagcache already has cached for it. */
+bool metro_music_track_path(int32_t idx_id, char *out, size_t outsz);
+
 int metro_music_albums_of_artist(int32_t artist_seek,
                                   metro_music_item_t *out, int max);
 int metro_music_songs_of_album(int32_t album_seek,

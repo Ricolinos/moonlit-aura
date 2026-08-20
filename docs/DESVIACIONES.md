@@ -541,3 +541,93 @@ solo cambia el tamaño), lo que apuntó directo al escalón de DCT.
 esta corrección es lo que lo hizo posible. Vale la pena que R3-F4
 (quickplay, también sobre este motor) tenga esto presente si sus
 carátulas de álbum llegan a decodificarse cerca del tamaño del tile.
+
+---
+
+## R3-4 — Quickplay: Metro nunca vacía la cola async de tagcache en ningún apagado (no solo el arnés headless de pruebas)
+
+**No estaba en el plan** (el plan sí anticipaba, con otro número
+provisional, que `runtimedb` estaba apagado sin UI propia -- eso ya
+está cubierto arriba, en el propio M-065 de `DECISIONS.md`. Esta
+entrada es un hallazgo **distinto y más grave**, encontrado al
+verificar el criterio de "hecho" de R3-F4 "el orden se conserva tras
+reiniciar el simulador").
+
+**Qué se encontró**: tras reproducir un álbum completo y reiniciar el
+simulador de cero (proceso nuevo, headless, `METRO_SIM_AUTODUMP_QUIT`),
+Quickplay aparecía vacío -- ninguna escritura de `tag_lastplayed`
+había sobrevivido. La lectura (`metro_music_recent_albums()`) estaba
+bien: el problema era que la escritura nunca llegó a disco.
+
+**Causa raíz**: `tagtree_track_finish_event()` (`apps/tagtree.c`) no
+escribe `tag_lastplayed`/`tag_playcount`/`tag_playtime` directo a
+disco -- los **encola** vía `tagcache_update_numeric()` →
+`queue_command()` (`apps/tagcache.c`), un buffer circular de 32
+entradas que el hilo de tagcache solo vacía (`run_command_queue()`)
+cuando (a) el buffer se llena, o (b) alguien llama
+`tagcache_shutdown()` con `force=true`. En Rockbox normal,
+`tagcache_shutdown()` se llama desde `tree_flush()`
+(`apps/tree.c`), invocado a su vez desde el propio bucle de
+`root_menu()` al salir. **Metro reemplaza `root_menu()` por
+completo** (comentario del propio `apps/main.c`, y `apps/tree.c` está
+explícitamente prohibido desde `apps/metro/` por este mismo
+`CLAUDE.md`) -- así que esa llamada nunca ocurre. Esto no es un
+artefacto del arnés de pruebas headless: es un hueco real en el propio
+apagado de Metro, en **cualquier** apagado normal (`SYS_POWEROFF`/
+`SYS_REBOOT`, sim o hardware real), no solo en el `exit(0)` abrupto de
+`METRO_SIM_AUTODUMP_QUIT`. Una sesión con pocas reproducciones (menos
+de 32 escrituras encoladas, el caso normal) perdía su historial de
+reproducción -- y, a partir de R3-F5, también perdería calificaciones
+recién importadas -- en cualquier apagado normal, silenciosamente, sin
+ningún síntoma visible hasta la siguiente vez que se consultara ese
+dato.
+
+**Cómo se encontró**: verificación en vivo del propio criterio de
+"hecho" de R3-F4. La primera corrida con 12 reproducciones (3 álbumes
+completos, deliberadamente muchas para esta verificación) sí persistió
+-- porque 12 pistas × 4 comandos encolados cada una supera las 32
+entradas del buffer, desbordándolo y forzando un volcado automático a
+mitad de la sesión, sin que el apagado tuviera nada que ver. Eso
+enmascaró el problema real hasta que se leyó `tagcache.c` a fondo para
+entender POR QUÉ había funcionado -- no porque el apagado limpio
+funcionara, sino a pesar de que no funciona.
+
+**Qué se hizo**: `metro_main.c`, en el `case SYS_POWEROFF: case
+SYS_REBOOT:` que este archivo ya tenía (dibuja la pantalla de apagado,
+llama `default_event_handler()`), se agregó una llamada a
+`tagcache_shutdown()` antes de ceder el control a
+`default_event_handler()` -- mismo efecto que la llamada real de
+`tree_flush()` que Metro nunca ejercita, sin necesitar `apps/tree.c`
+para nada. Cambio contenido enteramente en `apps/metro/metro_main.c`
+(el propio archivo ya tiene `tagcache.h` incluido) -- no toca ningún
+archivo de Rockbox fuera de `apps/metro/`, así que no aplica la regla
+de `MODIFICATIONS.md`/parada-antes-de-escribir de la sección "Reglas
+de todas las fases" del plan maestro.
+
+**No verificado de forma aislada en el simulador headless**: probar
+específicamente ESTE camino (una sesión con pocas reproducciones,
+apagado limpio vía el token `POWEROFF` de `sim_shot.sh`, verificar que
+sobrevive) se dejó fuera de esta fase -- `shutdown_hw()` involucra
+código de plataforma (`firmware/powermgmt.c`) cuyo comportamiento
+exacto en el simulador headless no está mapeado, y sesiones previas
+(`docs/DESVIACIONES.md` F2-2/F2-3) ya documentaron que ciclos largos
+del hilo `sim_thread` en modo headless pueden disparar condiciones de
+carrera de AppKit/SDL específicas de este entorno. La verificación de
+R3-F4 en sí (`docs/screenshots/R3-F4-quickplay.png`) se apoyó en el
+desbordamiento natural del buffer (32 entradas), no en este fix, así
+que el criterio de "hecho" de la fase queda cumplido igual sin
+depender de código no verificado en vivo. El fix en sí es de bajo
+riesgo (llama una función pública ya usada por Rockbox exactamente
+para este propósito, en el mismo lugar donde el propio `metro_main.c`
+ya maneja el mismo evento) pero **queda pendiente de una verificación
+interactiva real** -- el dueño puede confirmarlo con una sesión corta
+(reproducir un track, cerrar la ventana del simulador con el botón de
+apagado real en vez de `sim_shot.sh`, reabrir y revisar Quickplay) o
+dejarlo para la verificación de hardware real de R3-F9.
+
+**Impacto en `PLAN-metro-r3-maestro.md`**: ninguno en el criterio de
+"hecho" de R3-F4 en sí (verificado por otra vía, arriba). Si no se
+verifica interactivamente antes de R3-F9, ese es el lugar natural para
+cerrarlo del todo -- ya está en el alcance de esa fase ("simulador
+primero; hardware real solo en R3-F9"). R3-F5 (calificaciones) hereda
+el mismo fix sin trabajo adicional, al reusar la misma cola.
