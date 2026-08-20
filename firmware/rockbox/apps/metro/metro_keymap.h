@@ -77,6 +77,7 @@ enum metro_context {
     MCTX_DIALOG,
     MCTX_PLAYER,
     MCTX_VIEWER, /* R2-F3: photo viewer (DD-10) */
+    MCTX_LOCK,   /* R3-F7: PIN entry on the screen lock (DD-8) */
 };
 
 /* get_context_map callback for get_custom_action() -- pass this

@@ -688,3 +688,63 @@ código. Vale la pena que cualquier verificación futura que dependa de
 pause la reproducción primero -- de lo contrario el resultado depende
 de cuántos botones hay que inyectar antes de llegar al punto de
 control, no de lo que en realidad se está probando.
+
+---
+
+## R3-6 — Candado por PIN: Metro NO porta el parche a `apps/misc.c` de D-238, y el caso borde no obvio desaparece por construcción
+
+**Esto no es una desviación del plan sino su cumplimiento** -- DD-8 lo
+decidió de antemano y esta entrada documenta el resultado real, como
+pedía la lista de archivos de R3-F7. Se anota aquí porque quien compare
+los dos firmwares va a ver un archivo de core parchado en Aura-Firmware
+y ninguno en Metro, y merece saber que fue deliberado.
+
+**Qué hace Aura-Firmware** (`aura_screenlock.c`, `aura_main.c:378-395`,
+consultados read-only): mientras el candado está activo, intercepta
+`SYS_USB_CONNECTED` **antes** de `default_event_handler()` y lo
+**difiere** -- guarda el evento y su `seqnum`, y solo lo reproduce
+después de que el usuario acierte la clave. Eso exige ~28 líneas nuevas
+en `apps/misc.c` (`default_event_handler_deferred_usb()`), un archivo
+de **core**, porque el manejador estándar monta el disco vía
+`gui_usb_screen_run()` sin preguntar nada.
+
+**Qué hace Metro**: nada de eso. Una conexión USB durante el bloqueo se
+atiende **normal**, igual que en cualquier otro momento.
+
+**Por qué**: el parche compra muy poco. El volumen es FAT **sin
+cifrar**: cualquiera con el cable lee el disco entero, con candado o
+sin él. Diferir el montaje protege la *interfaz*, no los *datos* -- y
+la interfaz ya está protegida por el candado mismo. A cambio cuesta un
+archivo de core modificado (con su entrada en `MODIFICATIONS.md` y su
+deuda de mantenimiento en cada rebase de Rockbox) más un caso borde
+genuinamente no obvio: `button_get_data()` es una global de "último
+dato crudo", no una cola, así que el `seqnum` hay que capturarlo en el
+instante exacto de la conexión o los dígitos del PIN lo pisan; y
+además hay que revisar `usb_inserted()` antes de reproducir el evento,
+porque `SYS_USB_DISCONNECTED` no pasa por esa misma cola y sin ese
+chequeo el aparato se quedaría esperando un desenchufe que ya ocurrió.
+
+**Lo importante**: Metro no se "pierde" ese caso borde por descuido --
+**el caso borde deja de existir**. Sin diferimiento no hay `seqnum` que
+capturar, no hay evento que reproducir, y no hay estado pendiente que
+pueda quedar desincronizado. Menos código, menos superficie de core, y
+un comportamiento más fácil de explicar.
+
+**Consecuencia deliberada, dicha con todas sus letras en la ayuda**:
+Metro **no ofrece protección de datos**. `docs/ESTADO_FINAL.md` lo
+declara en esas palabras, junto con que la clave se guarda en texto
+plano y que no hay límite de intentos.
+
+**Y el efecto lateral que resultó ser una ventaja**: como el USB sigue
+vivo con el candado puesto, la **salida de emergencia** (borrar dos
+líneas de `aura.cfg` para quitar un PIN olvidado) es alcanzable desde
+el propio aparato bloqueado. En Aura-Firmware, que sí difiere el USB,
+esa salida **no existe** -- ni está documentada de aquel lado. Metro la
+volvió criterio de "Hecho" de la fase y la probó de verdad, no solo la
+escribió.
+
+**Impacto en `PLAN-metro-r3-maestro.md`**: ninguno; DD-8 se cumplió tal
+cual. Nota de numeración: el plan llamaba prospectivamente "R3-4" a
+esta entrada; los números de `DESVIACIONES.md` se asignan en orden real
+de ejecución, y R3-4/R3-5 ya los consumieron hallazgos de R3-F4/R3-F5
+(mismo precedente que M-056/M-057 en `DECISIONS.md`).

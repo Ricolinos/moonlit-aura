@@ -2051,3 +2051,114 @@ suites de test de host en verde (678 checks, sin cambios --
 `metro_screen_settings.c` depende de `firmware/powermgmt.c`/
 `lib/rbcodec/dsp/eq.c` reales, no host-testeable, mismo patrón que
 `metro_sync.c`/`metro_screen_nowplaying.c` en R3-F5).
+
+## M-068 — R3-F7: candado de interfaz por PIN, sin parche de core y con salida de emergencia probada
+
+**Contexto**: séptima fase de la ronda 3 (`PLAN-metro-r3-maestro.md`
+DD-8), la única que intercepta el bucle principal antes del despacho de
+pantallas -- por eso el plan la marcaba para escalar de modelo. Clave de
+4 dígitos marcada con la rueda, tres estados, persistencia en
+`aura.cfg`, y la salida de emergencia como parte del criterio de
+"Hecho", no como extra.
+
+**Lo que NO se hizo, y es la decisión central**: Aura-Firmware (D-238)
+parcha `apps/misc.c` -- un archivo de **core** -- para diferir el
+montaje USB mientras el candado está activo. Metro no. El volumen es
+FAT sin cifrar: diferir el montaje protege la interfaz, no los datos, y
+la interfaz ya la protege el candado. Detalle completo del costo evitado
+(incluido el caso borde del `seqnum`, que **deja de existir** en vez de
+quedar sin resolver) en `docs/DESVIACIONES.md` R3-6. Consecuencia
+deliberada y declarada en la ayuda: **Metro no ofrece protección de
+datos**.
+
+**Tres estados** (`metro_screen_lock.h`): NONE (sin clave), ARMED (con
+clave, desbloqueado en esta sesión) y ACTIVE (bloqueando ahora).
+Configurar la clave deja ARMED, **no** ACTIVE -- el dueño acaba de
+entrar a Ajustes, no tiene sentido bloquearlo en ese instante; el
+candado se cobra en el siguiente arranque. Aura llegó al mismo diseño
+pero por el camino largo: con un solo booleano recibió reportes del
+dueño en las dos direcciones (configurar "no servía de nada" / bloqueaba
+de inmediato). **Rearmar en cada arranque, incondicionalmente**, es la
+única parte del diseño de Aura que se copia tal cual, porque su
+razonamiento es correcto y no obvio: todo apagado real termina sin
+retorno, así que forzar la condición al arrancar cierra de golpe todos
+los caminos de apagado (`SYS_POWEROFF`, batería crítica, el hold de PLAY
+del driver) sin interceptar cada uno ni arriesgar que un camino nuevo se
+olvide de rearmar.
+
+**Interceptación** (`metro_main.c`): dos llamadas, cada una con su
+razón. Una en el arranque, después de `metro_screen_list_init()` y
+**antes** de `metro_disk_handoff()` -- si fuera después, la pantalla de
+"actualizando biblioteca" (`metro_run_sync_screen_if_needed()`) se
+dibujaría por encima del candado. Otra al principio del `while(1)`,
+antes de calcular el contexto y de cualquier despacho: es **esa** línea,
+y no el orden de las llamadas de arranque, la que vuelve
+*estructuralmente* cierto que ninguna otra pantalla es alcanzable con
+el candado puesto. La pantalla corre su propio bucle de entrada, el
+mismo patrón modal que `metro_run_sync_screen_if_needed()` y
+`metro_widgets_confirm()` ya usaban -- no hubo que reestructurar el
+despacho.
+
+**Dos mejoras deliberadas sobre Aura**, ambas verificadas en vivo:
+
+1. **Retroceso con MENU.** Aura no tiene: equivocarse a media clave
+   obliga allá a completar los cuatro dígitos y fallar a propósito. En
+   Metro MENU borra el dígito anterior; en el primero, cancela al
+   configurar y no hace nada al desbloquear (no existe un "cancelar"
+   legítimo ahí).
+2. **Falla ABIERTO, nunca cerrado.** La clave se guarda como **cadena**
+   de 4 dígitos, no como entero. Con entero -- como Aura -- `"0000"` y
+   "clave ausente" son el mismo valor 0, así que un `aura.cfg` con
+   `screen_lock_enabled: 1` pero sin línea de clave deja el aparato
+   bloqueado con una clave que nadie configuró. Metro valida que sean
+   exactamente 4 dígitos y trata cualquier otra cosa (ausente, truncada,
+   con letras) como "sin candado". Verificado con los tres casos
+   corruptos: ninguno bloquea.
+
+**Persistencia**: `screen_lock` y `screen_lock_pin` en `aura.cfg`, texto
+plano y dicho así en la documentación -- coherente con que el candado
+sea de interfaz. Se escriben **solo cuando hay candado**, no como un
+`screen_lock: 0` permanente: así la salida de emergencia ("borra estas
+dos líneas") deja un archivo que no las vuelve a hacer crecer solo.
+
+**Salida de emergencia** (`docs/ESTADO_FINAL.md` + `docs/GUIA_FLASHEO.md`):
+conectar por USB -- posible **porque** Metro no difiere el USB, ver
+arriba -- y borrar las dos líneas. Surte efecto sin reiniciar: la
+pantalla de candado relee los ajustes del disco al terminar cada sesión
+USB. Ese `metro_settings_load()` cubre además el reverso, que era el
+riesgo real de no hacerlo: sin releer, un guardado posterior habría
+regenerado el `aura.cfg` desde la copia vieja en RAM y **resucitado la
+clave recién borrada**. Aura-Firmware no tiene esta salida ni la
+documenta.
+
+**Teclas**: contexto `MCTX_LOCK` propio. Rueda marca el dígito, SELECT
+confirma y avanza, MENU retrocede. LEFT/RIGHT/PLAY y MENU sostenido
+quedan **sin mapear a propósito** -- con el candado puesto el aparato no
+debe ofrecer ningún control, ni siquiera play/pausa, y no mapearlos es
+lo que garantiza que resuelvan a `ACTION_NONE`. `metro_input_next()` se
+llama con timeout (HZ/2), no bloqueando: el encabezado trae reloj y
+batería y tiene que refrescarse solo (Aura bloquea indefinidamente y su
+pantalla de candado no tiene reloj).
+
+**Verificado en vivo** (simulador, `make install` primero), los ocho
+criterios de la fase: `docs/screenshots/R3-F7-lock-setup.png`
+(configurar), `R3-F7-lock-confirm.png` (segunda captura) y
+`R3-F7-locked.png` (desbloqueo al arrancar, tras reiniciar el simulador
+con la clave ya guardada). La clave marcada llegó a `aura.cfg` como
+`screen_lock_pin: 1234` (dígitos correctos, doble captura funcionando).
+Clave incorrecta (9999) rechazada con el aviso correcto y sin
+desbloquear; clave correcta desbloquea al hub. **Ninguna otra pantalla
+alcanzable**: 14 pulsaciones de escape (MENU, MENU sostenido, LEFT,
+RIGHT, PLAY en toda combinación) dejan la pantalla de candado
+intacta. USB con el candado puesto se atiende normal (token
+`USB_INSERT` del inyector: aparece la pantalla de conexión). MENU
+cancela la configuración y no escribe nada al `aura.cfg`. La salida de
+emergencia **probada de verdad**: borrar las dos líneas y arrancar deja
+el aparato en el hub, sin candado. Los tres casos de archivo corrupto
+fallan abiertos. **Cero archivos de core en el diff** (`git status`
+como criterio explícito: solo `apps/metro/` y la línea de `apps/SOURCES`
+que lista el `.c` nuevo, la misma modificación ya documentada en
+`MODIFICATIONS.md` desde F1 y que cada fase con archivo nuevo amplía).
+Builds limpios en sim y target. 6 suites de test de host en verde (678
+checks, sin cambios -- este módulo depende del LCD y del bucle de
+entrada reales, no host-testeable).

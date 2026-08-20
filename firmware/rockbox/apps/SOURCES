@@ -343,6 +343,7 @@ metro/metro_screen_photo_viewer.c
 metro/metro_manifest.c
 metro/metro_screen_about.c
 metro/metro_screen_usb.c
+metro/metro_screen_lock.c
 metro/metro_splash_lang.c
 metro/metro_fb.c
 metro/metro_motion.c

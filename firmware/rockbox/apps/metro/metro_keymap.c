@@ -97,6 +97,23 @@ static const struct button_mapping viewer_mapping[] = {
     LAST_ITEM_IN_LIST
 };
 
+/* LOCK (R3-F7/DD-8): captura de 4 dígitos. La rueda marca el dígito
+ * enfocado (adelante/atrás, con vuelta), SELECT lo confirma y avanza,
+ * MENU retrocede uno. LEFT/RIGHT/PLAY quedan SIN mapear a propósito --
+ * no es que "no hagan falta": con el candado activo el aparato no debe
+ * ofrecer NINGÚN control, ni siquiera play/pausa, y no mapearlos es lo
+ * que garantiza que resuelvan a ACTION_NONE en vez de caer a otra
+ * tabla. Sin MACT_HOME por la misma razón. */
+static const struct button_mapping lock_mapping[] = {
+    { MACT_PREV,   BUTTON_SCROLL_BACK,                 BUTTON_NONE },
+    { MACT_PREV,   BUTTON_SCROLL_BACK | BUTTON_REPEAT, BUTTON_NONE },
+    { MACT_NEXT,   BUTTON_SCROLL_FWD,                  BUTTON_NONE },
+    { MACT_NEXT,   BUTTON_SCROLL_FWD | BUTTON_REPEAT,  BUTTON_NONE },
+    { MACT_SELECT, BUTTON_SELECT | BUTTON_REL,         BUTTON_SELECT },
+    { MACT_BACK,   BUTTON_MENU | BUTTON_REL,           BUTTON_MENU },
+    LAST_ITEM_IN_LIST
+};
+
 const struct button_mapping *metro_keymap_get_context_map(int context)
 {
     switch (context & ~CONTEXT_PLUGIN)
@@ -106,6 +123,7 @@ const struct button_mapping *metro_keymap_get_context_map(int context)
         case MCTX_DIALOG: return dialog_mapping;
         case MCTX_PLAYER: return player_mapping;
         case MCTX_VIEWER: return viewer_mapping;
+        case MCTX_LOCK:   return lock_mapping;
         default:          return NULL;
     }
 }

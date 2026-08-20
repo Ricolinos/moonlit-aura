@@ -44,6 +44,8 @@ static const metro_settings_t defaults = {
     .graphics = METRO_GFX_DEFAULT,
     .tz_local_quarters = 0,
     .first_boot_done = false,
+    .screen_lock = false,
+    .screen_lock_pin = "",
 };
 
 static int clamp_enum(int v, int count)
@@ -86,6 +88,16 @@ void metro_settings_load(void)
                 metro_settings.tz_local_quarters = v;
             else if (!strcmp(name, "first_boot_done"))
                 metro_settings.first_boot_done = (v != 0);
+            else if (!strcmp(name, "screen_lock"))
+                metro_settings.screen_lock = (v != 0);
+            else if (!strcmp(name, "screen_lock_pin"))
+            {
+                /* Cadena, no atoi() -- los ceros a la izquierda son
+                 * parte de la clave. metro_screen_lock.c valida que
+                 * sean 4 dígitos y falla ABIERTO si no lo son. */
+                strlcpy(metro_settings.screen_lock_pin, value,
+                         sizeof(metro_settings.screen_lock_pin));
+            }
             /* firmware_family/sync_marker_supported: write-only, Aura
              * Studio reads these off the mounted disk -- never read back
              * here. rtc_sync_*: transient, only
@@ -120,6 +132,18 @@ void metro_settings_save(void)
     fdprintf(fd, "graphics: %d\n", metro_settings.graphics);
     fdprintf(fd, "tz_local_quarters: %d\n", metro_settings.tz_local_quarters);
     fdprintf(fd, "first_boot_done: %d\n", metro_settings.first_boot_done ? 1 : 0);
+
+    /* R3-F7/DD-8 (M-068): las dos claves del candado se escriben SOLO
+     * cuando hay candado. Así, un aparato sin candado no las tiene en
+     * absoluto (en vez de un `screen_lock: 0` permanente), y sobre todo:
+     * la salida de emergencia documentada -- "conecta por USB y borra
+     * estas dos líneas" -- deja un archivo que no las vuelve a hacer
+     * crecer solo en el siguiente guardado. */
+    if (metro_settings.screen_lock)
+    {
+        fdprintf(fd, "screen_lock: 1\n");
+        fdprintf(fd, "screen_lock_pin: %s\n", metro_settings.screen_lock_pin);
+    }
 
     close(fd);
 }

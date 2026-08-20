@@ -28,6 +28,7 @@
 
 #include "metro_screen_settings.h"
 #include "metro_screen_about.h"
+#include "metro_screen_lock.h"
 #include "metro_lang.h"
 #include "metro_theme.h"
 #include "metro_widgets.h"
@@ -149,7 +150,7 @@ static void cycle_eq(void)
 static int general_count(void *ctx)
 {
     (void)ctx;
-    return 7;
+    return 8;
 }
 
 static void general_get_row(void *ctx, int index, struct metro_row *out)
@@ -186,6 +187,17 @@ static void general_get_row(void *ctx, int index, struct metro_row *out)
             out->kind = METRO_ROW_SETTING;
             break;
         case 5:
+            /* R3-F7/DD-8 (M-068): estado real del candado, no la
+             * preferencia guardada -- ARMED y ACTIVE se ven igual desde
+             * aquí (para llegar a esta fila el aparato ya está
+             * desbloqueado), así que basta con "activado"/"desactivado". */
+            out->title = metro_lang_str(LANG_SETTING_LOCK);
+            out->subtitle = metro_lang_str(
+                metro_screen_lock_state() == METRO_LOCK_NONE ? LANG_VALUE_OFF
+                                                              : LANG_VALUE_ON);
+            out->kind = METRO_ROW_SETTING;
+            break;
+        case 6:
             out->title = metro_lang_str(LANG_SETTING_LIBRARY);
             out->subtitle = NULL;
             out->kind = METRO_ROW_ACTION;
@@ -232,6 +244,22 @@ static void general_on_select(void *ctx, int index)
             break;
 
         case 5:
+            /* R3-F7/DD-8 (M-068): con candado -> confirmar y quitarlo;
+             * sin candado -> configurar uno nuevo (dos capturas). Quitar
+             * pide confirmación (destruye la clave guardada), poner no
+             * la necesita: la propia doble captura ya es la confirmación,
+             * y MENU cancela en cualquier momento. */
+            if (metro_screen_lock_state() != METRO_LOCK_NONE)
+            {
+                if (metro_widgets_confirm(metro_lang_str(LANG_HUB_SETTINGS),
+                                           metro_lang_str(LANG_DIALOG_LOCK_OFF_TITLE)))
+                    metro_screen_lock_clear();
+            }
+            else
+                metro_screen_lock_setup();
+            break;
+
+        case 6:
             if (metro_widgets_confirm(metro_lang_str(LANG_HUB_SETTINGS),
                                        metro_lang_str(LANG_DIALOG_LIBRARY_TITLE)))
             {

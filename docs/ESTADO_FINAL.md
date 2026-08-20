@@ -106,6 +106,46 @@ pueda reconocerlo y abstenerse, pero ese lado de la corrección vive en
 el repositorio de Aura Studio, fuera de alcance de este proyecto — no
 resuelto todavía. Ver `DECISIONS.md` M-004 y `docs/GUIA_FLASHEO.md`.
 
+## Candado de pantalla: qué protege y cómo quitarlo si olvidas la clave
+
+Ajustes → General → **candado** pide una clave de 4 dígitos (marcada
+con la rueda) y la vuelve a pedir al arrancar el aparato.
+
+**Es un candado de interfaz, no de datos.** Protege que alguien tome tu
+iPod y curiosee tu biblioteca; **no** protege el contenido del disco.
+El volumen es FAT sin cifrar, así que cualquiera que conecte el cable
+lee todos tus archivos con o sin candado — Metro no difiere ni bloquea
+la conexión USB mientras el candado está puesto, a propósito (ver
+`docs/DESVIACIONES.md` R3-6). La clave misma se guarda **en texto
+plano** en `.rockbox/aura/aura.cfg`, coherente con lo anterior: no
+tendría sentido cifrarla en un disco que se lee entero de todas formas.
+Tampoco hay límite de intentos ni retardo entre ellos.
+
+### Salida de emergencia (si olvidaste la clave)
+
+**El aparato nunca queda inservible por un PIN olvidado.** Como la
+conexión USB sigue funcionando con el candado puesto:
+
+1. Conecta el iPod a la computadora con el cable (funciona aunque la
+   pantalla esté pidiendo la clave).
+2. Abre `.rockbox/aura/aura.cfg` en el disco del iPod con cualquier
+   editor de texto.
+3. Borra estas dos líneas:
+   ```
+   screen_lock: 1
+   screen_lock_pin: ####
+   ```
+4. Guarda, expulsa el disco y desconecta el cable.
+
+El candado desaparece **en ese momento** — Metro relee el archivo al
+terminar la sesión USB, así que ni siquiera hace falta reiniciar. Si
+prefieres reiniciar, también funciona.
+
+Metro además **falla abierto** si el archivo queda dañado: un
+`screen_lock: 1` sin su línea de clave, o una clave que no sean
+exactamente 4 dígitos, se tratan como "sin candado". Un `aura.cfg`
+corrupto no puede dejarte fuera del aparato.
+
 ## Cómo instalar
 
 Ver `docs/GUIA_FLASHEO.md` — procedimiento completo con `mks5lboot`

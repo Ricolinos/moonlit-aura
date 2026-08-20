@@ -134,6 +134,17 @@ static const char *const strings_es[LANG_COUNT] = {
 
     [LANG_NP_RATING]           = "calificacion",
 
+    [LANG_SETTING_LOCK]         = "candado",
+    [LANG_LOCK_TITLE_LOCKED]    = "bloqueado",
+    [LANG_LOCK_TITLE_SET]       = "clave nueva",
+    [LANG_LOCK_TITLE_CONFIRM]   = "confirma",
+    [LANG_LOCK_HINT_UNLOCK]     = "marca tu clave con la rueda",
+    [LANG_LOCK_HINT_WRONG]      = "clave incorrecta -- intenta de nuevo",
+    [LANG_LOCK_HINT_SET]        = "elige 4 digitos con la rueda",
+    [LANG_LOCK_HINT_CONFIRM]    = "marcala otra vez para confirmar",
+    [LANG_LOCK_HINT_MISMATCH]   = "no coincidieron -- empieza de nuevo",
+    [LANG_DIALOG_LOCK_OFF_TITLE] = "quitar el candado?",
+
     [LANG_SETTING_SLEEP]      = "temporizador de sueno",
     [LANG_SETTING_EQ]         = "ecualizador",
     [LANG_EQ_FLAT]            = "plano",
@@ -254,6 +265,17 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_QUICKPLAY_EMPTY]     = "nothing played yet -- play something first",
 
     [LANG_NP_RATING]           = "rating",
+
+    [LANG_SETTING_LOCK]         = "screen lock",
+    [LANG_LOCK_TITLE_LOCKED]    = "locked",
+    [LANG_LOCK_TITLE_SET]       = "new code",
+    [LANG_LOCK_TITLE_CONFIRM]   = "confirm",
+    [LANG_LOCK_HINT_UNLOCK]     = "dial your code with the wheel",
+    [LANG_LOCK_HINT_WRONG]      = "wrong code -- try again",
+    [LANG_LOCK_HINT_SET]        = "pick 4 digits with the wheel",
+    [LANG_LOCK_HINT_CONFIRM]    = "dial it again to confirm",
+    [LANG_LOCK_HINT_MISMATCH]   = "they didn't match -- start over",
+    [LANG_DIALOG_LOCK_OFF_TITLE] = "remove the lock?",
 
     [LANG_SETTING_SLEEP]      = "sleep timer",
     [LANG_SETTING_EQ]         = "equalizer",

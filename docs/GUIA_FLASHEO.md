@@ -153,6 +153,14 @@ bórralos a mano si quieres limpiar el disco por completo.
   — los drivers libusb-win32 (libusb0) no funcionan con `mks5lboot`.
 - **Acceso USB denegado**: corre `mks5lboot` con privilegios elevados
   (`sudo` en macOS/Linux, Administrador en Windows).
+- **"Olvidé la clave del candado de pantalla"**: el aparato **no**
+  queda inservible y no hace falta reflashear nada. Conecta el cable
+  (el USB sigue funcionando con el candado puesto, a propósito), abre
+  `.rockbox/aura/aura.cfg` en el disco del iPod, borra las dos líneas
+  `screen_lock: 1` y `screen_lock_pin: ####`, guarda y expulsa. El
+  candado desaparece al terminar la sesión USB, sin reiniciar
+  siquiera. Explicación completa y sus límites (es un candado de
+  interfaz, no de datos) en `docs/ESTADO_FINAL.md`.
 - **Si algo sale mal a mitad del flasheo del bootloader**: un tono
   grave repetido (330Hz) indica que el NOR se corrompió y hace falta
   restaurar vía iTunes/Finder (modo de recuperación de Apple). Esto es

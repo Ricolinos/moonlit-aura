@@ -49,6 +49,7 @@
 #include "metro_transitions.h"
 #include "metro_thumbs.h"
 #include "metro_screen_photo_viewer.h"
+#include "metro_screen_lock.h"
 
 /* See metro_main.h for why this must be called from apps/main.c's
  * init(), not from here. None of these settings are exposed anywhere
@@ -255,6 +256,18 @@ void metro_main(void)
     wait_for_tagcache_with_splash();
 
     metro_screen_list_init();
+
+    /* R3-F7/DD-8 (M-068): el candado se arma aquí y se cobra AQUÍ, antes
+     * de metro_disk_handoff() -- que puede levantar la pantalla de
+     * "actualizando biblioteca" (metro_run_sync_screen_if_needed()) y
+     * dejarla visible por encima del candado. Todo lo que esta pantalla
+     * necesita ya está listo a esta altura (fuentes, tema, idioma); lo
+     * único que corrió antes es el splash. Al desbloquear, el arranque
+     * sigue normal y el handoff recoge cualquier marcador que Studio
+     * hubiera dejado. */
+    metro_screen_lock_init();
+    metro_screen_lock_run_if_active();
+
     metro_disk_handoff();
 
     /* F3: the twist navigation core supersedes the F2 type/palette
@@ -265,11 +278,26 @@ void metro_main(void)
 
     while (1)
     {
-        bool at_root = metro_nav_is_root(metro_screen_nav());
-        bool at_player = !at_root && metro_screen_nowplaying_is_current();
+        bool at_root;
+        bool at_player;
+        bool at_viewer;
+
+        /* R3-F7/DD-8 (M-068): la interceptación, antes de CUALQUIER
+         * despacho de pantalla -- eso es lo que hace que el candado
+         * alcance a todo el aparato y no solo a una pantalla. No-op
+         * mientras el estado no sea ACTIVE (el caso normal: ya se cobró
+         * arriba, en el arranque), así que no cuesta nada por vuelta.
+         * Sigue aquí igual, y no solo en el arranque, porque es esta
+         * línea -- no el orden de las llamadas de más arriba -- la que
+         * vuelve estructuralmente cierto que ninguna otra pantalla es
+         * alcanzable con el candado puesto. */
+        metro_screen_lock_run_if_active();
+
+        at_root = metro_nav_is_root(metro_screen_nav());
+        at_player = !at_root && metro_screen_nowplaying_is_current();
         /* R2-F3: mutually exclusive with at_player -- only one sentinel
          * page can be current at a time (metro_screen_photo_viewer.h). */
-        bool at_viewer = !at_root && metro_screen_photo_viewer_is_current();
+        at_viewer = !at_root && metro_screen_photo_viewer_is_current();
         enum metro_context ctx = at_root ? MCTX_HUB
                                           : (at_player ? MCTX_PLAYER
                                                         : (at_viewer ? MCTX_VIEWER : MCTX_LIST));

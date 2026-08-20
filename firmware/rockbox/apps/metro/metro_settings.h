@@ -60,6 +60,15 @@ typedef struct {
     enum metro_gfx_level graphics;
     int tz_local_quarters; /* quarter-hours from UTC, D.4 of the contract */
     bool first_boot_done;
+    /* R3-F7/DD-8 (M-068): candado de interfaz. La clave se guarda como
+     * CADENA de 4 dígitos, no como entero -- con un entero, "0000" y
+     * "clave ausente" son el mismo valor 0, que es exactamente la
+     * trampa por la que un aura.cfg a medio escribir dejaría el aparato
+     * bloqueado con una clave que nadie configuró (Aura-Firmware la
+     * tiene). Texto plano a propósito: es un candado de interfaz, no de
+     * datos -- ver metro_screen_lock.h. Cadena vacía = sin clave. */
+    bool screen_lock;
+    char screen_lock_pin[5];
 } metro_settings_t;
 
 extern metro_settings_t metro_settings;
