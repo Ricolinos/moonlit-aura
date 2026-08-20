@@ -10,6 +10,25 @@ sin GPU, clickwheel).
 
 Es "el Zune que Microsoft habría diseñado para el iPod".
 
+## Qué trae (v0.3.0)
+
+Navegación twist completa, música sobre tagcache (artistas/álbumes/
+canciones/géneros/playlists) con Now Playing y carátula real, video y
+fotos con miniaturas y visor propio, ajustes reales (tema, 10 acentos,
+idioma ES/EN, brillo, EQ, temporizador de sueño, candado de pantalla),
+y un motor de transiciones propio (twist, turnstile, fade, feather,
+continuum) con tres niveles de FX.
+
+De la ronda 3: **letras `.lrc` sincronizadas**, **fotos de artista**,
+**Quickplay** (álbumes recientes), **calificaciones** importadas de
+Aura Studio, **candado de 4 dígitos** y **CONTINUUM** (el título de la
+fila vuela a la página nueva). Detalle completo en
+`docs/ESTADO_FINAL.md`.
+
+> **Todavía sin probar en hardware real.** Las tres rondas se
+> verificaron en el simulador SDL. La lista de verificación pendiente
+> está en `docs/ESTADO_FINAL.md`.
+
 ## Capturas
 
 Simulador SDL, tema oscuro (acento magenta, el default — `DECISIONS.md`
@@ -39,8 +58,7 @@ ofrecer "actualizar" tu iPod con Metro de vuelta a Aura — ver
 
 ## Compilar
 
-Ver `docs/guia-desarrollo.md` *(a escribir en F0 tras verificar el
-build)*. Resumen:
+Ver `docs/guia-desarrollo.md`. Resumen:
 
 ```bash
 firmware/tools/build_toolchain.sh   # una sola vez, ~unos minutos
@@ -48,11 +66,18 @@ firmware/tools/build_sim.sh --run   # simulador SDL, día a día
 firmware/tools/build_target.sh      # target real ipod6g + bootloader
 ```
 
+## Instalar
+
+Ver `docs/GUIA_FLASHEO.md` — procedimiento completo con `mks5lboot`,
+requisitos, y qué hacer si algo sale mal.
+
 ## Estado del proyecto
 
-Ver `docs/plans/PLAN_MAESTRO.md` para el plan completo de fases,
-`docs/DESVIACIONES.md` para desviaciones respecto al plan, y
-`docs/ESTADO_FINAL.md` (cuando exista) para el estado actual.
+`docs/ESTADO_FINAL.md` es el estado actual (v0.3.0) y la lista de
+verificación en hardware pendiente. Los planes de cada ronda están en
+`docs/plans/`, las desviaciones respecto a ellos en
+`docs/DESVIACIONES.md`, y la fuente de verdad de las decisiones en
+`DECISIONS.md`.
 
 ## Licencia
 

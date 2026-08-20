@@ -2248,3 +2248,44 @@ volador contra `29-31` sin él — ~1 tick de costo, y **cero**
 `auto-degrade` en tandas de cuatro PUSH seguidos (el umbral de M-015 es
 2× presupuesto = 48). Builds limpios en sim y target; 6 suites de test
 de host en verde (678 checks).
+
+## M-070 — R3-F9: release v0.3.0 y la lista de verificación en hardware que sigue vacía
+
+**Contexto**: novena y última fase de la ronda 3
+(`PLAN-metro-r3-maestro.md` DD-11). Cierra la ronda: documentación al
+día, artefactos regenerados, tag anotado, y —tras las dos barreras que
+solo el dueño puede levantar— el Release publicado y la primera sesión
+con hardware real.
+
+**`docs/ESTADO_FINAL.md` reescrito a v0.3.0**: venía diciendo "v0.1.0"
+todavía (la ronda 2 nunca lo actualizó, deuda que esta fase salda de
+paso). Ahora acumula las tres rondas, con secciones propias para lo que
+agregó cada una, y el conteo real de tests (678 en 6 suites, contra los
+251 que declaraba).
+
+**La lista de verificación en hardware, reescrita como lista de verdad**:
+antes eran cinco viñetas en prosa; ahora son **17 puntos numerados
+(H1-H17) en tablas con una columna de resultado sin responder**, para
+llenarse punto por punto en el aparato real. H1-H9 cubren la base de
+las rondas 1-2; H10-H17 lo nuevo de la ronda 3. Se agregó además una
+sección corta que nombra las **tres cosas verificadas solo por vía
+indirecta** en el simulador, que son las que más merecen atención en la
+primera sesión real: el volcado de la cola de tagcache al apagar (en el
+simulador la cola se desbordó sola por volumen, nunca se probó un
+apagado limpio), el disparo real del temporizador de sueño (nunca se
+dejaron correr 15 minutos), y el EQ por oído (el simulador no tiene
+salida de audio representativa). Decir explícitamente qué NO se probó,
+y por qué, vale más que una lista que parezca completa.
+
+**`README.md`**: sección "Qué trae (v0.3.0)", aviso claro de que nada
+se ha probado en hardware, enlace a la guía de flasheo, y limpieza de
+dos referencias obsoletas ("a escribir en F0", "cuando exista").
+
+**Las dos barreras**, tal cual las definió el plan y por qué existen:
+**B1** es el `git push` del tag y la publicación del Release — sale de
+la máquina y es irreversible de cara a terceros, así que se prepara
+todo y se pide confirmación literal. **B2** es el flasheo: solo el
+dueño tiene el iPod. Lo que reporte se anota en `ESTADO_FINAL.md`, y si
+algo hay que ajustar (tiempos de transición, presupuesto de miniaturas,
+la curva de CONTINUUM) sale en un commit de ajuste dentro de esta misma
+fase.

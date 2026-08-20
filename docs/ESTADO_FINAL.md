@@ -1,12 +1,15 @@
-# Estado final — Metro-Aura v0.1.0
+# Estado final — Metro-Aura v0.3.0
 
-Cierre de la Fase 4 de ejecución (F0-F13, `docs/plans/PLAN_MAESTRO.md`).
-Qué funciona, qué queda pendiente, cómo instalar, y cómo medir el
-rendimiento real de las transiciones en hardware. La fuente de verdad
-de las decisiones sigue siendo `DECISIONS.md`; este documento resume,
-no reemplaza.
+Cierre de la **ronda 3**. Acumula las tres rondas de ejecución: la
+ronda 1 construyó el firmware (F0-F13, `docs/plans/PLAN_MAESTRO.md`),
+la ronda 2 lo pulió y le agregó fotos/video de verdad
+(`PLAN-metro-r2-maestro.md`), y la ronda 3 cerró el backlog
+(`PLAN-metro-r3-maestro.md`). Qué funciona, qué queda pendiente, cómo
+instalar, y cómo medir el rendimiento real en hardware. La fuente de
+verdad de las decisiones sigue siendo `DECISIONS.md`; este documento
+resume, no reemplaza.
 
-## Qué funciona (verificado en el simulador SDL, F0-F12)
+## Qué funciona (verificado en el simulador SDL)
 
 - **Navegación twist completa** (F3): pila de navegación por
   profundidad + pivot horizontal, mapeo de gestos del clickwheel
@@ -43,16 +46,55 @@ no reemplaza.
   (lite/full), ajustable desde Ajustes → General, con auto-degradación
   de sesión (M-015) y `METRO_TRACE` instrumentando cada transición.
 
-Suite de tests de host: 251 checks, 0 fallos
-(`firmware/rockbox/apps/metro/test/`, `make -C apps/metro/test`).
-Ambos builds (`firmware/tools/build_sim.sh`, `firmware/tools/build_target.sh`)
-compilan limpio, sin advertencias, en cada fase desde F0.
+### Lo que agregó la ronda 2
+
+- **Miniaturas reales de fotos** (R2-F2): `/Photos` en cuadrícula de
+  tiles con miniaturas decodificadas y cacheadas en disco.
+- **Visor de fotos** (R2-F3): pantalla completa, ajustar/rellenar,
+  navegación entre fotos de la misma categoría.
+- **OSD de video estilo Zune HD** (R2-F4).
+- **`version.txt` en los releases** (R2-F1), para que Aura Studio pueda
+  distinguir versiones.
+
+### Lo que agregó la ronda 3
+
+- **Letras `.lrc` sincronizadas** (R3-F2): modo de pantalla completa en
+  Now Playing, con parser propio de bajo consumo (11.6 KB vs los ~80 KB
+  del enfoque de Aura-Firmware) y la línea activa avanzando sola.
+- **Fotos de artista** (R3-F3): el pivot Artistas pasa a cuadrícula,
+  consumiendo el `artist_images.cfg` que escribe Aura Studio.
+- **Quickplay** (R3-F4): primer pivot de Música, los álbumes
+  reproducidos más recientemente con su carátula real. Requirió
+  encender el runtime DB de Rockbox, que estaba apagado y sin ninguna
+  forma de activarlo desde Metro.
+- **Calificaciones** (R3-F5): import de una vía desde `ratings.cfg` de
+  Studio, más una fila de 5 estrellas en las opciones de Now Playing.
+  La asimetría (lo que califiques en el iPod se pierde en el siguiente
+  sync) está documentada en `docs/COMPAT_STUDIO.md` C26, no escondida.
+- **Temporizador de sueño y presets de EQ** (R3-F6): dos filas nuevas
+  en Ajustes, sin pantallas propias ni cambios al core.
+- **Candado de pantalla** (R3-F7): clave de 4 dígitos con la rueda —
+  ver su propia sección más abajo, incluida la salida de emergencia.
+- **CONTINUUM** (R3-F8): al entrar a un álbum o artista, su nombre
+  vuela desde la fila hasta la ceja de la página nueva mientras el
+  resto gira.
+- **Un motor de miniaturas compartido** (R3-F1) en vez de tres copias
+  del mismo módulo, y el volcado de la cola de tagcache al apagar
+  (R3-F4), que faltaba y perdía historial de reproducción en silencio.
+
+Suite de tests de host: 678 checks, 0 fallos
+(`firmware/rockbox/apps/metro/test/`, `make -C apps/metro/test`) en 6
+suites. Ambos builds (`firmware/tools/build_sim.sh`,
+`firmware/tools/build_target.sh`) compilan limpio en cada fase desde F0.
 
 ## Qué NO está verificado (pendiente de hardware real)
 
 Todo lo de arriba se verificó **exclusivamente en el simulador SDL**
-(`PLAN_MAESTRO.md` regla transversal #6: "simulador primero"). Nunca
-se conectó un iPod Classic 6G real durante F0-F13. En particular:
+(`PLAN_MAESTRO.md` regla transversal #6: "simulador primero"). **Nunca
+se ha conectado un iPod Classic 6G real** — ni en la ronda 1, ni en la
+2, ni en la 3. Es la deuda más vieja del proyecto y la razón de que la
+lista de verificación del final de este documento siga sin respuestas.
+En particular:
 
 - **Arranque real**: el bootloader dual-boot y el arranque de
   Metro-Aura en NOR/disco real nunca se probaron.
@@ -190,21 +232,51 @@ nivel, no una reestructuración; commitéalo aparte (`F13: adjust
 transition frame budget from hardware measurement` o similar) una vez
 confirmado.
 
-## Qué reportar tras flashear (primera sesión con hardware real)
+## Lista de verificación en hardware real (sin responder todavía)
 
-1. **Arranque**: ¿llega a la pantalla de música/videos/fotos/ajustes
-   sin errores? ¿Se ve el splash con el wordmark?
-2. **Navegación**: twist entre pivots, profundizar/volver, todos los
-   gestos de la tabla de `PLAN_MAESTRO.md` §2.3.
-3. **Reproducción**: música real desde el propio dispositivo,
-   carátulas, video, fotos.
-4. **Sincronización con Aura Studio** (si aplica, checklist C20 de
-   `docs/COMPAT_STUDIO.md`): un marcador real, escrito por Aura Studio
-   de verdad, procesado correctamente al arrancar.
-5. **Fluidez de las transiciones**: ¿se sienten bien a ojo? Si no,
-   correr el procedimiento de medición de arriba antes de ajustar nada
-   a ciegas.
+**Esta sección es el pendiente más viejo del proyecto.** Tres rondas
+completas se verificaron solo en el simulador. Lo de abajo es para
+llenarse **en el iPod real**, con una respuesta escrita por punto —
+"sí", "no", o qué pasó exactamente. Cualquier hallazgo es material
+nuevo para `docs/DESVIACIONES.md`/`DECISIONS.md`, con el mismo formato
+que el resto del proyecto.
 
-Cualquier hallazgo de esta primera sesión con hardware real es
-material nuevo para `docs/DESVIACIONES.md`/`DECISIONS.md`, siguiendo
-el mismo formato que el resto del proyecto.
+### Base (rondas 1-2)
+
+| # | Qué probar | Resultado |
+|---|---|---|
+| H1 | **Arranque**: bootloader dual-boot, splash con wordmark, llega al hub | _(sin responder)_ |
+| H2 | **Navegación**: twist entre pivots, profundizar/volver, todos los gestos de `PLAN_MAESTRO.md` §2.3 | _(sin responder)_ |
+| H3 | **Reproducción**: música del propio dispositivo, carátulas reales, transporte | _(sin responder)_ |
+| H4 | **Video y fotos**: `mpegplayer`/visor propio, miniaturas de la cuadrícula | _(sin responder)_ |
+| H5 | **Pantalla USB** (F9-1): ¿se ve un cuadro de la pantalla propia de Metro, o `gui_usb_screen_run()` la tapa como en el simulador? | _(sin responder)_ |
+| H6 | **Fluidez de transiciones**: ¿se sienten bien a ojo? Si no, correr la medición de la sección anterior **antes** de ajustar nada a ciegas | _(sin responder)_ |
+| H7 | **Turnstile** (F12-1): ¿la geometría de proyección se siente como el Zune HD? Es una elección propia, sin confirmar | _(sin responder)_ |
+| H8 | **Sync real con Aura Studio** (C20): marcador escrito por Studio de verdad, procesado al arrancar | _(sin responder)_ |
+| H9 | **Batería/CPU por nivel de FX**: consumo real con `animations=all` vs `off` | _(sin responder)_ |
+
+### Nuevo en la ronda 3
+
+| # | Qué probar | Resultado |
+|---|---|---|
+| H10 | **Letras `.lrc`**: una pista con su `.lrc` al lado; ¿la línea activa avanza sola y en tiempo? | _(sin responder)_ |
+| H11 | **Fotos de artista**: con un `artist_images.cfg` real de Studio, ¿la cuadrícula muestra las fotos? | _(sin responder)_ |
+| H12 | **Quickplay + escritura de historial**: reproducir tres álbumes, **apagar bien** el aparato, encender, y ver si el orden sobrevivió. Es la prueba real del volcado de la cola de tagcache al apagar (R3-4 en `DESVIACIONES.md`), que en el simulador solo se pudo verificar por la vía indirecta | _(sin responder)_ |
+| H13 | **Calificaciones**: `ratings.cfg` de Studio importado tras un sync real; calificar en el aparato y confirmar que sobrevive un apagado | _(sin responder)_ |
+| H14 | **Temporizador de sueño**: armar 15 min y confirmar que el aparato **se apaga solo** — en el simulador solo se verificó que el temporizador queda armado, no que dispare | _(sin responder)_ |
+| H15 | **Presets de EQ**: ¿se **oyen** distintos? En el simulador solo se verificó por inspección de estado, nunca por oído | _(sin responder)_ |
+| H16 | **Candado**: configurar clave, apagar, encender, desbloquear. Y probar la salida de emergencia de verdad (borrar las dos líneas por USB) | _(sin responder)_ |
+| H17 | **CONTINUUM**: ¿el título volador se lee bien a 30 fps reales, o se ve a saltos? La curva (`OUT_QUAD`) y el punto de cambio de fuente son fáciles de ajustar si no | _(sin responder)_ |
+
+### Lo que solo el hardware puede decir
+
+Tres cosas de la ronda 3 están verificadas **por vía indirecta** en el
+simulador y merecen atención especial en la primera sesión real:
+
+1. **El volcado de tagcache al apagar** (H12) — en el simulador se
+   comprobó gracias a que la cola se desbordó sola por volumen, no por
+   un apagado limpio. El apagado real es el caso que importa.
+2. **El disparo del temporizador de sueño** (H14) — nunca se dejó
+   correr 15 minutos.
+3. **El EQ por oído** (H15) — el simulador no tiene salida de audio
+   representativa.
