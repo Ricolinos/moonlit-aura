@@ -55,7 +55,10 @@ struct mpeg_settings settings;
 static const char *const metro_str_es[MSTR_COUNT] = {
     [MSTR_SETTINGS]              = "Ajustes",
     [MSTR_EXIT]                  = "Salir",
-    [MSTR_VIDEO_PLAYER]          = "Reproductor de video",
+    /* Lowercase on purpose -- used as the page eyebrow (caption line at
+     * the very top), which Metro's own screens render lowercase
+     * ("videos", "musica" -- see metro_draw_header() call sites). */
+    [MSTR_VIDEO_PLAYER]          = "reproductor de video",
     [MSTR_DISPLAY_OPTIONS]       = "Opciones de pantalla",
     [MSTR_AUDIO_OPTIONS]         = "Opciones de audio",
     [MSTR_PLAY_MODE]             = "Modo de reproduccion",
@@ -91,12 +94,17 @@ static const char *const metro_str_es[MSTR_COUNT] = {
     [MSTR_NO_FILE]               = "Sin archivo",
     [MSTR_UNSUPPORTED_FORMAT]    = "Formato no compatible",
     [MSTR_ERROR_OPENING_FILE]    = "Error al abrir el archivo: %d",
+    [MSTR_TITLE_VIDEO]           = "video",
+    [MSTR_TITLE_SETTINGS]        = "ajustes",
+    [MSTR_TITLE_DISPLAY]         = "pantalla",
+    [MSTR_TITLE_AUDIO]           = "audio",
+    [MSTR_TITLE_BRIGHTNESS]      = "brillo",
 };
 
 static const char *const metro_str_en[MSTR_COUNT] = {
     [MSTR_SETTINGS]              = "Settings",
     [MSTR_EXIT]                  = "Exit",
-    [MSTR_VIDEO_PLAYER]          = "Video player",
+    [MSTR_VIDEO_PLAYER]          = "video player",
     [MSTR_DISPLAY_OPTIONS]       = "Display options",
     [MSTR_AUDIO_OPTIONS]         = "Audio options",
     [MSTR_PLAY_MODE]             = "Play mode",
@@ -132,6 +140,11 @@ static const char *const metro_str_en[MSTR_COUNT] = {
     [MSTR_NO_FILE]               = "No File",
     [MSTR_UNSUPPORTED_FORMAT]    = "Unsupported format",
     [MSTR_ERROR_OPENING_FILE]    = "Error opening file: %d",
+    [MSTR_TITLE_VIDEO]           = "video",
+    [MSTR_TITLE_SETTINGS]        = "settings",
+    [MSTR_TITLE_DISPLAY]         = "display",
+    [MSTR_TITLE_AUDIO]           = "audio",
+    [MSTR_TITLE_BRIGHTNESS]      = "brightness",
 };
 
 const char *metro_str(int id)
@@ -181,8 +194,85 @@ static void mpeg_settings(void);
  * any other Metro list, not a foreign plugin screen. */
 #define METRO_ROW_PITCH  28
 #define METRO_ROW_LEFT_X 12
-#define METRO_ROWS_FIRST_Y 32
+#define METRO_ROWS_FIRST_Y 84
 #define METRO_HEADER_Y   4
+#define METRO_TITLE_Y    28
+
+/* Battery glyph geometry copied 1:1 from metro_draw_battery()
+ * (apps/metro/metro_draw.c, F10) -- a plugin can't link that module,
+ * so the 18x9 outline + 2x4 nub is redrawn here with rb-> calls. */
+#define METRO_BATTERY_W     18
+#define METRO_BATTERY_H     9
+#define METRO_BATTERY_NUB_W 2
+#define METRO_BATTERY_NUB_H 4
+
+static void metro_page_battery(int x_right, int y, unsigned color)
+{
+    int level = rb->battery_level();
+    int body_x = x_right - METRO_BATTERY_NUB_W - METRO_BATTERY_W;
+    int nub_x = x_right - METRO_BATTERY_NUB_W;
+    int nub_y = y + (METRO_BATTERY_H - METRO_BATTERY_NUB_H) / 2;
+    int fill_w;
+
+    rb->lcd_set_foreground(color);
+    rb->lcd_drawrect(body_x, y, METRO_BATTERY_W, METRO_BATTERY_H);
+    rb->lcd_fillrect(nub_x, nub_y, METRO_BATTERY_NUB_W, METRO_BATTERY_NUB_H);
+
+    if (level > 100)
+        level = 100;
+    if (level > 0)
+    {
+        fill_w = (METRO_BATTERY_W - 4) * level / 100;
+        if (fill_w > 0)
+            rb->lcd_fillrect(body_x + 2, y + 2, fill_w, METRO_BATTERY_H - 4);
+    }
+}
+
+/* The top of every page: eyebrow caption at the left, clock, battery --
+ * metro_draw_header() (apps/metro/metro_draw.c) replicated with rb->
+ * calls, same positions (12,4 / width-40 / width-4). The eyebrow is
+ * always "reproductor de video": the plugin is one place inside the
+ * larger app, and the eyebrow names the place, like "videos" does on
+ * the hub. */
+static void metro_page_chrome(const char *title)
+{
+    unsigned bg, fg, secondary, tertiary, accent;
+    struct tm *now;
+
+    metro_osd_colors(&bg, &fg, &secondary, &tertiary, &accent);
+    (void)tertiary; (void)accent;
+
+    rb->lcd_set_background(bg);
+    rb->lcd_set_drawmode(DRMODE_SOLID);
+    rb->lcd_clear_display();
+
+    rb->lcd_set_drawmode(DRMODE_FG);
+    rb->lcd_setfont(metro_font_caption());
+    rb->lcd_set_foreground(secondary);
+    rb->lcd_putsxy(METRO_ROW_LEFT_X, METRO_HEADER_Y,
+                   metro_str(MSTR_VIDEO_PLAYER));
+
+    now = rb->get_time();
+    if (now != NULL)
+    {
+        char timebuf[8];
+        int w;
+        rb->snprintf(timebuf, sizeof(timebuf), "%02d:%02d",
+                     now->tm_hour, now->tm_min);
+        rb->lcd_getstringsize(timebuf, &w, NULL);
+        rb->lcd_putsxy(LCD_WIDTH - 40 - w, METRO_HEADER_Y, timebuf);
+    }
+
+    metro_page_battery(LCD_WIDTH - 4, METRO_HEADER_Y, secondary);
+
+    /* The signature Metro element: the big lowercase page title in the
+     * display face (48px), same position the hub draws its pivots
+     * (metro_draw_pivots(): x=12, y=28). This -- not the row geometry
+     * -- is what M-059's first restyle was missing entirely. */
+    rb->lcd_setfont(metro_font_display());
+    rb->lcd_set_foreground(fg);
+    rb->lcd_putsxy(METRO_ROW_LEFT_X, METRO_TITLE_Y, title);
+}
 
 static void metro_menu_draw(const char *title, const char *const *labels,
                             const char *const *values, int count, int sel)
@@ -192,38 +282,37 @@ static void metro_menu_draw(const char *title, const char *const *labels,
 
     metro_osd_colors(&bg, &fg, &secondary, &tertiary, &accent);
     (void)accent; /* not used here -- selected row uses fg, see DD-11 */
+    (void)bg;
 
-    rb->lcd_setfont(FONT_UI);
-    rb->lcd_set_background(bg);
-    rb->lcd_set_drawmode(DRMODE_SOLID);
-    rb->lcd_clear_display();
+    metro_page_chrome(title);
 
     /* R2-F1/DD-1 (M-051)'s own rule, restated here since a plugin can't
      * include metro_draw.c: every glyph transparent (DRMODE_FG), never
-     * the DRMODE_SOLID default -- there is no plate to paint behind
-     * text on a plain flat-color menu, but staying consistent avoids
-     * relying on two different drawing conventions in the same app.
-     * Row colors match metro_draw_rows() exactly (DD-11): selected in
-     * fg, the rest in secondary -- no accent, no pill/highlight fill
-     * (Metro's real list has none either). */
-    rb->lcd_set_drawmode(DRMODE_FG);
-    rb->lcd_set_foreground(secondary);
-    rb->lcd_putsxy(METRO_ROW_LEFT_X, METRO_HEADER_Y, title);
-
+     * the DRMODE_SOLID default. Rows replicate metro_draw_rows()
+     * (apps/metro/metro_draw.c) exactly: from y=84, pitch 28, x=12,
+     * title in the list face (listsel when selected, fg vs secondary),
+     * current value right-aligned at width-12 in caption/tertiary,
+     * nudged +4 to sit on the list face's baseline -- same fonts, same
+     * colors, same offsets, so this reads as one more Metro list, not
+     * a plugin's imitation of one. */
     y = METRO_ROWS_FIRST_Y;
 
     for (i = 0; i < count; i++)
     {
+        bool selected = (i == sel);
+
         rb->lcd_set_drawmode(DRMODE_FG);
-        rb->lcd_set_foreground(i == sel ? fg : secondary);
+        rb->lcd_setfont(selected ? metro_font_list_sel() : metro_font_list());
+        rb->lcd_set_foreground(selected ? fg : secondary);
         rb->lcd_putsxy(METRO_ROW_LEFT_X, y, labels[i]);
 
         if (values && values[i])
         {
             int vw;
+            rb->lcd_setfont(metro_font_caption());
             rb->lcd_getstringsize(values[i], &vw, NULL);
             rb->lcd_set_foreground(tertiary);
-            rb->lcd_putsxy(LCD_WIDTH - METRO_ROW_LEFT_X - vw, y, values[i]);
+            rb->lcd_putsxy(LCD_WIDTH - METRO_ROW_LEFT_X - vw, y + 4, values[i]);
         }
 
         y += METRO_ROW_PITCH;
@@ -282,24 +371,21 @@ static int metro_menu_pick(const char *title, const char *const *labels,
 static void metro_adjust_draw(const char *title, const char *value_text)
 {
     unsigned bg, fg, secondary, tertiary, accent;
-    int tw, th, vw, vh;
 
     metro_osd_colors(&bg, &fg, &secondary, &tertiary, &accent);
-    (void)secondary; (void)tertiary;
+    (void)bg; (void)fg; (void)secondary; (void)tertiary;
 
-    rb->lcd_setfont(FONT_UI);
-    rb->lcd_set_background(bg);
-    rb->lcd_set_drawmode(DRMODE_SOLID);
-    rb->lcd_clear_display();
+    /* R2-F4 Zune redesign (M-060 cont.): same page anatomy as every
+     * other screen (chrome + big lowercase title), value left-aligned
+     * under it in the title face and the user's accent -- the one spot
+     * a Metro settings page paints accent, the "current value" (same
+     * role the accent plays in metro_widgets' dialogs). */
+    metro_page_chrome(title);
 
     rb->lcd_set_drawmode(DRMODE_FG);
-    rb->lcd_set_foreground(fg);
-    rb->lcd_getstringsize(title, &tw, &th);
-    rb->lcd_putsxy((LCD_WIDTH - tw) / 2, LCD_HEIGHT / 2 - th - 8, title);
-
+    rb->lcd_setfont(metro_font_title());
     rb->lcd_set_foreground(accent);
-    rb->lcd_getstringsize(value_text, &vw, &vh);
-    rb->lcd_putsxy((LCD_WIDTH - vw) / 2, LCD_HEIGHT / 2 + 8, value_text);
+    rb->lcd_putsxy(METRO_ROW_LEFT_X, METRO_ROWS_FIRST_Y + 16, value_text);
 
     rb->lcd_update();
 }
@@ -501,7 +587,7 @@ int mpeg_menu(void)
     const char *const items[] = { metro_str(MSTR_SETTINGS), metro_str(MSTR_EXIT) };
     int result;
 
-    result = metro_menu_pick(metro_str(MSTR_VIDEO_PLAYER), items, NULL, 2, 0);
+    result = metro_menu_pick(metro_str(MSTR_TITLE_VIDEO), items, NULL, 2, 0);
 
     switch (result)
     {
@@ -519,6 +605,13 @@ int mpeg_menu(void)
     return result;
 }
 
+/* R2-F4 Zune redesign (M-060 cont.): value rows cycle in place on
+ * SELECT, with the current value always visible as the row's
+ * right-aligned subtitle -- the exact interaction model of the app's
+ * own settings screen (metro_screen_settings.c, general_on_select():
+ * language/animations/graphics all cycle in place there). M-059's
+ * first version opened a separate two-row picker page per value,
+ * which is a Rockbox pattern, not a Metro one. */
 static void display_options(void)
 {
     const char *const items[] = {
@@ -532,13 +625,29 @@ static void display_options(void)
     };
     const char *const yesno[] = { metro_str(MSTR_NO), metro_str(MSTR_YES) };
     const char *const scalemodes[] = { metro_str(MSTR_FIT), metro_str(MSTR_COVER) };
+#ifdef HAVE_BACKLIGHT_BRIGHTNESS
+    char bright_buf[32];
+#endif
     int selected = 0;
     int result;
     bool menu_quit = false;
 
     while (!menu_quit)
     {
-        result = metro_menu_pick(metro_str(MSTR_DISPLAY_OPTIONS), items, NULL,
+        const char *values[ARRAYLEN(items)];
+
+        values[MPEG_OPTION_DISPLAY_FPS] = yesno[settings.showfps ? 1 : 0];
+        values[MPEG_OPTION_LIMIT_FPS] = yesno[settings.limitfps ? 1 : 0];
+        values[MPEG_OPTION_SKIP_FRAMES] = yesno[settings.skipframes ? 1 : 0];
+        values[MPEG_OPTION_SCALE_MODE] =
+            scalemodes[settings.scale_mode == MPEG_SCALE_MODE_COVER ? 1 : 0];
+#ifdef HAVE_BACKLIGHT_BRIGHTNESS
+        values[MPEG_OPTION_BACKLIGHT_BRIGHTNESS] =
+            backlight_brightness_formatter(bright_buf, sizeof(bright_buf),
+                                           settings.backlight_brightness, NULL);
+#endif
+
+        result = metro_menu_pick(metro_str(MSTR_TITLE_DISPLAY), items, values,
                                  ARRAYLEN(items), selected);
         if (result >= 0)
             selected = result;
@@ -546,47 +655,30 @@ static void display_options(void)
         switch (result)
         {
         case MPEG_OPTION_DISPLAY_FPS:
-        {
-            int picked = metro_menu_pick(metro_str(MSTR_SHOW_FPS), yesno, NULL, 2,
-                                         settings.showfps);
-            if (picked >= 0) settings.showfps = picked;
+            settings.showfps = !settings.showfps;
             break;
-        }
 
         case MPEG_OPTION_LIMIT_FPS:
-        {
-            int picked = metro_menu_pick(metro_str(MSTR_LIMIT_FPS), yesno, NULL, 2,
-                                         settings.limitfps);
-            if (picked >= 0) settings.limitfps = picked;
+            settings.limitfps = !settings.limitfps;
             break;
-        }
 
         case MPEG_OPTION_SKIP_FRAMES:
-        {
-            int picked = metro_menu_pick(metro_str(MSTR_SKIP_FRAMES), yesno, NULL, 2,
-                                         settings.skipframes);
-            if (picked >= 0) settings.skipframes = picked;
+            settings.skipframes = !settings.skipframes;
             break;
-        }
 
         case MPEG_OPTION_SCALE_MODE:
-        {
-            int picked = metro_menu_pick(metro_str(MSTR_SCALE_MODE), scalemodes, NULL,
-                                         2, settings.scale_mode);
-            if (picked >= 0)
-            {
-                settings.scale_mode = picked;
-                vo_update_scale_mode();
-            }
+            settings.scale_mode =
+                (settings.scale_mode == MPEG_SCALE_MODE_FIT)
+                    ? MPEG_SCALE_MODE_COVER : MPEG_SCALE_MODE_FIT;
+            vo_update_scale_mode();
             break;
-        }
 
 #ifdef HAVE_BACKLIGHT_BRIGHTNESS
         case MPEG_OPTION_BACKLIGHT_BRIGHTNESS:
         {
             int v = settings.backlight_brightness;
             mpeg_backlight_update_brightness(v);
-            metro_menu_adjust_int(metro_str(MSTR_BACKLIGHT_BRIGHTNESS), &v, -1,
+            metro_menu_adjust_int(metro_str(MSTR_TITLE_BRIGHTNESS), &v, -1,
                                   MAX_BRIGHTNESS_SETTING - MIN_BRIGHTNESS_SETTING,
                                   backlight_brightness_formatter,
                                   backlight_brightness_function);
@@ -624,7 +716,15 @@ static void audio_options(void)
 
     while (!menu_quit)
     {
-        result = metro_menu_pick(metro_str(MSTR_AUDIO_OPTIONS), items, NULL,
+        const char *values[ARRAYLEN(items)];
+
+        values[MPEG_AUDIO_TONE_CONTROLS] = off_setting[settings.tone_controls ? 1 : 0];
+        values[MPEG_AUDIO_CHANNEL_MODES] = off_setting[settings.channel_modes ? 1 : 0];
+        values[MPEG_AUDIO_CROSSFEED] = off_setting[settings.crossfeed ? 1 : 0];
+        values[MPEG_AUDIO_EQUALIZER] = off_setting[settings.equalizer ? 1 : 0];
+        values[MPEG_AUDIO_DITHERING] = off_setting[settings.dithering ? 1 : 0];
+
+        result = metro_menu_pick(metro_str(MSTR_TITLE_AUDIO), items, values,
                                  ARRAYLEN(items), selected);
         if (result >= 0)
             selected = result;
@@ -632,64 +732,29 @@ static void audio_options(void)
         switch (result)
         {
         case MPEG_AUDIO_TONE_CONTROLS:
-        {
-            int picked = metro_menu_pick(metro_str(MSTR_TONE_CONTROLS), off_setting,
-                                         NULL, 2, settings.tone_controls);
-            if (picked >= 0)
-            {
-                settings.tone_controls = picked;
-                sync_audio_setting(MPEG_AUDIO_TONE_CONTROLS, false);
-            }
+            settings.tone_controls = !settings.tone_controls;
+            sync_audio_setting(MPEG_AUDIO_TONE_CONTROLS, false);
             break;
-        }
 
         case MPEG_AUDIO_CHANNEL_MODES:
-        {
-            int picked = metro_menu_pick(metro_str(MSTR_CHANNEL_MODES), off_setting,
-                                         NULL, 2, settings.channel_modes);
-            if (picked >= 0)
-            {
-                settings.channel_modes = picked;
-                sync_audio_setting(MPEG_AUDIO_CHANNEL_MODES, false);
-            }
+            settings.channel_modes = !settings.channel_modes;
+            sync_audio_setting(MPEG_AUDIO_CHANNEL_MODES, false);
             break;
-        }
 
         case MPEG_AUDIO_CROSSFEED:
-        {
-            int picked = metro_menu_pick(metro_str(MSTR_CROSSFEED), off_setting, NULL,
-                                         2, settings.crossfeed);
-            if (picked >= 0)
-            {
-                settings.crossfeed = picked;
-                sync_audio_setting(MPEG_AUDIO_CROSSFEED, false);
-            }
+            settings.crossfeed = !settings.crossfeed;
+            sync_audio_setting(MPEG_AUDIO_CROSSFEED, false);
             break;
-        }
 
         case MPEG_AUDIO_EQUALIZER:
-        {
-            int picked = metro_menu_pick(metro_str(MSTR_EQUALIZER), off_setting, NULL,
-                                         2, settings.equalizer);
-            if (picked >= 0)
-            {
-                settings.equalizer = picked;
-                sync_audio_setting(MPEG_AUDIO_EQUALIZER, false);
-            }
+            settings.equalizer = !settings.equalizer;
+            sync_audio_setting(MPEG_AUDIO_EQUALIZER, false);
             break;
-        }
 
         case MPEG_AUDIO_DITHERING:
-        {
-            int picked = metro_menu_pick(metro_str(MSTR_DITHERING), off_setting, NULL,
-                                         2, settings.dithering);
-            if (picked >= 0)
-            {
-                settings.dithering = picked;
-                sync_audio_setting(MPEG_AUDIO_DITHERING, false);
-            }
+            settings.dithering = !settings.dithering;
+            sync_audio_setting(MPEG_AUDIO_DITHERING, false);
             break;
-        }
 
         default:
             menu_quit = true;
@@ -717,13 +782,25 @@ static void mpeg_settings(void)
         metro_str(MSTR_CLEAR_RESUMES),
     };
     const char *const single_all[] = { metro_str(MSTR_SINGLE), metro_str(MSTR_ALL) };
+    char resume_buf[8];
     int selected = 0;
     int result;
     bool menu_quit = false;
 
     while (!menu_quit)
     {
-        result = metro_menu_pick(metro_str(MSTR_SETTINGS), items, NULL,
+        const char *values[ARRAYLEN(items)];
+
+        values[MPEG_SETTING_DISPLAY_SETTINGS] = NULL;
+        values[MPEG_SETTING_AUDIO_SETTINGS] = NULL;
+        values[MPEG_SETTING_PLAY_MODE] = single_all[settings.play_mode ? 1 : 0];
+        /* The stored-resume count doubles as this action's value --
+         * it also confirms the action worked (drops to 0 in place). */
+        rb->snprintf(resume_buf, sizeof(resume_buf), "%d",
+                     settings.resume_count);
+        values[MPEG_SETTING_CLEAR_RESUMES] = resume_buf;
+
+        result = metro_menu_pick(metro_str(MSTR_TITLE_SETTINGS), items, values,
                                  ARRAYLEN(items), selected);
         if (result >= 0)
             selected = result;
@@ -739,12 +816,8 @@ static void mpeg_settings(void)
             break;
 
         case MPEG_SETTING_PLAY_MODE:
-        {
-            int picked = metro_menu_pick(metro_str(MSTR_PLAY_MODE), single_all,
-                                         NULL, 2, settings.play_mode);
-            if (picked >= 0) settings.play_mode = picked;
+            settings.play_mode = !settings.play_mode;
             break;
-        }
 
         case MPEG_SETTING_CLEAR_RESUMES:
             clear_resume_count();

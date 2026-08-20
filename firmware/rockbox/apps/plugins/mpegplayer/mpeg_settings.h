@@ -173,6 +173,17 @@ enum metro_str_id
     MSTR_NO_FILE,
     MSTR_UNSUPPORTED_FORMAT,
     MSTR_ERROR_OPENING_FILE,
+    /* R2-F4 Zune redesign (M-060 cont.): lowercase page titles for the
+     * DISPLAY-48 header -- separate entries from the row labels above
+     * because Metro's big titles are all-lowercase and deliberately
+     * short (the 48px face fits ~13 characters across 320px), while
+     * the same concept as a row label reads in sentence case ("Opciones
+     * de pantalla" row -> "pantalla" page). */
+    MSTR_TITLE_VIDEO,
+    MSTR_TITLE_SETTINGS,
+    MSTR_TITLE_DISPLAY,
+    MSTR_TITLE_AUDIO,
+    MSTR_TITLE_BRIGHTNESS,
     MSTR_COUNT
 };
 
@@ -180,3 +191,16 @@ const char *metro_str(int id);
 int metro_language(void);
 void metro_osd_colors(unsigned *bgcolor, unsigned *fgcolor, unsigned *secondary,
                       unsigned *tertiary, unsigned *accent);
+
+/* R2-F4 Zune redesign (M-060 cont.): Metro's own real list typefaces,
+ * loaded once in mpegplayer.c's osd_init() next to the caption font --
+ * mpeg_settings.c's menu widget was drawing with plain FONT_UI before,
+ * which is why it never actually looked like the rest of Metro despite
+ * matching its row geometry. A plugin can't include apps/metro/'s own
+ * metro_fonts.c (separate link unit), so these are loaded fresh here,
+ * same rb->font_load() mechanism as the caption font. */
+int metro_font_caption(void);
+int metro_font_list(void);
+int metro_font_list_sel(void);
+int metro_font_display(void);
+int metro_font_title(void);

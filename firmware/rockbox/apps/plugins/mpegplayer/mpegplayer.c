@@ -596,16 +596,23 @@ enum osd_bits
     OSD_REFRESH_ALL        = 0x000f, /* Only immediate graphical elements */
 };
 
-/* Status icons selected according to font height */
-extern const unsigned char mpegplayer_status_icons_8x8x1[];
-extern const unsigned char mpegplayer_status_icons_12x12x1[];
-extern const unsigned char mpegplayer_status_icons_16x16x1[];
-
 /* Main border areas that contain OSD elements */
 #define OSD_BDR_L 2
 #define OSD_BDR_T 2
 #define OSD_BDR_R 2
 #define OSD_BDR_B 2
+
+/* R2-F4 Zune redesign (M-060): single-row transport strip -- icon,
+ * elapsed time, thin scrubber, duration, all on one baseline, sized
+ * off the OSD's own text height instead of Rockbox's original fixed
+ * bitmap-icon tiers. METRO_OSD_BAR_H is the scrollbar rect's full
+ * height (also the end-cap dot's side); the track/fill line itself is
+ * thinner, METRO_OSD_BAR_LINE. */
+#define METRO_OSD_ICON_MIN  10
+#define METRO_OSD_GAP        4
+#define METRO_OSD_BAR_H       4
+#define METRO_OSD_BAR_LINE    2
+#define METRO_OSD_VOL_W      28
 
 struct osd
 {
@@ -634,7 +641,6 @@ struct osd
     struct vo_rect time_rect;
     struct vo_rect dur_rect;
     struct vo_rect vol_rect;
-    const unsigned char *icons;
     struct vo_rect stat_rect;
     int status;
     uint32_t curr_time;
@@ -730,19 +736,11 @@ static void draw_fillrect(int x, int y, int width, int height)
     mylcd_fillrect(__X, __Y, __W, __H);
 }
 
-static void draw_hline(int x1, int x2, int y)
-{
-#ifdef LCD_LANDSCAPE
-    mylcd_hline(x1 + osd.x, x2 + osd.x, y + osd.y);
-#else
-    y = LCD_WIDTH - (y + osd.y) - 1;
-    mylcd_vline(y, x1 + osd.x, x2 + osd.x);
-#endif
-}
-
 /* R2-F4/DD-11 (M-059): draw_vline() (the progress bar border's left/
- * right edges) is gone -- the flat bar below has no border, only
- * draw_hline() (still used elsewhere, osd_refresh_background()) survives. */
+ * right edges) is gone -- the flat bar below has no border. R2-F4
+ * Zune redesign (M-060) later dropped draw_hline() too, once
+ * osd_refresh_background() stopped drawing the raised-bevel hairlines
+ * that were its last caller. */
 
 /* R2-F4/DD-11 (M-059): flat two-color bar -- track (osd.prog_trackcolor)
  * then accent fill over the played portion, full height, no border, no
@@ -757,20 +755,93 @@ static void draw_scrollbar_draw(int x, int y, int width, int height,
                                 uint32_t min, uint32_t max, uint32_t val)
 {
     unsigned oldfg = mylcd_get_foreground();
+    int line_y = y + (height - METRO_OSD_BAR_LINE) / 2;
+    int cap_x;
 
     val = muldiv_uint32((uint32_t)width, val, max - min);
     val = MIN(val, (uint32_t)width);
 
+    /* R2-F4/DD-11 (M-059), Zune redesign (M-060): thin flat line, not
+     * a full-height block -- track (osd.prog_trackcolor, now a ~28%
+     * white blend over the panel, see osd_init()) then accent fill for
+     * the played portion. */
     mylcd_set_foreground(osd.prog_trackcolor);
-    draw_fillrect(x, y, width, height);
+    draw_fillrect(x, line_y, width, METRO_OSD_BAR_LINE);
 
     if (val > 0)
     {
         mylcd_set_foreground(osd.prog_fillcolor);
-        draw_fillrect(x, y, val, height);
+        draw_fillrect(x, line_y, val, METRO_OSD_BAR_LINE);
+
+        /* Rounded-looking end-cap "thumb" at the scrub position, sized
+         * to the row's full bar-cap height so it always stays inside
+         * osd.prog_rect's own bounds -- that rect is exactly what gets
+         * cleared before the next redraw and unioned into the dirty
+         * blit in osd_refresh(), so nothing drawn here may cross it. */
+        cap_x = x + val - height / 2;
+        if (cap_x < x)
+            cap_x = x;
+        if (cap_x + height > x + width)
+            cap_x = x + width - height;
+        draw_fillrect(cap_x, y, height, height);
     }
 
     mylcd_set_foreground(oldfg);
+}
+
+/* R2-F4 Zune redesign (M-060): geometric transport glyphs, stepped
+ * from 1px-wide fillrects -- the same primitive draw_scrollbar_draw()
+ * above already uses -- instead of Rockbox's bitmap+drop-shadow icon.
+ * dir>0 points right (play/ff), dir<0 points left (rw). */
+static void draw_tri_stepped(int x, int y, int w, int h, int dir)
+{
+    int s;
+
+    for (s = 0; s < w; s++)
+    {
+        int col = (dir > 0) ? s : (w - 1 - s);
+        int hh = h - (h * col) / w;
+        if (hh < 1)
+            hh = 1;
+        draw_fillrect(x + s, y + (h - hh) / 2, 1, hh);
+    }
+}
+
+static void draw_status_icon(int x, int y, int size, int status)
+{
+    int bar_w, gap, half;
+
+    switch (status)
+    {
+    case OSD_STATUS_PAUSED:
+        bar_w = MAX(size / 4, 2);
+        draw_fillrect(x, y, bar_w, size);
+        draw_fillrect(x + size - bar_w, y, bar_w, size);
+        break;
+
+    case OSD_STATUS_STOPPED:
+        draw_fillrect(x, y, size, size);
+        break;
+
+    case OSD_STATUS_FF:
+        gap = MAX(size / 8, 1);
+        half = (size - gap) / 2;
+        draw_tri_stepped(x, y, half, size, 1);
+        draw_tri_stepped(x + half + gap, y, half, size, 1);
+        break;
+
+    case OSD_STATUS_RW:
+        gap = MAX(size / 8, 1);
+        half = (size - gap) / 2;
+        draw_tri_stepped(x, y, half, size, -1);
+        draw_tri_stepped(x + half + gap, y, half, size, -1);
+        break;
+
+    case OSD_STATUS_PLAYING:
+    default:
+        draw_tri_stepped(x, y, size, size, 1);
+        break;
+    }
 }
 
 static void draw_scrollbar_draw_rect(const struct vo_rect *rc, int min,
@@ -1087,17 +1158,10 @@ static void draw_putsxy_oriented(int x, int y, const char *str)
     }
 }
 #else
-static void draw_oriented_mono_bitmap_part(const unsigned char *src,
-                                           int src_x, int src_y,
-                                           int stride, int x, int y,
-                                           int width, int height)
-{
-    int mode = mylcd_get_drawmode();
-    mylcd_set_drawmode(DRMODE_FG);
-    mylcd_mono_bitmap_part(src, src_x, src_y, stride, x, y, width, height);
-    mylcd_set_drawmode(mode);
-}
-
+/* R2-F4 Zune redesign (M-060): the non-portrait draw_oriented_mono_bitmap_part()
+ * that used to live here was only ever called by osd_refresh_status()'s
+ * bitmap-icon draw -- now gone in favor of draw_status_icon()'s hand-drawn
+ * glyphs, so it's removed rather than left as dead code. */
 static void draw_putsxy_oriented(int x, int y, const char *str)
 {
     int mode = mylcd_get_drawmode();
@@ -1238,76 +1302,64 @@ static void osd_backlight_brightness_video_mode(bool video_on)
 #define osd_backlight_brightness_video_mode(video_on)
 #endif /* HAVE_BACKLIGHT_BRIGHTNESS */
 
+/* Defined below, alongside the rest of the R2-F4 Zune-personalization
+ * block (M-060) -- forward-declared since osd_text_init() needs it to
+ * size the row against the same font osd_refresh() will actually draw
+ * with, but osd_init() (which loads the font) runs after this file's
+ * geometry code is defined. */
+static void draw_setfont_osd(void);
+
 static void osd_text_init(void)
 {
     struct hms hms;
     char buf[32];
-    int phys;
-    int spc_width;
+    int dur_w, text_h;
+    int icon_size, row_h;
+    int x, y;
 
-    draw_setfont(FONT_UI);
+    draw_setfont_osd();
 
     osd.x = 0;
     osd.width = SCREEN_WIDTH;
 
-    vo_rect_clear(&osd.time_rect);
-    vo_rect_clear(&osd.stat_rect);
-    vo_rect_clear(&osd.prog_rect);
-    vo_rect_clear(&osd.vol_rect);
-
     ts_to_hms(stream_get_duration(), &hms);
     hms_format(buf, sizeof (buf), &hms);
-    mylcd_getstringsize(buf, &osd.time_rect.r, &osd.time_rect.b);
+    mylcd_getstringsize(buf, &dur_w, &text_h);
 
-    /* Choose well-sized bitmap images relative to font height */
-    if (osd.time_rect.b < 12) {
-        osd.icons = mpegplayer_status_icons_8x8x1;
-        osd.stat_rect.r = osd.stat_rect.b = 8;
-    } else if (osd.time_rect.b < 16) {
-        osd.icons = mpegplayer_status_icons_12x12x1;
-        osd.stat_rect.r = osd.stat_rect.b = 12;
-    } else {
-        osd.icons = mpegplayer_status_icons_16x16x1;
-        osd.stat_rect.r = osd.stat_rect.b = 16;
-    }
+    /* R2-F4 Zune redesign (M-060): the glyph is drawn, not picked from
+     * a fixed bitmap tier -- size it off the row's own text height. */
+    icon_size = MAX(text_h, METRO_OSD_ICON_MIN);
+    row_h = MAX(text_h, icon_size);
 
-    if (osd.stat_rect.b < osd.time_rect.b) {
-        vo_rect_offset(&osd.stat_rect, 0,
-                       (osd.time_rect.b - osd.stat_rect.b) / 2 + OSD_BDR_T);
-        vo_rect_offset(&osd.time_rect, OSD_BDR_L, OSD_BDR_T);
-    } else {
-        vo_rect_offset(&osd.time_rect, OSD_BDR_L,
-                       osd.stat_rect.b - osd.time_rect.b + OSD_BDR_T);
-        vo_rect_offset(&osd.stat_rect, 0, OSD_BDR_T);
-    }
+    /* Single row, left to right: icon, elapsed time, the scrubber bar,
+     * duration -- a real transport bar (Zune HD included) puts the
+     * times at the bar's own ends, not in a separate header line above
+     * it the way Rockbox's original two-tier OSD did. Trailing space
+     * is reserved for the transient volume level bar (a fixed pixel
+     * width now, not text -- see osd_refresh_volume()). */
+    y = OSD_BDR_T;
+    x = OSD_BDR_L;
 
-    osd.dur_rect = osd.time_rect;
+    vo_rect_set_ext(&osd.stat_rect, x, y + (row_h - icon_size) / 2,
+                    icon_size, icon_size);
+    x += icon_size + METRO_OSD_GAP;
 
-    phys = rb->sound_val2phys(SOUND_VOLUME, rb->sound_min(SOUND_VOLUME));
-    rb->snprintf(buf, sizeof(buf), "%d%s", phys,
-                 rb->sound_unit(SOUND_VOLUME));
+    vo_rect_set_ext(&osd.time_rect, x, y + (row_h - text_h) / 2,
+                    dur_w, text_h);
+    x += dur_w + METRO_OSD_GAP;
 
-    mylcd_getstringsize(" ", &spc_width, NULL);
-    mylcd_getstringsize(buf, &osd.vol_rect.r, &osd.vol_rect.b);
+    vo_rect_set_ext(&osd.dur_rect,
+                    SCREEN_WIDTH - OSD_BDR_R - METRO_OSD_GAP - METRO_OSD_VOL_W - dur_w,
+                    y + (row_h - text_h) / 2, dur_w, text_h);
 
-    osd.prog_rect.r = SCREEN_WIDTH - OSD_BDR_L - spc_width -
-                           osd.vol_rect.r - OSD_BDR_R;
-    osd.prog_rect.b = 3*osd.stat_rect.b / 4;
-    vo_rect_offset(&osd.prog_rect, osd.time_rect.l,
-                   osd.time_rect.b);
+    vo_rect_set_ext(&osd.prog_rect, x, y + (row_h - METRO_OSD_BAR_H) / 2,
+                    osd.dur_rect.l - METRO_OSD_GAP - x, METRO_OSD_BAR_H);
 
-    vo_rect_offset(&osd.stat_rect,
-                   (osd.prog_rect.r + osd.prog_rect.l - osd.stat_rect.r) / 2,
-                   0);
+    vo_rect_set_ext(&osd.vol_rect, osd.dur_rect.r + METRO_OSD_GAP,
+                    y + (row_h - METRO_OSD_BAR_H) / 2,
+                    METRO_OSD_VOL_W, METRO_OSD_BAR_H);
 
-    vo_rect_offset(&osd.dur_rect,
-                   osd.prog_rect.r - osd.dur_rect.r, 0);
-
-    vo_rect_offset(&osd.vol_rect, osd.prog_rect.r + spc_width,
-                   (osd.prog_rect.b + osd.prog_rect.t - osd.vol_rect.b) / 2);
-
-    osd.height = OSD_BDR_T + MAX(osd.prog_rect.b, osd.vol_rect.b) -
-                    MIN(osd.time_rect.t, osd.stat_rect.t) + OSD_BDR_B;
+    osd.height = OSD_BDR_T + row_h + OSD_BDR_B;
 
 #ifdef HAVE_LCD_COLOR
     osd.height = ALIGN_UP(osd.height, 2);
@@ -1332,6 +1384,61 @@ static void osd_text_init(void)
 static unsigned s_metro_secondary;
 static unsigned s_metro_tertiary;
 static int s_metro_language; /* 0=ES, 1=EN -- METRO_LANG_ES/EN */
+
+/* R2-F4 Zune redesign (M-060): Metro's real caption face for the OSD
+ * transport row instead of FONT_SYSFIXED -- loaded once here (a
+ * plugin has no font_load_ex glyph-budget knob, just rb->font_load()),
+ * falls back to FONT_UI if the .fnt is missing so the OSD never goes
+ * blank. Same load-once-at-init, read-via-accessor shape as
+ * metro_load_personalization() itself (see the block comment above
+ * metro_osd_colors()). */
+#define METRO_OSD_FONT_PATH FONT_DIR "/metro-caption-14.fnt"
+static int s_metro_font_id = -1;
+
+/* R2-F4 Zune redesign (M-060 cont.): the settings menu (mpeg_settings.c)
+ * was drawing with plain FONT_UI, which is why it never looked like
+ * the rest of Metro despite already matching its row geometry -- these
+ * two load the same list/listsel faces apps/metro/metro_fonts.c loads
+ * for real Metro screens, exposed to mpeg_settings.c (same plugin
+ * binary, different translation unit) via the accessors below. */
+#define METRO_LIST_FONT_PATH FONT_DIR "/metro-list-20.fnt"
+#define METRO_LISTSEL_FONT_PATH FONT_DIR "/metro-listsel-20.fnt"
+#define METRO_DISPLAY_FONT_PATH FONT_DIR "/metro-display-48.fnt"
+#define METRO_TITLE_FONT_PATH FONT_DIR "/metro-title-28.fnt"
+static int s_metro_list_font_id = -1;
+static int s_metro_listsel_font_id = -1;
+static int s_metro_display_font_id = -1;
+static int s_metro_title_font_id = -1;
+
+static void draw_setfont_osd(void)
+{
+    draw_setfont(s_metro_font_id >= 0 ? s_metro_font_id : FONT_UI);
+}
+
+int metro_font_caption(void)
+{
+    return s_metro_font_id >= 0 ? s_metro_font_id : FONT_UI;
+}
+
+int metro_font_list(void)
+{
+    return s_metro_list_font_id >= 0 ? s_metro_list_font_id : FONT_UI;
+}
+
+int metro_font_list_sel(void)
+{
+    return s_metro_listsel_font_id >= 0 ? s_metro_listsel_font_id : FONT_UI;
+}
+
+int metro_font_display(void)
+{
+    return s_metro_display_font_id >= 0 ? s_metro_display_font_id : FONT_UI;
+}
+
+int metro_font_title(void)
+{
+    return s_metro_title_font_id >= 0 ? s_metro_title_font_id : FONT_UI;
+}
 
 /* Same order as apps/metro/metro_theme.c's accent_colors[] -- index
  * must match enum metro_accent there (0=blue .. 9=teal). */
@@ -1425,8 +1532,24 @@ static void osd_init(void)
     osd.resume_delay = HZ/2;
 #ifdef HAVE_LCD_COLOR
     metro_load_personalization();
-    osd.prog_trackcolor = s_metro_tertiary;
+    /* R2-F4 Zune redesign (M-060): unplayed track reads as a faint
+     * ~28% white wash over the panel instead of a solid tertiary
+     * block -- draw_blendcolor(c1, c2, amount) interpolates c1->c2 as
+     * amount goes 0->255 (see its definition above), so 71 is ~28%. */
+    osd.prog_trackcolor = draw_blendcolor(osd.bgcolor, MYLCD_WHITE, 71);
     osd.prog_fillcolor = osd.accent;
+    /* Negative rb->font_load() results are left as -1 -- the
+     * accessors above already fall back to FONT_UI for any id < 0.
+     * These are the same .fnt files apps/metro/metro_fonts.c loads at
+     * boot, and font_load() dedupes by path (firmware/font.c,
+     * find_font_index() -> "already loaded, no need to reload"), so
+     * all five loads resolve to the app's already-resident fonts --
+     * no extra font RAM, nothing to unload on plugin exit. */
+    s_metro_font_id = rb->font_load(METRO_OSD_FONT_PATH);
+    s_metro_list_font_id = rb->font_load(METRO_LIST_FONT_PATH);
+    s_metro_listsel_font_id = rb->font_load(METRO_LISTSEL_FONT_PATH);
+    s_metro_display_font_id = rb->font_load(METRO_DISPLAY_FONT_PATH);
+    s_metro_title_font_id = rb->font_load(METRO_TITLE_FONT_PATH);
 #else
     osd.bgcolor = GREY_LIGHTGRAY;
     osd.fgcolor = GREY_BLACK;
@@ -1481,39 +1604,18 @@ static void osd_refresh_background(void)
     char buf[32];
     struct hms hms;
 
-    unsigned bg = mylcd_get_background();
-    mylcd_set_drawmode(DRMODE_SOLID | DRMODE_INVERSEVID);
-
-#ifdef HAVE_LCD_COLOR
-    /* Draw a "raised" area for our graphics */
-    mylcd_set_background(draw_blendcolor(bg, MYLCD_WHITE, 192));
-    draw_hline(0, osd.width, 0);
-
-    mylcd_set_background(draw_blendcolor(bg, MYLCD_WHITE, 80));
-    draw_hline(0, osd.width, 1);
-
-    mylcd_set_background(draw_blendcolor(bg, MYLCD_BLACK, 48));
-    draw_hline(0, osd.width, osd.height-2);
-
-    mylcd_set_background(draw_blendcolor(bg, MYLCD_BLACK, 128));
-    draw_hline(0, osd.width, osd.height-1);
-
-    mylcd_set_background(bg);
-    draw_clear_area(0, 2, osd.width, osd.height - 4);
-#else
-    /* Give contrast with the main background */
-    mylcd_set_background(MYLCD_WHITE);
-    draw_hline(0, osd.width, 0);
-
-    mylcd_set_background(MYLCD_DARKGRAY);
-    draw_hline(0, osd.width, osd.height-1);
-
-    mylcd_set_background(bg);
-    draw_clear_area(0, 1, osd.width, osd.height - 2);
-#endif
+    /* R2-F4 Zune redesign (M-060): one flat fill in the panel's own
+     * background color -- no raised-bevel highlight/shadow hairlines.
+     * Metro's flat design language (M-051) rules out both; the panel
+     * itself stays an opaque strip regardless (see DECISIONS.md M-060
+     * for why a truly transparent, floating-over-live-video panel
+     * isn't achievable here -- osd_show() clips the video thread out
+     * of the OSD's rect entirely while it's visible, it isn't real
+     * compositing). */
+    mylcd_set_drawmode(DRMODE_SOLID);
+    draw_clear_area(0, 0, osd.width, osd.height);
 
     vo_rect_set_ext(&osd.update_rect, 0, 0, osd.width, osd.height);
-    mylcd_set_drawmode(DRMODE_SOLID);
 
     if (stream_get_duration() != INVALID_TIMESTAMP) {
         /* Draw the movie duration */
@@ -1550,18 +1652,41 @@ static void osd_refresh_time(void)
 /* Refresh the volume display area */
 static void osd_refresh_volume(void)
 {
-    char buf[32];
-    int width;
-
+    unsigned oldfg = mylcd_get_foreground();
+    int width = osd.vol_rect.r - osd.vol_rect.l;
+    int height = osd.vol_rect.b - osd.vol_rect.t;
+    int line_y = osd.vol_rect.t + (height - METRO_OSD_BAR_LINE) / 2;
+    int min = rb->sound_min(SOUND_VOLUME);
+    int max = rb->sound_max(SOUND_VOLUME);
     int volume = rb->global_status->volume;
-    rb->snprintf(buf, sizeof (buf), "%d%s",
-                 rb->sound_val2phys(SOUND_VOLUME, volume),
-                 rb->sound_unit(SOUND_VOLUME));
-    mylcd_getstringsize(buf, &width, NULL);
+    int fill;
 
-    /* Right-justified */
+    if (volume < min)
+        volume = min;
+    if (volume > max)
+        volume = max;
+    fill = (max > min) ? (int)((long)width * (volume - min) / (max - min)) : 0;
+
+    /* R2-F4 Zune redesign (M-060 cont.): a level bar, same visual
+     * language as the scrubber (draw_scrollbar_draw() above), instead
+     * of a raw "-34dB" readout -- the owner explicitly asked for this
+     * not to show as decibels. draw_scrollbar_draw() itself isn't
+     * reused here since its (val, min, max) contract assumes min==0
+     * (always true for playback position, not necessarily for
+     * SOUND_VOLUME's raw range) -- this normalizes (volume-min)
+     * itself instead. */
     draw_clear_area_rect(&osd.vol_rect);
-    draw_putsxy_oriented(osd.vol_rect.r - width, osd.vol_rect.t, buf);
+
+    mylcd_set_foreground(osd.prog_trackcolor);
+    draw_fillrect(osd.vol_rect.l, line_y, width, METRO_OSD_BAR_LINE);
+
+    if (fill > 0)
+    {
+        mylcd_set_foreground(osd.prog_fillcolor);
+        draw_fillrect(osd.vol_rect.l, line_y, fill, METRO_OSD_BAR_LINE);
+    }
+
+    mylcd_set_foreground(oldfg);
 
     vo_rect_union(&osd.update_rect, &osd.update_rect, &osd.vol_rect);
 }
@@ -1570,55 +1695,18 @@ static void osd_refresh_volume(void)
 static void osd_refresh_status(void)
 {
     int icon_size = osd.stat_rect.r - osd.stat_rect.l;
+    unsigned oldfg = mylcd_get_foreground();
 
     draw_clear_area_rect(&osd.stat_rect);
 
-#ifdef HAVE_LCD_COLOR
-    /* Draw status icon with a drop shadow */
-    unsigned oldfg = mylcd_get_foreground();
-    int i = 1;
-
-    mylcd_set_foreground(draw_blendcolor(mylcd_get_background(),
-                        MYLCD_BLACK, 96));
-
-    while (1)
-    {
-        draw_oriented_mono_bitmap_part(osd.icons,
-                                       icon_size*osd.status,
-                                       0,
-                                       icon_size*OSD_STATUS_COUNT,
-                                       osd.stat_rect.l + osd.x + i,
-                                       osd.stat_rect.t + osd.y + i,
-                                       icon_size, icon_size);
-
-        if (--i < 0)
-            break;
-
-        /* R2-F4/DD-11 (M-059): the main stroke (not the shadow) uses
-         * the user's accent instead of the default fgcolor -- the one
-         * place in the OSD where the accent has a natural spot, since
-         * the progress bar deliberately doesn't use it for the track
-         * (draw_scrollbar_draw() above already reserves accent for the
-         * played portion specifically). */
-        mylcd_set_foreground(osd.accent);
-    }
-
-    /* Restores the color this function was entered with -- same rule
-     * draw_scrollbar_draw() follows: every drawing function leaves the
-     * color as it found it, osd_refresh() doesn't do that for them. */
+    /* R2-F4 Zune redesign (M-060): flat accent-colored glyph, no drop
+     * shadow, no bitmap -- draw_status_icon() above. Same "leave the
+     * color as it found it" rule draw_scrollbar_draw() follows. */
+    mylcd_set_foreground(osd.accent);
+    draw_status_icon(osd.stat_rect.l, osd.stat_rect.t, icon_size, osd.status);
     mylcd_set_foreground(oldfg);
 
     vo_rect_union(&osd.update_rect, &osd.update_rect, &osd.stat_rect);
-#else
-    draw_oriented_mono_bitmap_part(osd.icons,
-                                   icon_size*osd.status,
-                                   0,
-                                   icon_size*OSD_STATUS_COUNT,
-                                   osd.stat_rect.l + osd.x,
-                                   osd.stat_rect.t + osd.y,
-                                   icon_size, icon_size);
-    vo_rect_union(&osd.update_rect, &osd.update_rect, &osd.stat_rect);
-#endif
 }
 
 /* Update the current status which determines which icon is displayed */
@@ -1738,7 +1826,7 @@ static void osd_refresh(int hint)
     oldfg = mylcd_get_foreground();
     oldbg = mylcd_get_background();
 
-    draw_setfont(FONT_UI);
+    draw_setfont_osd();
     mylcd_set_foreground(osd.fgcolor);
     mylcd_set_background(osd.bgcolor);
 

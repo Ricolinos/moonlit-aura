@@ -350,3 +350,77 @@ Durante la captura de las evidencias de F4 (`docs/screenshots/F4-*.png`), UNA co
 **El frame YUV del video SÍ se pudo capturar en este simulador**: a diferencia de lo que el plan asumía citando D-307 de Aura-Firmware, `docs/screenshots/R2-F4-video-play.png` muestra el video de prueba (patrón de barras SMPTE) renderizado a todo color, no negro -- confirma que este simulador (o esta versión de Rockbox/SDL) sí puede volcar el contenido YUV decodificado, sin la limitación que Aura documentó para el suyo. Lo que **no** se pudo confirmar visualmente fue el panel del OSD (barra de progreso + tiempos) en sí -- el área donde debería estar aparece en negro en todas las capturas probadas, independiente del tema/acento (verificado con dos esquemas de color distintos, oscuro/teal y claro/rojo), lo que descarta que sea un color mal calculado (los valores de color se verificaron correctos por inspección directa en tiempo de ejecución, ver `DECISIONS.md` M-059) y apunta a un artefacto de decodificación en progreso o a un límite de temporización de captura headless distinto del de D-307, no documentado antes en este proyecto. Ver `DECISIONS.md` M-059, sección "No verificado visualmente".
 
 **Impacto en `PLAN-metro-r2-maestro.md`**: ninguno en el criterio de "hecho" de R2-F4 más allá de la captura específica del panel OSD, que queda pendiente de confirmación visual (por el dueño, en simulador interactivo o hardware) en vez de headless -- el resto de las capturas requeridas (menú de ajustes, modo de ajuste, video entrando directo sin menú de inicio, tema/acento en vivo) sí se completaron.
+
+---
+
+## R2-4 — Video/mpegplayer, rediseño Zune (M-060): el panel del OSD no puede ser realmente transparente sobre el video en vivo
+
+**No es una desviación de un plan escrito** (el rediseño de M-060 no
+estaba en `PLAN-metro-r2-maestro.md`, surgió de una crítica de diseño
+del dueño después de que R2-F4 ya estaba cerrado) sino una corrección
+factual encontrada al ejecutar el punto 1 de una maqueta que el dueño
+ya había aprobado ("sí, me gusta esa propuesta procede") -- se
+documenta aquí por el mismo criterio que el resto de este archivo:
+factual, encontrado en ejecución, con impacto real en lo entregado.
+
+**La maqueta aprobada asumía** que el panel del OSD podía dibujarse
+sin fondo, flotando directamente sobre el frame de video en
+reproducción (mismo lenguaje que el "Now Playing" de Zune HD, donde
+los controles son solo texto+glifos sin ningún panel detrás).
+
+**Lo que el código real permite**: Rockbox no compone el OSD sobre el
+video -- lo **recorta**. `osd_show(OSD_SHOW)` (`mpegplayer.c`) llama
+`stream_vo_set_clip(&rc)` con `rc = {0, 0, SCREEN_WIDTH, osd.y}`: el
+hilo de video deja de dibujar por completo en el rectángulo del OSD
+mientras está visible. No hay "video congelado" detrás para componer
+con alpha -- simplemente no hay nada ahí hasta que el OSD se oculta y
+`stream_draw_frame(false)` vuelve a pintar esa zona. Lograr un panel
+de verdad transparente exigiría leer el framebuffer de vuelta y
+componer manualmente cuadro a cuadro -- una reescritura bastante más
+grande, con riesgo de rendimiento real en el iPod 6G que esta ronda no
+puede medir (Barrera B3, sin hardware).
+
+**Resolución aplicada** (ver `DECISIONS.md` M-060, punto 1): el panel
+se queda opaco, pero se redujo de dos filas (~28-34px) a una sola fila
+del tamaño exacto del texto (~18-20px) y se le quitó el bisel
+elevado/bordes que traía -- un acercamiento honesto al espíritu de "no
+un cajón de chrome sobre el video", no al pixel de la maqueta.
+
+**Impacto**: los otros 4 puntos de la maqueta (ícono geométrico,
+tiempos en los extremos de la barra, tipografía Metro real, barra
+delgada con punta redondeada) se implementaron tal como se aprobaron,
+sin ajuste de alcance. Solo el punto 1 difiere de lo maquetado, por la
+razón arquitectónica de arriba.
+
+---
+
+## R2-5 — Video/mpegplayer: la conclusión de R2-3 sobre "el panel del OSD no capturable" era falsa -- el binario del simdisk estaba desactualizado (`make` no instala plugins)
+
+**Qué decían R2-3 y los registros de M-059/M-060**: que el panel del
+OSD no se pudo confirmar visualmente en capturas headless en ninguna
+ventana de ticks probada, atribuyéndolo a un artefacto de
+decodificación MPEG-2 en progreso o a un límite de temporización de la
+captura de un solo proceso.
+
+**Lo que era en realidad**: `make` en `build-sim` compila
+`mpegplayer.rock` pero no lo copia a
+`simdisk/.rockbox/rocks/viewers/` -- eso lo hace **`make install`**
+(`tools/root.make` → `buildzip.pl`). Las capturas de M-059/M-060 y el
+simulador interactivo que el dueño usó corrían un `.rock` viejo. Con
+el binario instalado, el panel se captura sin problema
+(`docs/screenshots/R2-F4-zune-osd.png`). Lo único de R2-3 que se
+sostiene es que la pantalla completamente negra en ticks muy tempranos
+(~44-48) es decodificación aún en progreso.
+
+**Cómo se descubrió**: el dueño reportó ver el OSD viejo (volumen en
+"-34dB", panel de dos niveles) en el simulador interactivo después de
+que M-060 estaba supuestamente aplicado -- la única explicación
+coherente era que el binario en ejecución no contenía los cambios, y
+la marca de tiempo del `.rock` del simdisk (16:47, horas antes del
+último build) lo confirmó.
+
+**Impacto**: ninguna de las conclusiones de diseño cambia; cambia el
+procedimiento de verificación (todo `sim_shot.sh` o lanzamiento
+interactivo va precedido de `make install`) y quedan corregidas las
+filas/planes que citaban "no verificable en headless" como límite del
+simulador. Ver `DECISIONS.md` M-061.

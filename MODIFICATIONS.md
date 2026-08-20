@@ -180,3 +180,74 @@ comentario inline `Metro (M-059)` en el punto exacto del cambio:
 Ver `DECISIONS.md` M-059 para el detalle completo de cada decisión de
 diseño y el bug de memoria encontrado y corregido durante la
 verificación (no presente en el port mecánico inicial de Aura).
+
+### R2-F4, continuación (2026-08-19, M-060)
+
+Rediseño real "Zune HD" del OSD de video, pedido explícitamente por el
+dueño tras verificar M-059 en el simulador interactivo (el port
+mecánico ya quitaba el menú nativo de Rockbox, pero el OSD en sí no se
+parecía al reproductor del Zune). Todo el cambio vive en
+`apps/plugins/mpegplayer/mpegplayer.c`, comentario inline `Metro
+(M-060)`/`R2-F4 Zune redesign (M-060)` en cada punto:
+
+- `struct osd` pierde el campo `icons` (ya no hay ícono bitmap); las 3
+  externs `mpegplayer_status_icons_8/12/16x8x1` se quitan (los `.bmp`
+  fuente en `apps/plugins/bitmaps/mono/` se dejan intactos, fuera de
+  alcance).
+- `osd_text_init()`: reescritura completa, de layout de dos filas
+  (ícono+tiempos arriba, barra abajo) a una sola fila (ícono, tiempo
+  transcurrido, barra, duración), usando `vo_rect_set_ext()` en vez del
+  truco original de ancho-como-`.r`-luego-offset.
+- `osd_refresh_background()`: el bisel elevado de 4 líneas de
+  brillo/sombra se quita, un solo relleno plano.
+- `draw_status_icon()`/`draw_tri_stepped()` (nuevas): ícono geométrico
+  por `draw_fillrect()`, reemplaza el bitmap+sombra de
+  `osd_refresh_status()`.
+- `draw_scrollbar_draw()`: línea de 2px con "thumb" cuadrado de 4px en
+  el borde de lo reproducido, en vez del bloque de altura completa
+  sin punta.
+- `osd_init()`: `osd.prog_trackcolor` pasa de `s_metro_tertiary` sólido
+  a `draw_blendcolor(osd.bgcolor, MYLCD_WHITE, 71)` (~28% blanco);
+  carga `metro-caption-14.fnt` vía `rb->font_load()`
+  (`draw_setfont_osd()`, con reserva a `FONT_UI` si falla).
+- `draw_oriented_mono_bitmap_part()` (la variante no-portrait) y
+  `draw_hline()` se eliminan por quedar sin llamadores tras lo
+  anterior.
+
+Ver `DECISIONS.md` M-060 para el detalle de cada uno de los 5 cambios
+de la maqueta aprobada por el dueño, incluida la razón por la que el
+panel no puede ser realmente transparente sobre el video en vivo
+(`docs/DESVIACIONES.md` R2-4).
+
+### R2-F4, cierre (2026-08-19, M-061)
+
+Menús del plugin reconstruidos con la anatomía real de página Metro y
+volumen del OSD como barra de nivel, tras verificación del dueño en el
+simulador interactivo (que además destapó que M-060 nunca había
+llegado al simdisk -- `make` no instala plugins, ver
+`docs/DESVIACIONES.md` R2-5). Comentarios inline `Metro (M-060 cont.)`/
+`M-061`:
+
+- `apps/plugins/mpegplayer/mpeg_settings.h`: 5 IDs de string nuevos
+  (títulos de página en minúsculas: `MSTR_TITLE_VIDEO`/`_SETTINGS`/
+  `_DISPLAY`/`_AUDIO`/`_BRIGHTNESS`); declaraciones
+  `metro_font_caption()`/`metro_font_list()`/`metro_font_list_sel()`/
+  `metro_font_display()`/`metro_font_title()`.
+- `apps/plugins/mpegplayer/mpeg_settings.c`: `metro_page_chrome()`
+  (nueva -- ceja caption + reloj + batería 18x9 replicando
+  `metro_draw_header()`/`metro_draw_battery()` de `apps/metro/`, más el
+  título de página en display-48 a (12,28));
+  `metro_menu_draw()` ahora dibuja esa anatomía completa con filas
+  desde y=84; `display_options()`/`audio_options()`/`mpeg_settings()`
+  reescritas al patrón ciclar-en-el-lugar con valores visibles
+  (los selectores de dos filas por valor se eliminaron);
+  `metro_adjust_draw()` (brillo) con la misma anatomía y el valor en
+  title-28/acento; strings de ceja en minúsculas.
+- `apps/plugins/mpegplayer/mpegplayer.c`: carga de
+  `metro-display-48.fnt`/`metro-title-28.fnt` (deduplicadas por ruta
+  contra las de la app, `firmware/font.c`); `osd_refresh_volume()`
+  reescrita a barra de nivel de 28px (pista 28% blanco + relleno
+  acento, rango real de SOUND_VOLUME normalizado) en vez del texto
+  "-NdB"; `osd_text_init()` reserva ancho fijo para esa barra.
+
+Ver `DECISIONS.md` M-061.

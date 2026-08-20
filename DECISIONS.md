@@ -1331,3 +1331,217 @@ que usa están verificados correctos por inspección directa -- el
 riesgo real aquí es bajo, pero la confirmación visual queda pendiente
 para cuando el dueño lo revise en el simulador interactivo o en
 hardware real.
+
+## M-060 — R2-F4 (continuación): rediseño real "Zune HD" del OSD de video
+
+**Contexto**: tras M-059, el dueño verificó en el simulador interactivo
+y confirmó que el menú nativo de Rockbox en efecto ya no aparece, pero
+que el OSD en sí "dista mucho de parecerse al reproductor que tenía el
+Zune" -- pidió explícitamente ayuda de diseño real, "como Microsoft lo
+hubiera hecho con el Zune", no solo un port mecánico recoloreado. Se
+propuso una maqueta HTML (artefacto, 5 cambios concretos con su
+justificación) que el dueño aprobó sin cambios ("sí, me gusta esa
+propuesta procede").
+
+**Los 5 cambios aprobados y cómo se implementaron** (todo en
+`apps/plugins/mpegplayer/mpegplayer.c`, sin tocar `video_out_rockbox.c`
+ni `mpeg_settings.c` de M-059):
+
+1. **Panel flotando sobre el video, sin fondo opaco** -- este punto
+   resultó **no alcanzable tal cual se maquetó**, por una razón
+   arquitectónica descubierta al leer `osd_show()` con cuidado antes de
+   tocar código: Rockbox no compone el OSD sobre el video en vivo, lo
+   **recorta**. `osd_show(OSD_SHOW)` llama
+   `stream_vo_set_clip(&rc)` con `rc = {0, 0, SCREEN_WIDTH, osd.y}` --
+   el hilo de video literalmente deja de dibujar en el área del OSD
+   mientras está visible; al ocultarse, `stream_draw_frame(false)`
+   redibuja esa zona desde cero. No es alpha-blending con "stale" video
+   detrás -- es una zona muerta que el video nunca toca. Lograr un
+   panel de verdad transparente exigiría leer el framebuffer de vuelta
+   para componer manualmente, una reescritura mucho más grande y con
+   riesgo de rendimiento real en hardware iPod 6G que no se puede medir
+   esta ronda (Barrera B3). **Resolución aplicada**: no un panel
+   "flotante" literal, sino uno mucho más chico y completamente plano
+   -- `osd_refresh_background()` pasó de dibujar un bisel "elevado" de
+   4 líneas de brillo/sombra (M-059 heredó esto de Rockbox stock) a un
+   solo relleno plano sin borde, y la fila completa del OSD (ícono +
+   tiempos + barra) se redujo de dos niveles a **una sola fila**, del
+   tamaño del propio texto -- de un panel de ~28-34px de alto a uno de
+   ~18-20px. El efecto visual apuntado ("ligero, no un cajón de chrome
+   sobre el video") se logra por tamaño y planitud, no por
+   transparencia real. Este ajuste de alcance no estaba en la maqueta
+   aprobada -- se documenta aquí como corrección factual encontrada
+   durante la ejecución (ver también `docs/DESVIACIONES.md` R2-4).
+2. **Ícono de estado geométrico, sin sombra** -- `draw_status_icon()`
+   (nueva, junto a `draw_tri_stepped()`) dibuja triángulos/barras con
+   `draw_fillrect()` en pasos de 1px, igual que la barra de progreso ya
+   hacía -- reemplaza `osd_refresh_status()`'s bitmap de 3 tamaños
+   (`mpegplayer_status_icons_8/12/16x...`) con sombra de 1px offset en
+   negro-blend. Los 5 estados (parado/pausado/reproduciendo/
+   avance/retroceso) tienen su propio glifo; el color es siempre el
+   acento del usuario.
+3. **Tiempos en los extremos de la barra, no en una fila separada** --
+   `osd_text_init()` se reescribió por completo: antes eran dos filas
+   (ícono+tiempos arriba, barra abajo, con el ícono centrado sobre la
+   barra); ahora es una sola fila, izquierda a derecha: ícono, tiempo
+   transcurrido, la barra, duración total -- exactamente el layout de
+   un transport bar real (Zune HD incluido). Se usó `vo_rect_set_ext()`
+   (posición absoluta) en vez del truco original de "ancho como .r,
+   luego offset" -- más fácil de verificar a mano sin arrastrar bugs de
+   desplazamiento.
+4. **Tipografía Metro real, no `FONT_SYSFIXED`** -- `metro-caption-14.fnt`
+   (el mismo archivo que `apps/metro/metro_fonts.c` carga para el rol
+   `MFONT_CAPTION`) se carga una vez en `osd_init()` vía
+   `rb->font_load()` (un plugin no tiene `font_load_ex` con presupuesto
+   de glifos, solo el `rb->` genérico) y se expone a través de
+   `draw_setfont_osd()`, con reserva a `FONT_UI` si la carga falla. El
+   riesgo de rectángulo de redibujado que tenía pendiente el plan
+   anterior no aplicó: `osd_text_init()` mide el texto con la MISMA
+   fuente que `osd_refresh()` usa para dibujar (ambos llaman
+   `draw_setfont_osd()`), así que `osd.time_rect`/`osd.dur_rect` ya
+   encierran exactamente lo que se dibuja -- no se necesitó ampliar el
+   área de limpieza a mano.
+5. **Barra delgada de 2px con punta redondeada, pista al 28% blanco** --
+   `draw_scrollbar_draw()` ahora dibuja una línea de
+   `METRO_OSD_BAR_LINE=2`px (antes ocupaba toda la altura del rect,
+   ~12px) centrada dentro de un rect de `METRO_OSD_BAR_H=4`px, más un
+   "thumb" cuadrado de esos mismos 4px en el borde de lo reproducido
+   (recortado para no salirse nunca del rect que `osd.prog_rect` le
+   asignó, ya que ese rect es lo que se limpia antes de cada redibujado
+   y lo que se une al rectángulo sucio del blit final). La pista sin
+   reproducir pasó de `osd.prog_trackcolor = s_metro_tertiary` (bloque
+   sólido) a `draw_blendcolor(osd.bgcolor, MYLCD_WHITE, 71)` -- ~28% de
+   blanco mezclado sobre el fondo del panel (`draw_blendcolor` interpola
+   linealmente 0→255 entre sus dos colores, así que 71/255≈0.28).
+
+**Limpieza asociada**: `osd.icons` y las tres externs
+`mpegplayer_status_icons_8/12/16x8x1` (bitmaps que ya no se referencian
+en código) se quitaron del struct/decls -- los `.bmp` fuente en
+`apps/plugins/bitmaps/mono/` se dejaron intactos (recurso genérico de
+Rockbox, tocar su pipeline de generación de bitmaps es una superficie
+sin relación con este cambio). La variante de
+`draw_oriented_mono_bitmap_part()` no-portrait quedó sin llamadores
+tras quitar el ícono de bitmap -- se eliminó (la otra copia, la
+`#ifdef LCD_PORTRAIT`, sigue viva vía `draw_putsxy_oriented()` para el
+render de glifos). `draw_hline()` quedó igual de huérfana al aplanar
+`osd_refresh_background()` -- eliminada también. Build limpio, cero
+warnings, en sim (`build-sim`) y target (`build-ipod6g`).
+
+**No verificado visualmente (igual que M-059, mismo límite, más
+investigado esta vez)**: se intentó activamente encontrar una ventana
+de ticks donde la captura headless mostrara el panel del OSD con
+contenido legible. Con `firmware/tools/sim_shot.sh` variando ticks
+finos (40/44/46/48/50/55/60/65/70/75/80/90) sobre la secuencia
+`SCROLL_FWD,SELECT,SELECT`: en ticks ~40-50 aparece una franja negra
+grande (bastante más alta que los ~18-20px que calcula
+`osd_text_init()`) que por tamaño no puede ser solo el panel -- es
+consistente con la conclusión que ya dejó `docs/DESVIACIONES.md` R2-3
+para M-059: un artefacto de decodificación MPEG-2 en progreso (parte
+del frame aún sin decodificar, no el panel). Para ticks ~55 en
+adelante el video ya se ve a color completo y el panel ya no es
+visible en absoluto -- la ventana en la que el panel está mostrado
+*y* el video ya terminó de decodificar parece ser más angosta que la
+granularidad de captura de un solo proceso permite aislar, igual que
+"Committing database" en `docs/SUPERFICIES.md`. Se intentó además
+`DEBUGF` temporal en `osd_text_init()` para confirmar los valores de
+`osd.height`/rects en tiempo de ejecución sin depender de leer
+píxeles -- resultó ser un callejón sin salida distinto: `apps/plugin.h`
+compila `DEBUGF` como no-operación para plugins en este build (a
+diferencia de `apps/metro/`, que sí imprime -- de ahí que
+`metro_fonts: ... loaded as font id N` apareciera en el log pero nunca
+una línea propia de `mpegplayer`); no se persiguió más allá porque
+forzar una build de depuración del plugin es una superficie
+nueva y no crítica para este cambio. La geometría se verificó en
+cambio a mano (aritmética de `osd_text_init()` trazada término a
+término contra `vo_rect_set_ext()`) y por la propia compilación limpia
+en sim y target. Confirmación visual real queda, como en M-059, para
+el simulador interactivo (lanzado al cierre de esta fase) o hardware.
+
+## M-061 — R2-F4 (cierre): el rediseño Zune sí era invisible -- causa raíz `make` sin `make install`; menús reconstruidos con la anatomía real de página Metro
+
+**El reporte del dueño que destapó todo**: tras M-060, el dueño verificó
+en el simulador interactivo y vio el OSD *viejo* (dos niveles, volumen
+en "-34dB", bisel) y los menús sin estilo Metro -- "¿en qué parte
+supuestamente hiciste los ajustes?". Tenía razón: **ninguno de los
+cambios de M-060 había llegado al simulador**.
+
+**Causa raíz (metodológica, no de código)**: en este árbol, `make` a
+secas compila y enlaza `mpegplayer.rock` en
+`build-sim/apps/plugins/mpegplayer/` pero **no lo copia a
+`simdisk/.rockbox/rocks/viewers/`** -- eso lo hace `make install`
+(`tools/root.make`, `buildzip.pl` con `RBPREFIX=simdisk`). El
+`.rock` del simdisk llevaba horas desactualizado (16:47 vs 18:09):
+toda la verificación de M-060 -- capturas headless *y* el simulador
+interactivo lanzado al cierre -- corrió contra el binario de M-059.
+
+**Consecuencia que hay que corregir por escrito**: la sección "No
+verificado visualmente" de M-059/M-060 y la conclusión de
+`docs/DESVIACIONES.md` R2-3 ("el panel del OSD no se distingue en
+capturas headless, artefacto de decodificación o límite de
+temporización") quedan **desmentidas en su parte central**: con el
+binario correcto instalado, el panel del OSD se captura perfectamente
+(`docs/screenshots/R2-F4-zune-osd.png`, pausa a 40 ticks). La franja
+negra gigante de ticks 44-48 sí era decodificación en progreso (eso
+se sostiene), pero "el panel no aparece nunca" era simplemente el
+panel viejo de un binario viejo. Ver `docs/DESVIACIONES.md` R2-5.
+
+**Lo que M-060 dejó bien y esta pasada confirmó visualmente** (ya
+instalado): fila única de transporte (ícono geométrico en acento +
+tiempos en los extremos + línea de 2px al ~28% blanco), sin bisel,
+panel de ~20px. `docs/screenshots/R2-F4-zune-osd.png`.
+
+**Lo que faltaba de verdad y esta pasada agregó** (la crítica del dueño
+sobre los menús seguía vigente incluso con el binario correcto: M-059
+copió la *geometría* de filas pero no la *anatomía de página* de Metro):
+
+1. **Anatomía completa de página** (`metro_page_chrome()`,
+   `mpeg_settings.c`): réplica 1:1 de lo que toda pantalla real de la
+   app dibuja -- ceja en caption minúsculas a (12,4)
+   ("reproductor de video"), reloj `%02d:%02d` a la derecha, glifo de
+   batería 18x9+nub (copiado de `metro_draw_battery()`, F10), y el
+   elemento firma que faltaba por completo: **título de página gigante
+   en minúsculas con la fuente display de 48px a (12,28)** -- la misma
+   posición y fuente con que el hub dibuja sus pivotes
+   (`metro_draw_pivots()`). Filas desde y=84 (antes 32), pitch 28 --
+   los offsets exactos de `metro_draw.c`.
+2. **Fuentes reales en los menús**: la pasada anterior de esta misma
+   sesión ya había cambiado FONT_UI por `metro-list-20`/`metro-listsel-20`/
+   `metro-caption-14`; ahora se suman `metro-display-48` (título) y
+   `metro-title-28` (valor de la pantalla de brillo). Las cinco cargas
+   via `rb->font_load()` **deduplican por ruta** contra las que
+   `apps/metro/metro_fonts.c` ya dejó residentes al arrancar
+   (`firmware/font.c`, `find_font_index()` → "already loaded") -- costo
+   de RAM cero, nada que descargar al salir del plugin.
+3. **Interacción real de Metro -- ciclar en el lugar**: los selectores
+   de dos filas por valor (patrón Rockbox) se eliminaron; seleccionar
+   una fila de valor **cicla el valor en su lugar**, con el valor
+   actual siempre visible como subtítulo caption/terciario alineado a
+   la derecha -- exactamente `general_on_select()` de
+   `metro_screen_settings.c` (idioma/animaciones/gráficos ciclan así).
+   La fila "Borrar todas las reanudaciones" muestra el conteo actual
+   como valor (baja a 0 en el acto, confirmación visual gratis).
+4. **Títulos de página**: strings nuevos en minúsculas y cortos
+   (`video`, `ajustes`, `pantalla`, `audio`, `brillo` -- ES y EN) para
+   que quepan en la fuente de 48px; la ceja reutiliza
+   MSTR_VIDEO_PLAYER, ahora en minúsculas como toda ceja de la app.
+5. **Volumen sin decibeles** (pedido explícito del dueño): el "-34dB"
+   se reemplazó por una barra de nivel de 28px con el mismo lenguaje
+   de la barra de avance (pista al 28% blanco + relleno acento),
+   normalizando `(volume-min)/(max-min)` del rango real de
+   SOUND_VOLUME. `osd_refresh_volume()` reescrita; ya no se mide texto.
+6. **Pantalla de brillo**: misma anatomía de página (ceja + "brillo"
+   en display-48) con el valor en title-28 y color acento.
+
+**Verificado en vivo** (simulador, binario instalado con `make
+install`): `R2-F4-zune-menu-video.png` (menú raíz), 
+`R2-F4-zune-menu-ajustes.png` (valores "Uno"/"3" en línea),
+`R2-F4-zune-menu-pantalla.png` (5 filas con valores en vivo),
+`R2-F4-zune-menu-audio.png`, `R2-F4-zune-brillo.png` (valor en acento),
+`R2-F4-zune-osd.png` (OSD pausado: ícono acento + 0:00/0:01 en los
+extremos + línea 2px + barra de volumen). Build limpio sin warnings en
+sim y target; 271 checks de los 4 suites en verde.
+
+**Regla operativa nueva para el repo** (guardada también en memoria de
+sesión): toda verificación en simulador -- headless o interactiva --
+va precedida de `make install`, no solo `make`. `firmware/tools/sim_shot.sh`
+no lo hace por sí mismo.
