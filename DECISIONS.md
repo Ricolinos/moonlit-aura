@@ -2492,3 +2492,82 @@ la ventana. Las playlists muestran solo "QA Favorites", sin su fantasma.
 `gen_test_media.sh` (con su magic real `0x00051607`) en vez de dejarlos
 como un experimento de esta fase, para que cualquier captura futura de
 las cuadrículas siga demostrando que el filtro aguanta.
+
+## M-076 — R4/FA-5a: el catálogo español se acentúa, y sale a la luz un bug de UTF-8 que ya existía
+
+**Encargo y su ambigüedad**: el dueño pidió cambiar "Albumes". La
+Fase 1 lo marcó como contradicción a confirmar (¿inglés "Albums" o
+español "álbumes"?) porque el principio del proyecto es "Español
+impecable". Confirmó: **"álbumes", con acento**.
+
+**El problema resultó ser mucho más grande que una palabra**: **ninguna**
+cadena del catálogo español llevaba acentos. Un grep de `[áéíóúñ¿¡]`
+sobre el bloque `strings_es[]` devolvía **cero** resultados. Se
+corrigieron 30 cadenas, entre ellas:
+
+- `"temporizador de sueno"` → `"sueño"`. La vieja no era "sueño" mal
+  escrito: **"sueno" es otra palabra** (1.ª persona de *sonar*), así que
+  la fila decía literalmente otra cosa.
+- `"si"` → `"sí"`. Sin tilde es la conjunción condicional, no la
+  afirmación — en un diálogo de sí/no eso importa.
+- Las tres preguntas ganan su `¿` de apertura, que en español no es
+  opcional.
+- `"espanol"` → `"español"`, `"peliculas"` → `"películas"`,
+  `"imagenes"` → `"imágenes"`, `"calificación"`, `"animación"`,
+  `"gráficos"`, `"retroiluminación"`, etc.
+
+**"videos" se dejó SIN acento a propósito**: el proyecto escribe en
+español de México (`CLAUDE.md`), donde "video" es la forma estándar;
+"vídeo" es de España.
+
+**Precondición verificada antes de tocar nada**: se probó una sola
+cadena con `"música ñ ¿á"` y se capturó el hub. Las fuentes renderizan
+acentos, `ñ` y `¿` perfectamente — el rango generado (`0x20`-`0x17F`,
+`gen_fonts.sh`) los cubre. Sin esa comprobación previa, acentuar 30
+cadenas a ciegas podía haber llenado la interfaz de `?`.
+
+### El hallazgo real: cortar la inicial por BYTE, no por carácter
+
+Acentuar `LANG_UNKNOWN_ALBUM` destapó un bug **preexistente**. Dos
+sitios sacaban la inicial de una etiqueta con `label[0]` — **un solo
+byte**:
+
+- `metro_draw_tile()` (`metro_draw.c`), el tile de acento con inicial.
+- La letra flotante de índice (`metro_screen_list.c`).
+
+Para cualquier texto que empiece con letra acentuada, eso parte la
+secuencia UTF-8 a la mitad y le entrega a `lcd_putsxy()` un byte guía
+suelto sin continuación: glifo basura.
+
+**No es un bug que introduzca esta fase.** Una biblioteca real en
+español con un artista "Ángela" o un álbum "Éxitos" ya lo disparaba
+hoy; simplemente ninguna cadena compilada del firmware empezaba con
+acento, así que nunca se había visto. Acentuar el catálogo lo volvió
+alcanzable también desde el propio firmware — y por eso salió.
+
+**Corrección**: `metro_lang_initial()` (nueva, en `metro_lang.c` porque
+ese módulo no tiene dependencias de Rockbox y así queda host-testeable)
+copia el **carácter** completo, de 1 a 4 bytes, y lo pasa a mayúscula.
+Mayúsculas cubiertas: ASCII `a-z` **y** las acentuadas de Latin-1 en
+UTF-8 (`á`→`Á`, `ñ`→`Ñ`), excluyendo `÷` (0xC3 0xB7, no es letra) y `ÿ`
+(cuya mayúscula `Ÿ` no vive en Latin-1). `metro_widgets_draw_index_letter()`
+pasa de recibir un `char` a recibir una cadena.
+
+**24 checks nuevos** en `test_lang.c`, verdes al primer intento:
+acentos, mayúsculas ya hechas, no-letras de Latin-1, multibyte de 3 y 4
+bytes (CJK y emoji), secuencia truncada, byte de continuación suelto,
+`NULL`, buffer insuficiente y `outsz == 0`.
+
+**Fixture permanente en español**: `gen_test_media.sh` gana una pista de
+"Ángela Ñu" / "Éxitos". Sin ella ninguna etiqueta del simulador empieza
+con un carácter multibyte y el bug volvería a ser invisible.
+`docs/screenshots/R4-FA5a-inicial-acentuada.png` muestra el tile con
+una **Á** correcta.
+
+**Efecto lateral observado, no corregido**: `label_cmp()`
+(`metro_music.c`) compara bytes con mayusculización ASCII, así que una
+inicial acentuada (`0xC3…`) ordena **después de la Z**. "álbum
+desconocido" pasó de primero a último en la lista de álbumes. Afecta
+igual a contenido real de biblioteca ("Ángela" cae tras "Zoé"), es
+independiente de esta fase, y ordenar con plegado de acentos es trabajo
+aparte — queda anotado, no resuelto.

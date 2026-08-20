@@ -263,13 +263,15 @@ void metro_draw_progress(int x, int y, int width, int height, int pct)
 
 void metro_draw_tile(int x, int y, int size, const char *label)
 {
-    char initial[2] = { ' ', '\0' };
+    /* R4/FA-5a (M-076): 5 bytes, no 2 -- la inicial puede ser un
+     * carácter UTF-8 de varios bytes ("Álbum", "Ñu"). Cortar por byte
+     * entregaba una secuencia partida y un glifo basura. */
+    char initial[5] = { ' ', '\0' };
     int w, h;
 
-    if (label && label[0] >= 'a' && label[0] <= 'z')
-        initial[0] = label[0] - 32;
-    else if (label && label[0])
-        initial[0] = label[0];
+    metro_lang_initial(label, initial, sizeof(initial));
+    if (!initial[0])
+        initial[0] = ' ';
 
     lcd_set_foreground(metro_color_accent());
     lcd_fillrect(x, y, size, size);

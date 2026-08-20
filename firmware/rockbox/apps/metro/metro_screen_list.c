@@ -44,7 +44,7 @@ static metro_nav_t s_nav;
 #define METRO_INDEX_LETTER_MIN_STEPS 3
 
 static long s_index_letter_until = 0;
-static char s_index_letter = '\0';
+static char s_index_letter[5] = "";
 
 /* F12: FEATHER (S3.3) -- staggered row entrance after a PUSH, animations=all
  * only. Set on every metro_screen_list_push() and consumed (or just
@@ -181,10 +181,14 @@ void metro_screen_list_handle(int action, int steps)
             {
                 struct metro_row row;
                 pivot->get_row(pivot->ctx, metro_nav_sel(&s_nav), &row);
-                s_index_letter = row.title && row.title[0]
-                                      ? (char)(row.title[0] >= 'a' && row.title[0] <= 'z'
-                                                    ? row.title[0] - 32 : row.title[0])
-                                      : '?';
+                /* R4/FA-5a (M-076): carácter completo, no primer byte. */
+                metro_lang_initial(row.title, s_index_letter,
+                                    sizeof(s_index_letter));
+                if (!s_index_letter[0])
+                {
+                    s_index_letter[0] = '?';
+                    s_index_letter[1] = '\0';
+                }
                 s_index_letter_until = current_tick + METRO_INDEX_LETTER_TICKS;
             }
             break;

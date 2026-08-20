@@ -42,7 +42,7 @@ void metro_widgets_draw_volume_overlay(int pct);
  * caller. Draws over whatever the list already shows (a solid
  * MFONT_DISPLAY-sized accent square, centered) -- the caller decides
  * when to stop calling it and let the next real redraw clear it. */
-void metro_widgets_draw_index_letter(char c);
+void metro_widgets_draw_index_letter(const char *letter);
 
 /* Empty-list state (PLAN_MAESTRO.md S1.4): a centered 96x96 accent
  * tile (blank -- metro_draw_tile() with no letter, this isn't naming

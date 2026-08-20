@@ -20,6 +20,8 @@
 #ifndef METRO_LANG_H
 #define METRO_LANG_H
 
+#include <stddef.h>
+
 /* Own string table, no Rockbox .lang system -- same mechanism as
  * Aura-Firmware's aura_lang.c (D-013, INVESTIGACION.md A.9). Spanish
  * by default (DECISIONS.md M-009); append-only as new screens land. */
@@ -167,5 +169,27 @@ enum metro_lang_id {
 void metro_lang_set(enum metro_language lang);
 enum metro_language metro_lang_get(void);
 const char *metro_lang_str(enum metro_lang_id id);
+
+/* R4/FA-5a (M-076): copia el PRIMER CARÁCTER de `s` -- no el primer
+ * BYTE -- a `out`, en mayúscula si es una letra.
+ *
+ * Existe porque varios sitios dibujaban la inicial de una etiqueta con
+ * `label[0]`, un solo byte. Para cualquier texto que empiece con una
+ * letra acentuada eso parte la secuencia UTF-8 a la mitad y le entrega
+ * a `lcd_putsxy()` un byte guía suelto sin continuación: glifo basura.
+ *
+ * **Es un bug preexistente, no uno que introduzca la acentuación del
+ * catálogo**: una biblioteca real en español con un artista "Ángela" o
+ * un álbum "Éxitos" ya lo disparaba -- solo que ninguna cadena
+ * compilada del firmware empezaba con acento, así que no se había
+ * visto. Acentuar `LANG_UNKNOWN_ALBUM` lo volvió alcanzable también
+ * desde el propio firmware.
+ *
+ * Mayúsculas: ASCII `a-z` y las letras acentuadas de Latin-1 en UTF-8
+ * (`á`→`Á`, `ñ`→`Ñ`), que la fuente sí trae (rango 0x20-0x17F,
+ * gen_fonts.sh). `out` necesita al menos 5 bytes (4 de UTF-8 + NUL).
+ * Una cadena vacía o NULL deja `out` vacío -- los llamadores ya tratan
+ * eso como "sin inicial". */
+void metro_lang_initial(const char *s, char *out, size_t outsz);
 
 #endif /* METRO_LANG_H */

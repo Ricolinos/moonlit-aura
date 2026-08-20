@@ -85,13 +85,15 @@ void metro_widgets_draw_volume_overlay(int pct)
 
 #define METRO_INDEX_LETTER_SIZE 80
 
-void metro_widgets_draw_index_letter(char c)
+void metro_widgets_draw_index_letter(const char *letter)
 {
-    char s[2] = { c, '\0' };
     int x = (LCD_WIDTH - METRO_INDEX_LETTER_SIZE) / 2;
     int y = (LCD_HEIGHT - METRO_INDEX_LETTER_SIZE) / 2;
 
-    metro_draw_tile(x, y, METRO_INDEX_LETTER_SIZE, s);
+    /* R4/FA-5a (M-076): recibe una CADENA, no un char -- la inicial
+     * puede ser un carácter UTF-8 de varios bytes. metro_draw_tile()
+     * ya toma el primer carácter completo de lo que se le pase. */
+    metro_draw_tile(x, y, METRO_INDEX_LETTER_SIZE, letter);
 }
 
 #define METRO_EMPTY_TILE_SIZE 96

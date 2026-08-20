@@ -22,24 +22,24 @@
 static enum metro_language current_lang = METRO_LANG_ES;
 
 static const char *const strings_es[LANG_COUNT] = {
-    [LANG_HUB_MUSIC]    = "musica",
+    [LANG_HUB_MUSIC]    = "música",
     [LANG_HUB_VIDEOS]   = "videos",
     [LANG_HUB_PHOTOS]   = "fotos",
     [LANG_HUB_SETTINGS] = "ajustes",
 
     [LANG_PIVOT_ARTISTS]   = "artistas",
-    [LANG_PIVOT_ALBUMS]    = "albumes",
+    [LANG_PIVOT_ALBUMS]    = "álbumes",
     [LANG_PIVOT_SONGS]     = "canciones",
-    [LANG_PIVOT_GENRES]    = "generos",
+    [LANG_PIVOT_GENRES]    = "géneros",
     [LANG_PIVOT_PLAYLISTS] = "listas",
 
     [LANG_PIVOT_ALL]    = "todos",
-    [LANG_PIVOT_MOVIES] = "peliculas",
+    [LANG_PIVOT_MOVIES] = "películas",
     [LANG_PIVOT_SERIES] = "series",
     [LANG_PIVOT_CLIPS]  = "clips",
 
     [LANG_PIVOT_PHOTOS] = "fotos",
-    [LANG_PIVOT_IMAGES] = "imagenes",
+    [LANG_PIVOT_IMAGES] = "imágenes",
     [LANG_PIVOT_AI]     = "ia",
 
     [LANG_PIVOT_GENERAL] = "general",
@@ -50,34 +50,34 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_SETTING_THEME]    = "tema",
     [LANG_SETTING_ACCENT]   = "acento",
     [LANG_SETTING_RESET]    = "restablecer ajustes",
-    [LANG_VALUE_SPANISH]    = "espanol",
-    [LANG_VALUE_ENGLISH]    = "ingles",
+    [LANG_VALUE_SPANISH]    = "español",
+    [LANG_VALUE_ENGLISH]    = "inglés",
     [LANG_VALUE_DARK]       = "oscuro",
     [LANG_VALUE_LIGHT]      = "claro",
 
     [LANG_ACCENT_BLUE]    = "azul",
-    [LANG_ACCENT_BROWN]   = "cafe",
+    [LANG_ACCENT_BROWN]   = "café",
     [LANG_ACCENT_GREEN]   = "verde",
     [LANG_ACCENT_LIME]    = "lima",
     [LANG_ACCENT_MAGENTA] = "magenta",
     [LANG_ACCENT_MANGO]   = "mango",
     [LANG_ACCENT_PINK]    = "rosa",
-    [LANG_ACCENT_PURPLE]  = "purpura",
+    [LANG_ACCENT_PURPLE]  = "púrpura",
     [LANG_ACCENT_RED]     = "rojo",
     [LANG_ACCENT_TEAL]    = "verde azulado",
 
     [LANG_ABOUT_BASED_ON_ROCKBOX] = "basado en rockbox",
 
-    [LANG_DIALOG_RESET_TITLE] = "restablecer ajustes?",
-    [LANG_DIALOG_YES]         = "si",
+    [LANG_DIALOG_RESET_TITLE] = "¿restablecer ajustes?",
+    [LANG_DIALOG_YES]         = "sí",
     [LANG_DIALOG_NO]          = "no",
 
     [LANG_MUSIC_DB_UPDATING] = "actualizando biblioteca...",
     [LANG_HUB_NOWPLAYING]    = "reproduciendo",
     [LANG_UNKNOWN_ARTIST]    = "artista desconocido",
-    [LANG_UNKNOWN_ALBUM]     = "album desconocido",
-    [LANG_UNKNOWN_GENRE]     = "genero desconocido",
-    [LANG_UNKNOWN_TITLE]     = "titulo desconocido",
+    [LANG_UNKNOWN_ALBUM]     = "álbum desconocido",
+    [LANG_UNKNOWN_GENRE]     = "género desconocido",
+    [LANG_UNKNOWN_TITLE]     = "título desconocido",
 
     [LANG_NP_VOLUME]        = "volumen",
     [LANG_NP_OPTIONS_TITLE] = "opciones",
@@ -88,37 +88,37 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_REPEAT_ALL]       = "todo",
     [LANG_REPEAT_ONE]       = "uno",
 
-    [LANG_SYNC_ERROR_VERSION]  = "esta version de metro es mas vieja que aura studio",
+    [LANG_SYNC_ERROR_VERSION]  = "esta versión de metro es más vieja que aura studio",
     [LANG_SYNC_ERROR_ATTEMPTS] = "no se pudo actualizar la biblioteca",
-    [LANG_SYNC_DISMISS_HINT]   = "menu para continuar",
+    [LANG_SYNC_DISMISS_HINT]   = "menú para continuar",
 
     [LANG_SETTING_LIBRARY]      = "biblioteca",
     [LANG_SETTING_BRIGHTNESS]   = "brillo",
-    [LANG_SETTING_BACKLIGHT]    = "retroiluminacion",
+    [LANG_SETTING_BACKLIGHT]    = "retroiluminación",
     [LANG_VALUE_NEVER]          = "nunca",
-    [LANG_DIALOG_LIBRARY_TITLE] = "actualizar biblioteca ahora?",
+    [LANG_DIALOG_LIBRARY_TITLE] = "¿actualizar biblioteca ahora?",
     [LANG_LIBRARY_UPDATING]     = "actualizando...",
 
     [LANG_ABOUT_DEVICE_DEFAULT] = "mi ipod",
     [LANG_ABOUT_SONGS]          = "canciones",
-    [LANG_ABOUT_NOT_SYNCED]     = "sin sincronizar todavia",
+    [LANG_ABOUT_NOT_SYNCED]     = "sin sincronizar todavía",
     [LANG_ABOUT_PLAYLISTS]      = "listas",
-    [LANG_ABOUT_MOVIES]         = "peliculas",
+    [LANG_ABOUT_MOVIES]         = "películas",
     [LANG_ABOUT_SERIES]         = "series",
     [LANG_ABOUT_CLIPS]          = "videoclips",
-    [LANG_ABOUT_IMAGES]         = "imagenes",
-    [LANG_ABOUT_PHOTOS_TAKEN]   = "fotografias",
+    [LANG_ABOUT_IMAGES]         = "imágenes",
+    [LANG_ABOUT_PHOTOS_TAKEN]   = "fotografías",
     [LANG_ABOUT_AI]             = "ia",
 
     [LANG_USB_CONNECTED] = "conectado",
     [LANG_SHUTTING_DOWN] = "apagando...",
 
-    [LANG_EMPTY_LIST] = "aun no hay nada aqui -- sincroniza con aura studio",
+    [LANG_EMPTY_LIST] = "aún no hay nada aquí -- sincroniza con aura studio",
 
-    [LANG_SETTING_ANIMATIONS] = "animacion",
-    [LANG_SETTING_GRAPHICS]   = "graficos",
+    [LANG_SETTING_ANIMATIONS] = "animación",
+    [LANG_SETTING_GRAPHICS]   = "gráficos",
     [LANG_ANIM_ALL]     = "completa",
-    [LANG_ANIM_MINIMAL] = "minima",
+    [LANG_ANIM_MINIMAL] = "mínima",
     [LANG_ANIM_OFF]     = "apagada",
     [LANG_GFX_FULL] = "completos",
     [LANG_GFX_LITE] = "ligeros",
@@ -130,9 +130,9 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_VALUE_UNAVAILABLE]   = "no disponible",
 
     [LANG_PIVOT_QUICKPLAY]     = "reproducir ya",
-    [LANG_QUICKPLAY_EMPTY]     = "sin historial todavia -- reproduce algo primero",
+    [LANG_QUICKPLAY_EMPTY]     = "sin historial todavía -- reproduce algo primero",
 
-    [LANG_NP_RATING]           = "calificacion",
+    [LANG_NP_RATING]           = "calificación",
 
     [LANG_SETTING_LOCK]         = "candado",
     [LANG_LOCK_TITLE_LOCKED]    = "bloqueado",
@@ -140,12 +140,12 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_LOCK_TITLE_CONFIRM]   = "confirma",
     [LANG_LOCK_HINT_UNLOCK]     = "marca tu clave con la rueda",
     [LANG_LOCK_HINT_WRONG]      = "clave incorrecta -- intenta de nuevo",
-    [LANG_LOCK_HINT_SET]        = "elige 4 digitos con la rueda",
-    [LANG_LOCK_HINT_CONFIRM]    = "marcala otra vez para confirmar",
+    [LANG_LOCK_HINT_SET]        = "elige 4 dígitos con la rueda",
+    [LANG_LOCK_HINT_CONFIRM]    = "márcala otra vez para confirmar",
     [LANG_LOCK_HINT_MISMATCH]   = "no coincidieron -- empieza de nuevo",
-    [LANG_DIALOG_LOCK_OFF_TITLE] = "quitar el candado?",
+    [LANG_DIALOG_LOCK_OFF_TITLE] = "¿quitar el candado?",
 
-    [LANG_SETTING_SLEEP]      = "temporizador de sueno",
+    [LANG_SETTING_SLEEP]      = "temporizador de sueño",
     [LANG_SETTING_EQ]         = "ecualizador",
     [LANG_EQ_FLAT]            = "plano",
     [LANG_EQ_BASS]            = "graves",
@@ -305,4 +305,60 @@ const char *metro_lang_str(enum metro_lang_id id)
 
     s = (current_lang == METRO_LANG_EN) ? strings_en[id] : strings_es[id];
     return s ? s : "";
+}
+
+void metro_lang_initial(const char *s, char *out, size_t outsz)
+{
+    unsigned char lead;
+    size_t len, i;
+
+    if (outsz == 0)
+        return;
+    out[0] = '\0';
+    if (!s || !s[0] || outsz < 2)
+        return;
+
+    lead = (unsigned char)s[0];
+
+    /* Largo de la secuencia UTF-8 a partir del byte guía. Un byte de
+     * continuación suelto (10xxxxxx) o un guía inválido se tratan como
+     * 1 byte: entrada corrupta no debe leer de más. */
+    if (lead < 0x80)            len = 1;
+    else if ((lead & 0xE0) == 0xC0) len = 2;
+    else if ((lead & 0xF0) == 0xE0) len = 3;
+    else if ((lead & 0xF8) == 0xF0) len = 4;
+    else                        len = 1;
+
+    /* Nunca leer más allá del fin de la cadena si viene truncada. */
+    for (i = 1; i < len; i++)
+    {
+        if (!s[i])
+        {
+            len = i;
+            break;
+        }
+    }
+
+    if (len + 1 > outsz)
+        len = outsz - 1;
+
+    for (i = 0; i < len; i++)
+        out[i] = s[i];
+    out[len] = '\0';
+
+    if (len == 1 && out[0] >= 'a' && out[0] <= 'z')
+    {
+        out[0] -= 32;
+    }
+    else if (len == 2 && (unsigned char)out[0] == 0xC3)
+    {
+        /* Latin-1 en UTF-8: las minúsculas acentuadas viven en
+         * 0xC3 0xA0..0xBE y su mayúscula está 0x20 abajo (á 0xC3 0xA1
+         * -> Á 0xC3 0x81). Se excluyen 0xB7 (÷, no es letra) y 0xBF
+         * (ÿ, cuya mayúscula Ÿ no está en Latin-1). */
+        unsigned char b = (unsigned char)out[1];
+
+        if (b >= 0xA0 && b <= 0xBE && b != 0xB7)
+            out[1] = (char)(b - 0x20);
+    }
 }

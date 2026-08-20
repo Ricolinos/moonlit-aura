@@ -279,6 +279,19 @@ EOF
 # por el filtro de sufijo. Se generan siempre para que cualquier
 # captura futura de las cuadriculas siga demostrando que el filtro
 # aguanta, no solo la de la fase que lo introdujo.
+# R4/FA-5a (M-076): contenido en espanol REAL, con inicial acentuada y
+# enye. Cubre de forma permanente el camino de metro_lang_initial():
+# sin esto, ninguna etiqueta del simulador empieza con un caracter
+# multibyte y el bug de "cortar por el primer byte" vuelve a ser
+# invisible. Sin carpeta de artista a proposito, para que el tile caiga
+# al respaldo de acento + inicial y la "A" con acento se vea.
+mkdir -p "$MUSIC_DIR/Angela Nu"
+ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=390:duration=2" \
+  -metadata title="Canción Ñoña" -metadata artist="Ángela Ñu" \
+  -metadata album_artist="Ángela Ñu" -metadata album="Éxitos" \
+  -metadata genre="Latin" -metadata track=1 \
+  -c:a libmp3lame -b:a 96k "$MUSIC_DIR/Angela Nu/01 Cancion Nona.mp3"
+
 echo "==> Generando residuales de macOS de prueba (AppleDouble)"
 printf '\x00\x05\x16\x07appledouble de prueba' > "$OUT_DIR/Photos/._diagram.jpg"
 printf '\x00\x05\x16\x07appledouble de prueba' > "$OUT_DIR/Photos/._sunset.jpg"
