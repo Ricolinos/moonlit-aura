@@ -44,6 +44,7 @@
 #include "metro_settings.h"
 #include "metro_fb.h"
 #include "metro_keymap.h"
+#include "metro_fsutil.h"
 #include "metro_lrc.h"
 #include "metro_motion.h" /* R4/FA-9: metro_seek_step_ms() */
 
@@ -399,6 +400,49 @@ static int current_volume_pct(void)
  * secundario**. Reproducir es el estado normal y no necesita gritar;
  * pausa es el estado que explica por qué no se oye nada, y es el que
  * uno viene a buscar con la mirada. */
+/* R4/FA-7 (M-078): el fondo deja de ser la misma imagen que el tile.
+ *
+ * Tabla acordada con el dueño (Q7 de la Fase 1), leída por columnas:
+ *
+ *   artista | álbum | FONDO             | TILE
+ *   --------+-------+-------------------+---------------------------
+ *      sí   |  sí   | foto del artista  | carátula real
+ *      sí   |  no   | foto del artista  | acento + inicial
+ *      no   |  sí   | carátula          | carátula real
+ *      no   |  no   | plano (tema)      | acento + inicial
+ *
+ * La columna del TILE ya se comportaba así antes de esta fase (el
+ * respaldo de acento + inicial existe desde F5), así que aquí solo
+ * cambia la del FONDO. Y esa columna se reduce a una cascada: foto de
+ * artista si la hay, si no la carátula, si no nada -- las cuatro filas
+ * salen de esas dos preguntas en ese orden.
+ *
+ * La política vive aquí y no en metro_albumart.c a propósito: ese
+ * módulo decodifica, no decide (su propia cabecera ya lo dice para el
+ * nivel de FX). */
+static bool load_background(void)
+{
+    struct mp3entry *id3 = audio_current_track();
+    char filename[METRO_FSUTIL_NAME_LEN];
+    char dir[MAX_PATH], path[MAX_PATH];
+    long mtime;
+
+    if (id3 && id3->artist &&
+        metro_music_artist_image(id3->artist, filename, sizeof(filename), &mtime))
+    {
+        /* metro_settings_artists_dir() es la única autorizada a armar
+         * esta ruta -- regla de rutas de contrato del CLAUDE.md. */
+        metro_settings_artists_dir(dir, sizeof(dir));
+        snprintf(path, sizeof(path), "%s/%s", dir, filename);
+        if (metro_albumart_load_background_file(path))
+            return true;
+        /* Mapeada pero ilegible (archivo corrupto, borrado entre el
+         * índice y aquí): se cae a la carátula, no a fondo plano. */
+    }
+
+    return metro_albumart_load_background();
+}
+
 static void draw_transport_indicator(void)
 {
     int x = 12;
@@ -502,8 +546,7 @@ void metro_screen_nowplaying_show(void)
     struct mp3entry *id3;
     char elapsed_buf[16], remaining_buf[16];
     int w, h, pct;
-    bool has_bg = metro_settings.graphics == METRO_GFX_FULL &&
-                  metro_albumart_load_background();
+    bool has_bg = metro_settings.graphics == METRO_GFX_FULL && load_background();
 
     if (has_bg)
         metro_fb_blend_over_color(metro_albumart_background_bitmap(),

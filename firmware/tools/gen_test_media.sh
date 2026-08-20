@@ -279,6 +279,19 @@ EOF
 # por el filtro de sufijo. Se generan siempre para que cualquier
 # captura futura de las cuadriculas siga demostrando que el filtro
 # aguanta, no solo la de la fase que lo introdujo.
+# R4/FA-7 (M-078): la CUARTA fila de la tabla de fondo -- artista SIN
+# foto ("Wheel & Click" no esta en artist_images.cfg, a proposito desde
+# R3-F3) y album SIN caratula, en una carpeta cuyo PADRE tampoco tiene
+# cover.jpg (find_albumart mira el directorio del track y su padre). Sin
+# esto no habia forma de llegar al caso "ninguna de las dos" y esa fila
+# de la tabla quedaba sin verificar.
+mkdir -p "$MUSIC_DIR/Wheel & Click/Sin Portada"
+ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=260:duration=2" \
+  -metadata title="Sin Nada" -metadata artist="Wheel & Click" \
+  -metadata album_artist="Wheel & Click" -metadata album="Sin Portada" \
+  -metadata genre="Ambient" -metadata track=1 \
+  -c:a libmp3lame -b:a 96k "$MUSIC_DIR/Wheel & Click/Sin Portada/01 Sin Nada.mp3"
+
 # R4/FA-5a (M-076): contenido en espanol REAL, con inicial acentuada y
 # enye. Cubre de forma permanente el camino de metro_lang_initial():
 # sin esto, ninguna etiqueta del simulador empieza con un caracter

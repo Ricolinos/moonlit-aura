@@ -56,8 +56,24 @@ const fb_data *metro_albumart_bitmap(void);
  * has no effect on the other. */
 bool metro_albumart_load_background(void);
 
-/* Valid only right after metro_albumart_load_background() returned
- * true -- LCD_WIDTH x LCD_HEIGHT, row-major, native LCD format. */
+/* R4/FA-7 (M-078): mismo destino y misma caché-de-1 que
+ * metro_albumart_load_background(), pero desde un archivo de imagen
+ * ARBITRARIO en vez de la carátula de la pista en reproducción -- el
+ * caso real es una foto de artista bajo `.rockbox/aura/artists/`.
+ *
+ * **Este módulo no decide cuál usar.** La política (foto de artista si
+ * existe, si no la carátula, si no fondo plano) vive en el llamador,
+ * igual que la decisión de dibujar fondo o no ya vivía ahí -- ver la
+ * cabecera de este archivo y metro_screen_nowplaying.c.
+ *
+ * Las dos funciones comparten búfer y clave de caché, así que llamar a
+ * una invalida lo que la otra hubiera dejado: es un solo fondo en
+ * pantalla a la vez, por construcción. */
+bool metro_albumart_load_background_file(const char *path);
+
+/* Valid only right after metro_albumart_load_background() -- or
+ * metro_albumart_load_background_file() -- returned true:
+ * LCD_WIDTH x LCD_HEIGHT, row-major, native LCD format. */
 const fb_data *metro_albumart_background_bitmap(void);
 
 /* R3-F4/DD-5 (M-065): resolves and decodes art for `track_path` (any

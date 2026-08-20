@@ -2647,3 +2647,66 @@ el problema de `repeat_1` sin llegar a compilarlo.
 `docs/screenshots/R4-FA1-iconos-fluent.png` muestra pausa, aleatorio y
 repetir-uno reales en pantalla; `R4-FA1-volumen.png`, el altavoz.
 Builds limpios en sim y target; 2231 checks de host.
+
+## M-078 — R4/FA-7: el fondo del reproductor deja de ser la misma imagen que el tile
+
+**Estado previo**: `metro_albumart_load_background()` cargaba el arte de
+`audio_current_track()` escalado a pantalla completa — **la misma imagen
+que el tile**, solo que estirada y atenuada al 30%.
+
+**Tabla acordada con el dueño** (Q7 de la Fase 1, confirmada por él):
+
+| artista | álbum | fondo | tile |
+|---|---|---|---|
+| sí | sí | foto del artista | carátula real |
+| sí | no | foto del artista | acento + inicial |
+| no | sí | carátula | carátula real |
+| no | no | plano (tema) | acento + inicial |
+
+**La columna del TILE no necesitó ningún cambio**: el respaldo de acento
++ inicial existe desde F5 y ya se comportaba exactamente así. Solo
+cambia la columna del FONDO.
+
+**Y esa columna se reduce a una cascada de dos preguntas**: foto de
+artista si la hay → si no, la carátula → si no, nada. Las cuatro filas
+salen de eso en ese orden; no hizo falta escribir la tabla como tal.
+
+**Dónde vive cada mitad**: `metro_albumart.c` gana
+`metro_albumart_load_background_file()`, que decodifica un archivo
+arbitrario al búfer de fondo — **decodifica, no decide**. La política
+(cuál usar) vive en `metro_screen_nowplaying.c`, que es donde ya vivía
+la decisión de dibujar fondo o no. Mantiene el reparto que la propia
+cabecera de `metro_albumart.h` declara.
+
+**Caché-de-1 clavada a la RUTA de origen**, no al track: así una foto de
+artista y una carátula nunca se confunden entre sí, y volver a la misma
+pista con la misma fuente no vuelve a decodificar. Ambas funciones
+comparten búfer a propósito — hay un solo fondo en pantalla a la vez por
+construcción.
+
+**Caso borde cubierto**: si el índice mapea una foto de artista pero el
+archivo resulta ilegible (corrupto, borrado entre el índice y el
+dibujo), se cae a la **carátula**, no a fondo plano — un fallo de la
+primera opción no debe costar también la segunda.
+
+**Sobre el tamaño**: una foto de artista viene a lo mucho de 128 px
+(tope del contrato) y aquí se agranda a 320×240. Se ve suave, y detrás
+del texto al 30% de opacidad eso no es un defecto sino lo deseable.
+
+**Las cuatro filas verificadas en vivo**, una captura por fila
+(`docs/screenshots/R4-FA7-fila{1,2,3,4}.png`). Los fixtures hacen los
+casos inequívocos por color: la foto de "Aura Test Combo" es verde mar y
+la carátula de "First Light" naranja, así que la fila 1 muestra de un
+vistazo que fondo y tile **ya no son la misma imagen**.
+
+**Corrección a lo que se había dicho**: la Fase 1 anotó que dos de las
+cuatro filas no eran verificables sin el iPod. Era incorrecto — los
+fixtures de fotos de artista de R3-F3 viven en el simdisk, así que las
+cuatro se verifican en el simulador.
+
+**Fixture nuevo, permanente**: la fila 4 (ninguna de las dos imágenes)
+no era alcanzable con los fixtures existentes — todo track bajo
+`/Music/` hereda `/Music/cover.jpg` por el barrido de directorio padre
+de `find_albumart()`. Se agregó a `gen_test_media.sh` un álbum "Sin
+Portada" bajo un artista que a propósito no tiene foto, en una carpeta
+cuyo padre tampoco tiene `cover.jpg`.

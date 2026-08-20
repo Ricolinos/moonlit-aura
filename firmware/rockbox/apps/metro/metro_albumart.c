@@ -166,6 +166,36 @@ bool metro_albumart_load_background(void)
                      LCD_WIDTH, LCD_HEIGHT, FORMAT_NATIVE | FORMAT_RESIZE);
 }
 
+bool metro_albumart_load_background_file(const char *path)
+{
+    if (!path || !path[0])
+        return false;
+
+    /* Misma caché-de-1 que load_background(), clavada a la RUTA REAL
+     * de origen y no al track: así una foto de artista y una carátula
+     * nunca se confunden entre sí, y volver a la misma pista con la
+     * misma fuente no vuelve a decodificar. */
+    if (s_bg_loaded && !strcmp(s_bg_loaded_path, path))
+        return true;
+
+    /* Sin FORMAT_KEEP_ASPECT, igual que load_background(): llena los
+     * 320x240 y recorta, que es el punto de un fondo. Una foto de
+     * artista viene a lo mucho de 128px (tope del contrato), así que
+     * aquí se AGRANDA -- se ve suave, y a 30% de opacidad detrás del
+     * texto eso no es un defecto sino lo deseable. */
+    if (!decode_file_into(path, s_bg_scratch, sizeof(s_bg_scratch),
+                           LCD_WIDTH, LCD_HEIGHT, FORMAT_NATIVE | FORMAT_RESIZE))
+    {
+        s_bg_loaded = false;
+        s_bg_loaded_path[0] = '\0';
+        return false;
+    }
+
+    strlcpy(s_bg_loaded_path, path, sizeof(s_bg_loaded_path));
+    s_bg_loaded = true;
+    return true;
+}
+
 const fb_data *metro_albumart_background_bitmap(void)
 {
     return (const fb_data *)s_bg_scratch;
