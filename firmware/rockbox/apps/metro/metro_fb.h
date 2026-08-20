@@ -74,4 +74,16 @@ void metro_fb_draw_turnstile_layer(const fb_data *src, int angle_index);
  * once, not a transition's only compositing step per frame. */
 void metro_fb_blend_over_color(const fb_data *img, unsigned bg_color, int alpha256);
 
+/* R3-F8/DD-9 (M-069): rellena un rectángulo de color DENTRO de un
+ * buffer off-screen (no en el LCD real) -- el único caso hasta ahora es
+ * CONTINUUM borrando la ceja de la página de destino en `s_fb_to`
+ * antes de animarla, para que no se vea a la vez en su sitio y viajando
+ * encima. Recorta a los límites del buffer, así que un rectángulo que
+ * se pase de ancho (una ceja larga cerca del borde) no escribe fuera.
+ * Deliberadamente NO es `lcd_fillrect()` con `metro_fb_render()`
+ * alrededor: eso redirige TODO el dibujo y está pensado para pintar una
+ * pantalla entera, no para tocar unos pixeles de una que ya está
+ * compuesta. */
+void metro_fb_fill_rect(fb_data *dst, int x, int y, int w, int h, unsigned color);
+
 #endif /* METRO_FB_H */

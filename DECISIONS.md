@@ -2162,3 +2162,89 @@ que lista el `.c` nuevo, la misma modificación ya documentada en
 Builds limpios en sim y target. 6 suites de test de host en verde (678
 checks, sin cambios -- este módulo depende del LCD y del bucle de
 entrada reales, no host-testeable).
+
+## M-069 — R3-F8: CONTINUUM, el título de la fila vuela a la ceja de la página nueva
+
+**Contexto**: octava fase de la ronda 3 (`PLAN-metro-r3-maestro.md`
+DD-9), puro pulido visual sobre el motor de transiciones de F11/F12.
+Lo que el usuario acaba de elegir es lo único que **no** gira durante
+el PUSH: se queda plano y legible mientras el resto de la página hace
+su turnstile detrás, y viaja hasta su lugar nuevo. Es el continuum real
+de WP7, no un efecto inventado.
+
+**El destino resultó ser la ceja, no el título grande** — y eso cambia
+la forma de la animación (escalera de un escalón en vez de tres, texto
+que encoge en vez de crecer). Detalle completo, con por qué la puerta
+de igualdad que DD-9 define habría dejado la función como código muerto
+si se comparaba contra el título grande, en `docs/DESVIACIONES.md` R3-7.
+
+**Las tres puertas de DD-9, tal cual**: (1) nivel de FX —
+`animations=all` **y** `graphics=full`, el mismo `if` que ya elegía
+turnstile sobre slide; (2) solo PUSH hacia adentro — `direction > 0`,
+porque al volver no hay fila de origen de la cual volar; (3) solo
+cuando hay continuidad real que mostrar — el título de la fila elegida
+tiene que ser igual a la ceja de la página que se abrió
+(`title_dynamic`). Se suma una cuarta, propia: las cuadrículas de
+tiles quedan fuera (`tile_cols == 0`), porque un tile no tiene una fila
+de texto desde la cual volar.
+
+**Dónde vive cada parte**: `metro_screen_list.c` **decide** (captura el
+título y la y de la fila ANTES de `on_select()` —que puede empujar una
+página y dejar la selección apuntando a otra cosa— y compara después
+contra la página resultante); `metro_transitions.c` **anima**, sin
+saber qué es una página ni un pivot, igual que el resto de ese módulo.
+El armado es de un solo uso y se consume en el siguiente
+`metro_transitions_push()` se llegue o no a animarlo — si no, un PUSH
+sin continuidad heredaría el volador del anterior.
+
+**Curva propia (OUT_QUAD), no la del turnstile (OUT_EXPO)**: hallazgo
+real, encontrado al intentar capturar el vuelo a mitad y descubrir que
+a mitad ya no había vuelo. Out-expo gasta el 82 % del recorrido en los
+dos primeros cuadros de ocho -- perfecto para una rotación que debe
+sentirse instantánea, pésimo para un texto que tiene que **leerse**
+viajando: el título aterrizaba casi de inmediato y se quedaba quieto
+los seis cuadros restantes, que es exactamente lo contrario de lo que
+CONTINUUM cuenta. Out-quad (curva que Metro ya tenía, sin matemática
+nueva) reparte el viaje a lo largo de toda la animación y sigue
+frenando al llegar.
+
+**Dos primitivas, una nueva y una que no hizo falta**: la variante de
+`metro_fb_present_slide()` sin auto-`lcd_update()` que DD-9 pedía
+resultó innecesaria — al nivel de FX de CONTINUUM el PUSH hace
+turnstile, que ya establece ese mismo contrato (F12). Sí hizo falta
+`metro_fb_fill_rect()`, para borrar la ceja del destino dentro del
+buffer off-screen y que no se viera dos veces a la vez. Ver R3-7 para
+el bug que ese borrado destapó (la ceja quedaba ausente de forma
+permanente tras el asentado del turnstile) y su corrección.
+
+**Tres defines de `metro_draw.c` pasaron a `metro_draw.h`**
+(`METRO_DRAW_LEFT_X`, `METRO_DRAW_ROWS_FIRST_Y`, `METRO_DRAW_ROW_PITCH`):
+`metro_screen_list.c` necesita saber en qué y está dibujada la fila
+seleccionada, y `metro_transitions.c` la misma x del margen. Se
+exportan en vez de re-declarar los números por tercera vez — el
+`metro_draw.c` sigue usando sus nombres viejos, ahora definidos contra
+los públicos.
+
+**Un cambio fuera de `apps/metro/`, en herramienta de pruebas**: el
+sondeo del hilo del simulador pasó de `HZ/10` a `HZ/50`
+(`uisimulator/common/sim_tasks.c`, ya modificado por Metro y ampliado
+antes por esta misma clase de razón). Con 10 ticks de resolución una
+animación de 24 no se puede muestrear más que dos veces, y la primera
+cae pasado el tercer cuadro — el criterio de "hecho" de esta fase pide
+capturar justo el arranque. Registrado en `MODIFICATIONS.md`; solo
+compila en el simulador, cero impacto en el binario de hardware.
+
+**Verificado en vivo** (simulador, `make install` primero):
+`docs/screenshots/R3-F8-continuum-early.png` (cuadro 1 — "Analog
+Dreams" en 20 px blanco, a media pantalla, con la página visiblemente
+girando detrás), `-mid.png` (ya en 14 px, más arriba, turnstile todavía
+en curso) y `-late.png` (casi aterrizado, página casi asentada): tres
+posiciones y los dos tamaños. `R3-F8-continuum-minimal-off.png`: el
+mismo PUSH con `animations=minimal` muestra el slide a mitad **sin
+volador**. Un PUSH sin continuidad real (hub → Ajustes, cuya página no
+tiene `title_dynamic`) hace turnstile normal, también sin volador.
+Presupuesto: `push-turnstile 8 frames in 30-32 ticks (budget 24)` con
+volador contra `29-31` sin él — ~1 tick de costo, y **cero**
+`auto-degrade` en tandas de cuatro PUSH seguidos (el umbral de M-015 es
+2× presupuesto = 48). Builds limpios en sim y target; 6 suites de test
+de host en verde (678 checks).

@@ -36,6 +36,9 @@
 #include "metro_settings.h"
 #include "metro_theme.h"
 #include "metro_turnstile_table.h"
+#include "metro_draw.h"  /* R3-F8: metro_draw_text() para el volador */
+#include "metro_fonts.h"
+#include "string-extra.h"
 
 #define METRO_FB_PIXELS (LCD_WIDTH * LCD_HEIGHT)
 
@@ -177,6 +180,82 @@ void metro_transitions_slide(metro_transitions_draw_fn draw_to, int direction)
     note_transition_cost("slide", spec, start_tick);
 }
 
+/* --- R3-F8/DD-9 (M-069): CONTINUUM --------------------------------------
+ *
+ * El título de la fila elegida vuela hasta la ceja de la página nueva
+ * mientras el resto del PUSH hace su turnstile detrás. Es el continuum
+ * real de WP7: lo que el usuario tocó es lo único que NO gira -- se
+ * queda plano, legible, y viaja a su lugar nuevo.
+ *
+ * Posición interpolada de forma continua; tamaño por ESCALONES de las
+ * fuentes que Metro ya tiene, nunca escalado por muestreo (son fuentes
+ * bitmap de tamaño fijo y un escalado falso se ve sucio). Aquí el
+ * escalón es uno solo -- MFONT_LIST_SEL (20 px, la fila seleccionada)
+ * a MFONT_CAPTION (14 px, la ceja) -- y no los tres que DD-9 suponía,
+ * porque el destino real resultó ser la ceja y no el título grande:
+ * ver docs/DESVIACIONES.md R3-7. El color acompaña al mismo salto
+ * (fg -> secondary), en el mismo cuadro, para que el cambio se lea
+ * como un solo paso y no como dos efectos desacoplados. */
+
+/* Destino: (x, y) exactos de la ceja en metro_draw_header(). El x de
+ * la fila de origen es el mismo (METRO_ROWS_LEFT_X), así que el vuelo
+ * es puramente vertical -- por eso no se interpola x. */
+#define METRO_CONTINUUM_TO_Y 4
+
+static char s_cont_text[METRO_CONTINUUM_TITLE_MAX];
+static int  s_cont_from_y;
+static bool s_cont_armed = false;
+
+void metro_transitions_arm_continuum(const char *text, int from_y)
+{
+    if (!text || !text[0])
+        return;
+
+    strlcpy(s_cont_text, text, sizeof(s_cont_text));
+    s_cont_from_y = from_y;
+    s_cont_armed = true;
+}
+
+/* Borra la ceja de la página de destino DENTRO del buffer off-screen,
+ * antes de que empiece la animación: si no, se vería dos veces al
+ * mismo tiempo (la de s_fb_to girando con el turnstile, y el volador
+ * encima viajando hacia ella). Se recorta al ancho real del texto para
+ * no tocar el reloj ni la batería, que viven en el otro extremo del
+ * mismo encabezado. */
+static void erase_dest_eyebrow(void)
+{
+    int w, h;
+
+    lcd_setfont(metro_font_id(MFONT_CAPTION));
+    lcd_getstringsize((const unsigned char *)s_cont_text, &w, &h);
+
+    metro_fb_fill_rect(s_fb_to, METRO_DRAW_LEFT_X, METRO_CONTINUUM_TO_Y,
+                        w, h, metro_color_bg());
+}
+
+/* Un cuadro del volador, encima de las dos capas del turnstile y antes
+ * del único lcd_update() del cuadro.
+ *
+ * Curva PROPIA (OUT_QUAD), no la del turnstile (OUT_EXPO): out-expo
+ * gasta el 82 % del recorrido en los dos primeros cuadros de ocho --
+ * perfecto para una rotación que debe sentirse instantánea, pésimo
+ * para un texto que tiene que LEERSE viajando. Con out-expo el título
+ * aterrizaba casi de inmediato y se quedaba quieto los seis cuadros
+ * restantes, que es justo lo contrario de lo que CONTINUUM cuenta.
+ * Out-quad reparte el viaje a lo largo de toda la animación y sigue
+ * frenando al llegar. Encontrado al intentar capturar el vuelo a mitad
+ * y descubrir que a mitad ya no había vuelo. */
+static void draw_continuum_frame(int i, int frames)
+{
+    int p = metro_ease(METRO_EASE_OUT_QUAD, i, frames);
+    int y = s_cont_from_y + ((METRO_CONTINUUM_TO_Y - s_cont_from_y) * p) / 256;
+    bool landed = (p >= 128);
+
+    metro_draw_text(landed ? MFONT_CAPTION : MFONT_LIST_SEL,
+                     METRO_DRAW_LEFT_X, y, s_cont_text,
+                     landed ? metro_color_secondary() : metro_color_fg());
+}
+
 /* F12: angle in degrees -> nearest metro_turnstile_table.h index.
  * Rounds to the closest of the 32 precomputed angles instead of
  * interpolating between two rows -- the animation only spans ~250ms
@@ -204,9 +283,12 @@ static int turnstile_angle_index(int angle_deg)
  * unstated-but-symmetric out). No opacity fade on top of the
  * projection itself (DESVIACIONES.md F12-1) -- the perspective
  * shrink alone already reads as "leaving". */
-static void run_turnstile(int direction, struct level_spec spec)
+static void run_turnstile(int direction, struct level_spec spec, bool continuum)
 {
     int i;
+
+    if (continuum)
+        erase_dest_eyebrow();
 
     cpu_boost(true);
     for (i = 1; i <= spec.frames; i++)
@@ -229,6 +311,11 @@ static void run_turnstile(int direction, struct level_spec spec)
         lcd_fillrect(0, 0, LCD_WIDTH, LCD_HEIGHT);
         metro_fb_draw_turnstile_layer(s_fb_from, turnstile_angle_index(angle_out));
         metro_fb_draw_turnstile_layer(s_fb_to, turnstile_angle_index(angle_in));
+        /* Encima de las dos capas y antes del único update del cuadro
+         * -- el mismo contrato "compón varias capas, actualiza una
+         * vez" que draw_turnstile_layer() ya establecía (F12). */
+        if (continuum)
+            draw_continuum_frame(i, spec.frames);
         lcd_update();
 
         drain_button_queue_if_full();
@@ -246,6 +333,14 @@ static void run_turnstile(int direction, struct level_spec spec)
      * redraws again after this, unlike the rows FEATHER touches next)
      * would stay very slightly warped for good. */
     lcd_bitmap_part(s_fb_to, 0, 0, LCD_WIDTH, 0, 0, LCD_WIDTH, LCD_HEIGHT);
+    /* R3-F8: ese asentado vuelve a pintar s_fb_to -- que es justamente
+     * el buffer al que le borramos la ceja para que no se viera doble.
+     * Sin volver a dibujarla aquí, la ceja de la página nueva quedaría
+     * ausente hasta el próximo redibujo completo (FEATHER, que corre
+     * enseguida, solo toca el área de filas). El último cuadro del
+     * volador ES la ceja: misma fuente, mismo color, misma posición. */
+    if (continuum)
+        draw_continuum_frame(spec.frames, spec.frames);
     lcd_update();
 }
 
@@ -254,11 +349,19 @@ bool metro_transitions_effective_all(void)
     return effective_level() == METRO_ANIM_ALL;
 }
 
+
 void metro_transitions_push(metro_transitions_draw_fn draw_to, int direction)
 {
     enum metro_anim_level level = effective_level();
     struct level_spec spec = anim_level_spec(level);
     long start_tick = current_tick;
+    /* R3-F8/DD-9 (M-069): el armado es de un solo uso -- se consume
+     * aquí SIEMPRE, se llegue o no a animarlo. Si no se limpiara, un
+     * PUSH sin continuidad real (o un POP, o un push con la animación
+     * apagada) heredaría el texto volador del anterior. */
+    bool continuum = s_cont_armed;
+
+    s_cont_armed = false;
 
     if (!lcd_active() || spec.frames == 0)
     {
@@ -271,7 +374,11 @@ void metro_transitions_push(metro_transitions_draw_fn draw_to, int direction)
 
     if (level == METRO_ANIM_ALL && metro_settings.graphics == METRO_GFX_FULL)
     {
-        run_turnstile(direction, spec);
+        /* Tercera puerta (las otras dos son este mismo `if`: nivel de
+         * FX, y que solo PUSH llegue hasta aquí): direction > 0 = ir
+         * hacia adentro. Al volver (POP) no hay fila de origen de la
+         * cual volar. */
+        run_turnstile(direction, spec, continuum && direction > 0);
         note_transition_cost("push-turnstile", spec, start_tick);
     }
     else

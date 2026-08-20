@@ -29,6 +29,22 @@
  * actually gets drawn. */
 #define METRO_DRAW_ROWS_VISIBLE 5
 
+/* R3-F8/DD-9 (M-069): margen izquierdo compartido por la ceja del
+ * encabezado, los nombres de pivot y las filas -- las tres cosas se
+ * alinean en la misma vertical, que es lo que permite que el volador
+ * de CONTINUUM viaje SOLO en y. Era un define privado de metro_draw.c
+ * (METRO_ROWS_LEFT_X) hasta que metro_transitions.c necesitó la misma
+ * x para no re-declarar el 12 por su cuenta. */
+#define METRO_DRAW_LEFT_X 12
+
+/* R3-F8/DD-9 (M-069): geometría de la lista de filas, expuesta por el
+ * mismo motivo que METRO_DRAW_LEFT_X -- metro_screen_list.c necesita
+ * calcular en qué y está dibujada la fila seleccionada para decirle a
+ * CONTINUUM desde dónde arranca el vuelo. Eran privados de
+ * metro_draw.c (METRO_ROWS_FIRST_Y / METRO_ROW_PITCH). */
+#define METRO_DRAW_ROWS_FIRST_Y 84
+#define METRO_DRAW_ROW_PITCH    28
+
 /* High-level drawing shell over lcd_* -- see PLAN_MAESTRO.md S1.2.
  * metro_draw_tile()/metro_draw_progress() are still deferred -- F3
  * doesn't have tiles or a progress bar yet, those land with Now

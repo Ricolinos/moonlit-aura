@@ -70,4 +70,16 @@ bool metro_transitions_effective_all(void);
  * transition per the plan's own table, this one included. */
 void metro_transitions_fade(metro_transitions_draw_fn draw_to);
 
+/* R3-F8/DD-9 (M-069): CONTINUUM -- arma el "texto volador" para el
+ * PRÓXIMO metro_transitions_push(), y solo para ese (se consume ahí,
+ * arme o no arme la animación). `text` es el título de la fila que el
+ * usuario acaba de elegir y `from_y` la y en pantalla donde esa fila
+ * estaba dibujada; el destino es fijo (la ceja de la página nueva, ver
+ * metro_transitions.c). El llamador (metro_screen_list.c) es quien
+ * decide SI hay continuidad real que mostrar -- esta función no
+ * compara nada, solo guarda. `text` se copia; no hace falta que
+ * sobreviva a la llamada. */
+#define METRO_CONTINUUM_TITLE_MAX 64
+void metro_transitions_arm_continuum(const char *text, int from_y);
+
 #endif /* METRO_TRANSITIONS_H */

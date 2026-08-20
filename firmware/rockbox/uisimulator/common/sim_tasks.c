@@ -166,7 +166,17 @@ void sim_thread(void)
     while (1)
     {
         bool fine_poll = autodump_pending || (inject_pos < inject_count);
-        queue_wait_w_tmo(&sim_queue, &ev, fine_poll ? HZ/10 : 5*HZ);
+        /* Metro (M-069), R3-F8: HZ/10 -> HZ/50 mientras hay un dump o
+         * botones pendientes. Con 10 ticks de resolucion, una animacion
+         * de 24 ticks (8 cuadros x 3, el PUSH de animations=all) solo se
+         * puede muestrear dos veces, y la primera cae ya pasado el
+         * tercer cuadro -- imposible capturar el arranque de CONTINUUM,
+         * que es justo el criterio de "hecho" de esa fase. A 2 ticks hay
+         * ~12 muestras dentro de la misma animacion. Mismo caracter que
+         * la ampliacion de METRO_MAX_INJECT_BUTTONS de mas arriba:
+         * herramienta de pruebas, solo compila en el simulador, sin
+         * impacto de hardware. */
+        queue_wait_w_tmo(&sim_queue, &ev, fine_poll ? HZ/50 : 5*HZ);
 
         if (inject_pos < inject_count && TIME_AFTER(current_tick, inject_next_tick))
         {

@@ -18,6 +18,8 @@
  *
  ****************************************************************************/
 #include <stddef.h>
+#include <string.h>
+#include "string-extra.h"
 #include "lcd.h"
 #include "kernel.h"
 #include "button.h"
@@ -193,7 +195,48 @@ void metro_screen_list_handle(int action, int steps)
             break;
         case MACT_SELECT:
             if (pivot->on_select)
+            {
+                /* R3-F8/DD-9 (M-069): CONTINUUM. El título de la fila
+                 * elegida, y dónde está dibujada AHORA, hay que
+                 * capturarlos antes de on_select() -- que puede empujar
+                 * una página nueva y dejar `pivot`/la selección
+                 * apuntando a otra cosa. */
+                char from_title[METRO_CONTINUUM_TITLE_MAX];
+                int from_y = 0;
+                bool have_from = false;
+
+                if (pivot->tile_cols == 0 && count > 0)
+                {
+                    struct metro_row row;
+
+                    pivot->get_row(pivot->ctx, metro_nav_sel(&s_nav), &row);
+                    if (row.title && row.title[0])
+                    {
+                        strlcpy(from_title, row.title, sizeof(from_title));
+                        from_y = METRO_DRAW_ROWS_FIRST_Y +
+                                 (metro_nav_sel(&s_nav) - metro_nav_first_visible(&s_nav)) *
+                                     METRO_DRAW_ROW_PITCH;
+                        have_from = true;
+                    }
+                }
+
                 pivot->on_select(pivot->ctx, metro_nav_sel(&s_nav));
+
+                /* La tercera puerta de DD-9: solo si hay continuidad
+                 * REAL que mostrar, es decir si la página nueva se
+                 * llama igual que la fila que la abrió (su ceja es
+                 * title_dynamic). Un "canciones" genérico abierto desde
+                 * la fila "Analog Dreams" no coincide con nada y hace
+                 * PUSH normal, sin inventar una animación. */
+                if (have_from)
+                {
+                    const struct metro_page *dest = current_page();
+
+                    if (dest && dest != page && dest->title_dynamic &&
+                        !strcmp(dest->title_dynamic, from_title))
+                        metro_transitions_arm_continuum(from_title, from_y);
+                }
+            }
             break;
         case MACT_BACK:
             metro_screen_list_pop();

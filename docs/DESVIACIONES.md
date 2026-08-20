@@ -748,3 +748,84 @@ cual. Nota de numeración: el plan llamaba prospectivamente "R3-4" a
 esta entrada; los números de `DESVIACIONES.md` se asignan en orden real
 de ejecución, y R3-4/R3-5 ya los consumieron hallazgos de R3-F4/R3-F5
 (mismo precedente que M-056/M-057 en `DECISIONS.md`).
+
+---
+
+## R3-7 — CONTINUUM: el destino real es la ceja, no el título grande — y la escalera de fuentes se reduce a un escalón
+
+**Qué decía el plan** (DD-9): "El origen es una fila en `MFONT_LIST`
+(20 px) y el destino un título en `MFONT_DISPLAY` (48 px)", con una
+escalera de tres fuentes (20 → 28 → 48) cambiando de escalón a un
+tercio y a dos tercios de la animación, y el color pasando de
+secundario a `fg`.
+
+**Qué se encontró al implementarlo**: en la anatomía real de una página
+de Metro, el elemento que lleva la identidad de la fila que abrió la
+página **no es el título grande**. `metro_screen_list_show()` pasa
+`page->title_dynamic` a `metro_draw_header()` — es decir, a la **ceja**
+(14 px, `MFONT_CAPTION`, arriba a la izquierda) — mientras que el texto
+grande de 48 px es el **nombre del pivot** (`metro_draw_pivots()`).
+Al entrar a un álbum, la ceja dice "Analog Dreams" y el título grande
+dice "canciones".
+
+Eso vuelve inaplicable la puerta que el propio DD-9 define como la que
+"evita inventar una animación cuando no hay continuidad real": *"solo
+cuando el título de la fila de origen es igual al título de la página
+de destino"*. Contra el **título grande**, esa igualdad no se cumple
+nunca en ninguna navegación de Metro — la fila "Analog Dreams" abre una
+página cuyo título grande es "canciones", la fila "ajustes" abre una
+cuyo título grande es "general". CONTINUUM habría quedado como código
+muerto: implementado, gateado, y sin dispararse jamás.
+
+Contra la **ceja**, en cambio, la igualdad se cumple exactamente en las
+navegaciones donde hay continuidad real — artista → sus álbumes, álbum
+→ sus canciones, género → sus canciones — porque son justo las que
+hacen `title_dynamic = etiqueta de la fila`.
+
+**Qué se hizo**: el destino es la ceja. Consecuencias, todas derivadas
+de esa misma corrección y no decisiones sueltas:
+
+- **La escalera es de un escalón, no de tres**: `MFONT_LIST_SEL` (20 px)
+  → `MFONT_CAPTION` (14 px), cambiando a la mitad del recorrido. El
+  principio de DD-9 se respeta intacto — posición continua, tamaño por
+  escalones de las fuentes que Metro ya tiene, nunca escalado por
+  muestreo — solo que entre 20 y 14 no hay ningún escalón intermedio que
+  pisar. Los tres escalones eran consecuencia del destino equivocado.
+- **El texto encoge en vez de crecer**, y el color va de `fg` a
+  secundario en vez de al revés. Mismo movimiento, extremos
+  intercambiados.
+- **El vuelo es puramente vertical**: la ceja, los nombres de pivot y
+  las filas comparten margen izquierdo (`METRO_DRAW_LEFT_X`), así que
+  no hay nada que interpolar en x.
+
+**Dos hallazgos más, encontrados ejecutando y no previstos por el plan:**
+
+1. **La primitiva nueva de `metro_fb.c` que DD-9 pedía no hacía falta.**
+   El plan pedía "una variante de `metro_fb_present_slide()` que no
+   llame `lcd_update()`" suponiendo que CONTINUUM viajaría sobre el
+   SLIDE. Pero al nivel de FX al que DD-9 acota CONTINUUM
+   (`animations=all` **y** `graphics=full`), el PUSH no hace slide: hace
+   **turnstile** (F12), que ya compone dos capas sin auto-actualizar y
+   actualiza una sola vez por cuadro — exactamente el contrato que la
+   primitiva nueva iba a establecer. Agregarla habría sido código
+   muerto. Sí hizo falta otra, distinta y más chica
+   (`metro_fb_fill_rect()`), por el punto siguiente.
+2. **Había que borrar la ceja del destino, y luego volver a dibujarla.**
+   Sin borrarla del buffer off-screen, se veía dos veces a la vez: la de
+   `s_fb_to` girando con el turnstile y el volador viajando hacia ella.
+   Pero `run_turnstile()` **termina asentando `s_fb_to` sobre el LCD**
+   (F12 lo hace para corregir el redondeo de ángulos de la tabla), así
+   que borrarla dejaba la página nueva **sin ceja de forma permanente**
+   — FEATHER, que corre enseguida, solo redibuja el área de filas.
+   Encontrado en vivo, no razonando: una captura post-animación salió
+   sin ceja. Corregido dibujando el último cuadro del volador (que ES la
+   ceja: misma fuente, color y posición) justo después de ese asentado.
+
+**Impacto en `PLAN-metro-r3-maestro.md`**: ninguno en el criterio de
+"hecho" de R3-F8 — se cumple entero, incluidas las tres capturas a
+ticks distintos con dos tamaños de fuente. Lo que cambia es cuál es el
+texto de destino y, por lo tanto, cuántos escalones tiene la escalera.
+
+**Nota de numeración**: el plan llamaba prospectivamente "R3-5" a esta
+entrada; los números se asignan en orden real de ejecución y R3-5/R3-6
+ya los consumieron hallazgos de R3-F5 y R3-F7.

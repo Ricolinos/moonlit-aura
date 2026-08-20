@@ -133,7 +133,8 @@ void metro_draw_header(const char *page_title)
     char timebuf[8];
     int w, h;
 
-    metro_draw_text(MFONT_CAPTION, 12, 4, page_title, metro_color_secondary());
+    metro_draw_text(MFONT_CAPTION, METRO_DRAW_LEFT_X, 4, page_title,
+                     metro_color_secondary());
 
     if (now != NULL)
     {
@@ -149,10 +150,10 @@ void metro_draw_header(const char *page_title)
 
 #define METRO_PIVOT_Y      28
 #define METRO_PIVOT_GAP    24
-#define METRO_ROWS_FIRST_Y 84
-#define METRO_ROW_PITCH    28
+#define METRO_ROWS_FIRST_Y METRO_DRAW_ROWS_FIRST_Y
+#define METRO_ROW_PITCH    METRO_DRAW_ROW_PITCH
 #define METRO_ROWS_VISIBLE METRO_DRAW_ROWS_VISIBLE
-#define METRO_ROWS_LEFT_X  12
+#define METRO_ROWS_LEFT_X  METRO_DRAW_LEFT_X
 
 void metro_draw_pivots(const struct metro_page *page, int active_pivot,
                         int x_offset)

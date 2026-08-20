@@ -73,6 +73,17 @@ que ya dispara el menú interactivo del simulador) en vez de postear un
 botón, para poder capturar `metro_screen_usb.c` de forma headless. No
 existía en el mecanismo original de Aura-Firmware.
 
+**R3-F8 (2026-08-20, M-069):** el sondeo del hilo del simulador pasa de
+`HZ/10` a `HZ/50` mientras hay un volcado o botones pendientes. Con 10
+ticks de resolución, una animación de 24 ticks (los 8 cuadros × 3 del
+PUSH bajo `animations=all`) solo se puede muestrear dos veces y la
+primera cae ya pasado el tercer cuadro — imposible capturar el arranque
+de CONTINUUM, que es justo el criterio de "hecho" de esa fase. A 2
+ticks hay ~12 muestras dentro de la misma animación. Mismo carácter que
+la ampliación de `METRO_MAX_INJECT_BUTTONS` que este archivo ya traía:
+herramienta de pruebas, solo compila en el simulador, sin ningún
+impacto en el binario de hardware.
+
 ## `apps/metro/` — código nuevo, no una modificación
 
 Todo el árbol `firmware/rockbox/apps/metro/` es código **nuevo**,

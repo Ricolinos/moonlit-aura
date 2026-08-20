@@ -194,3 +194,22 @@ void metro_fb_draw_turnstile_layer(const fb_data *src, int angle_index)
                                metro_turnstile_step[angle_index][x]);
     }
 }
+
+void metro_fb_fill_rect(fb_data *dst, int x, int y, int w, int h, unsigned color)
+{
+    int row, col;
+
+    if (x < 0) { w += x; x = 0; }
+    if (y < 0) { h += y; y = 0; }
+    if (x + w > LCD_WIDTH)  w = LCD_WIDTH - x;
+    if (y + h > LCD_HEIGHT) h = LCD_HEIGHT - y;
+    if (w <= 0 || h <= 0)
+        return;
+
+    for (row = y; row < y + h; row++)
+    {
+        fb_data *p = dst + (size_t)row * LCD_WIDTH + x;
+        for (col = 0; col < w; col++)
+            p[col] = (fb_data)color;
+    }
+}
