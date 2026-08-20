@@ -206,6 +206,65 @@ static enum metro_lang_id repeat_value_lang(void)
     }
 }
 
+/* R3-F5/DD-7 (M-066): tag_rating is native Rockbox, stored 0-10; the
+ * UI cycles/shows 5 stars, mapped x2 -- same even-number convention
+ * Aura-Firmware's own commit_rating() uses (consultado read-only), so
+ * a rating either side writes/reads means the same thing on disk. */
+static char s_rating_subtitle[8];
+
+static void cycle_rating(void)
+{
+    struct mp3entry *id3 = audio_current_track();
+    int stars;
+
+    if (!id3)
+        return;
+
+    stars = (id3->rating / 2 + 1) % 6; /* 0..5, wraps */
+    id3->rating = stars * 2;
+
+    /* R3-F5/DD-7: verified live (calificar -> cambiar de pista ->
+     * volver) que el `tagtree_buffer_event()` de stock (apps/tagtree.c,
+     * registrado sin condiciones desde el propio `tagtree_init()` de
+     * apps/main.c, jamás tocado por Metro) ya restaura `tag_rating` en
+     * `id3->rating` en cada buffer -- a diferencia de Aura, que nunca
+     * llama `tagtree_init()` (árbol propio, `INVESTIGACION-metro-r3.md`
+     * C.2) y por eso sí necesita su propio listener de
+     * `PLAYBACK_EVENT_TRACK_BUFFER` para esto mismo. Metro lo hereda
+     * gratis -- ningún callback nuevo registrado aquí. Verificación en
+     * `docs/DESVIACIONES.md` R3-5. */
+    if (id3->tagcache_idx && global_settings.runtimedb)
+    {
+        tagcache_update_numeric(id3->tagcache_idx - 1, tag_rating, id3->rating);
+
+        /* R3-F5/DD-7 (M-066): mismo motivo que `import_ratings()`
+         * (`metro_sync.c`) -- `tagcache_update_numeric()` solo ENCOLA
+         * la escritura; sin forzar el volcado, calificar una pista
+         * quedaría invisible para cualquier lectura hasta que la cola
+         * se llenara sola (32 pendientes) o el dispositivo se apagara
+         * de verdad. Una calificación puesta a mano es exactamente la
+         * clase de escritura poco frecuente e intencional que vale la
+         * pena hacer persistir de inmediato -- `tagcache_shutdown()`
+         * es solo `run_command_queue(true)` en este target (ver
+         * `import_ratings()`), seguro de llamar aquí mismo. */
+        tagcache_shutdown();
+    }
+}
+
+static const char *rating_subtitle(void)
+{
+    struct mp3entry *id3 = audio_current_track();
+    int stars = id3 ? id3->rating / 2 : 0;
+
+    if (stars < 0)
+        stars = 0;
+    else if (stars > 5)
+        stars = 5; /* defensive: tag_rating is meant to stay 0-10 */
+
+    snprintf(s_rating_subtitle, sizeof(s_rating_subtitle), "%d/5", stars);
+    return s_rating_subtitle;
+}
+
 /* R3-F2/DD-2: whether the CURRENT track has usable lyrics -- the
  * single check both this row and metro_screen_nowplaying_show() rely
  * on so the mode is never reachable (nor stays shown) without them.
@@ -219,7 +278,7 @@ static bool lyrics_available(void)
     return id3 && ensure_lyrics_loaded(id3);
 }
 
-static int options_count(void *ctx) { (void)ctx; return 3 + s_queue_n; }
+static int options_count(void *ctx) { (void)ctx; return 4 + s_queue_n; }
 
 static void options_get_row(void *ctx, int index, struct metro_row *out)
 {
@@ -246,9 +305,15 @@ static void options_get_row(void *ctx, int index, struct metro_row *out)
                                              : metro_lang_str(LANG_VALUE_OFF);
         out->kind = METRO_ROW_SETTING;
     }
+    else if (index == 3)
+    {
+        out->title = metro_lang_str(LANG_NP_RATING);
+        out->subtitle = rating_subtitle();
+        out->kind = METRO_ROW_SETTING;
+    }
     else
     {
-        out->title = s_queue_labels[index - 3];
+        out->title = s_queue_labels[index - 4];
         out->subtitle = NULL;
         out->kind = METRO_ROW_ACTION;
     }
@@ -264,6 +329,8 @@ static void options_on_select(void *ctx, int index)
         cycle_repeat();
     else if (index == 2 && lyrics_available())
         s_lyrics_mode = !s_lyrics_mode;
+    else if (index == 3)
+        cycle_rating();
 }
 
 static const struct metro_pivot options_pivots[] = {

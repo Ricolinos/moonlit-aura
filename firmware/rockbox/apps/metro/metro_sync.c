@@ -26,9 +26,11 @@
 #include "file.h"
 #include "dir.h"
 #include "timefuncs.h"
+#include "misc.h" /* read_line()/settings_parseline() -- R3-F5/DD-7 */
 
 #include "metro_sync.h"
 #include "metro_sync_marker.h"
+#include "metro_settings.h"
 
 /* Contract S4: the marker lives at the disk ROOT, not under
  * /.rockbox/aura -- it's the one thing Studio leaves for the firmware
@@ -184,6 +186,72 @@ static void finish_ok(void)
     go_idle();
 }
 
+/* R3-F5/DD-7 (M-066): one-way import of Studio's ratings.cfg --
+ * `<ruta absoluta>: <rating 0-10>` por línea, calcado del import de
+ * Aura (`aura_music.c`, consultado read-only) salvo el propio
+ * `metro_settings_ratings_cfg_path()` en vez de una ruta armada a
+ * mano (regla de rutas del CLAUDE.md). Mismo patrón de parseo que
+ * `metro_media_categories.c`'s `load_index()` -- `read_line()` +
+ * `settings_parseline()`, sin cargar el archivo completo a RAM.
+ * Silenciosamente ignora líneas que no calcen (comentarios, formato
+ * roto) o cuya ruta ya no exista en tagcache (pista borrada/renombrada
+ * desde el último sync) -- mismo espíritu "forward-compat, ignorado"
+ * que el resto de los parsers de este archivo. NO hay camino de
+ * vuelta: una calificación puesta en el dispositivo se pierde en el
+ * siguiente sync si Studio no la conoce todavía -- asimetría real,
+ * documentada en `docs/COMPAT_STUDIO.md`, no escondida. */
+static void import_ratings(void)
+{
+    char path[MAX_PATH];
+    char line[MAX_PATH + 16];
+    int fd;
+
+    metro_settings_ratings_cfg_path(path, sizeof(path));
+    fd = open(path, O_RDONLY);
+    if (fd < 0)
+        return; /* no ratings.cfg this sync: nothing to do, not an error */
+
+    while (read_line(fd, line, sizeof(line)) > 0)
+    {
+        char *track_path, *value;
+        struct tagcache_search tcs;
+        int rating;
+
+        if (!settings_parseline(line, &track_path, &value))
+            continue;
+
+        rating = atoi(value);
+        if (rating < 0)
+            rating = 0;
+        else if (rating > 10)
+            rating = 10;
+
+        if (!tagcache_find_index(&tcs, track_path))
+            continue; /* not (or no longer) in the library: skip */
+
+        tagcache_update_numeric(tcs.idx_id, tag_rating, rating);
+        tagcache_search_finish(&tcs);
+    }
+
+    close(fd);
+
+    /* R3-F5/DD-7 (M-066): tagcache_update_numeric() only QUEUES the
+     * write (apps/tagcache.c's async command queue, same mechanism
+     * R3-4/docs/DESVIACIONES.md already found for lastplayed) -- it
+     * only reaches the RAM cache (what every subsequent read actually
+     * sees, tagcache_get_numeric()'s use_ram=true path) once the queue
+     * is flushed, which otherwise only happens at 32 pending entries or
+     * a real shutdown. Without forcing it here, a rating imported by
+     * "sincronizar ahora" would stay invisible -- not wrong, just
+     * silently delayed, possibly for the rest of the session -- which
+     * defeats the point of a manual sync. tagcache_shutdown() is just
+     * `run_command_queue(true)` on this target (HAVE_EEPROM_SETTINGS,
+     * the only other thing it can do, isn't defined for ipod6g) -- a
+     * plain synchronous flush, safe to call mid-session, not only at
+     * real shutdown. */
+    tagcache_shutdown();
+}
+
 static void start_job(void)
 {
     /* The attempt counts from the moment it starts: if power is lost
@@ -231,6 +299,11 @@ static void job_ended(void)
 
     if (ok)
     {
+        /* R3-F5/DD-7 (M-066): "al terminar bien [el import de música]"
+         * (library-layout-v1.md) -- justo aquí, no en el atajo de
+         * !s_marker.music de start_job() (ese camino no tocó tagcache
+         * en absoluto esta vez). */
+        import_ratings();
         finish_ok();
         return;
     }

@@ -131,6 +131,8 @@ static const char *const strings_es[LANG_COUNT] = {
 
     [LANG_PIVOT_QUICKPLAY]     = "reproducir ya",
     [LANG_QUICKPLAY_EMPTY]     = "sin historial todavia -- reproduce algo primero",
+
+    [LANG_NP_RATING]           = "calificacion",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -243,6 +245,8 @@ static const char *const strings_en[LANG_COUNT] = {
 
     [LANG_PIVOT_QUICKPLAY]     = "quickplay",
     [LANG_QUICKPLAY_EMPTY]     = "nothing played yet -- play something first",
+
+    [LANG_NP_RATING]           = "rating",
 };
 
 void metro_lang_set(enum metro_language lang)

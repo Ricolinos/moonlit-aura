@@ -1883,3 +1883,96 @@ disco, no solo en RAM de ese proceso. Build limpio en sim y target
 (mismos warnings preexistentes de `tile_cols`/`empty_message`, nada
 nuevo). 6 suites de test de host en verde (678 checks), incluido un
 caso nuevo para el tope de pivots (`test_max_pivots_is_respected`).
+
+## M-066 — R3-F5: calificación (import de una vía) + fila de estrellas en Now Playing
+
+**Contexto**: quinta fase de la ronda 3 (`PLAN-metro-r3-maestro.md`
+DD-7), sobre el `runtimedb` que R3-F4 ya encendió. Metro importa
+`ratings.cfg` de Studio hacia `tag_rating` (nativo de Rockbox, no una
+tabla propia) y agrega una fila de calificación en Options de Now
+Playing, mismo patrón "ciclar en el lugar" que Shuffle/Repeat.
+
+**Primer paso real, antes de escribir el import**: el propio DD-7
+pedía resolver, EN VIVO, una contradicción entre dos hallazgos de la
+Fase 2 (`INVESTIGACION-metro-r3.md` C.2 vs D.1) -- ¿necesita Metro su
+propio listener de `PLAYBACK_EVENT_TRACK_BUFFER` para restaurar
+`tag_rating` en `id3->rating` al cambiar de pista (como sí necesita
+Aura-Firmware), o el listener de stock que `apps/tagtree.c` ya
+registra (`tagtree_buffer_event()`, vía el `tagtree_init()`
+incondicional de `apps/main.c`, jamás tocado por Metro) alcanza solo?
+**Verificado en vivo: alcanza solo.** Aura necesita su propio callback
+porque nunca llama `tagtree_init()` en absoluto (árbol de navegación
+propio) -- Metro sí lo hereda, así que el mismo listener que ya existía
+antes de esta fase ya hacía el trabajo. **Ningún callback nuevo se
+registró.** Ver `docs/DESVIACIONES.md` R3-5 para el detalle de la
+verificación y por qué casi produce un falso negativo.
+
+**Import (`metro_sync.c`, `import_ratings()`)**: calcado del propio
+`import_ratings_from_studio()` de Aura (`aura_music.c`, consultado
+read-only) salvo la ruta -- `metro_settings_ratings_cfg_path()` nueva,
+mismo patrón `.../aura/ratings.cfg` que `artist_images_cfg_path()`
+(regla de rutas del `CLAUDE.md`). Mismo parseo línea por línea que
+`metro_media_categories.c` (`read_line()` + `settings_parseline()`,
+sin cargar el archivo completo a RAM). Formato `<ruta absoluta>:
+<rating 0-10>`; `tagcache_find_index()` resuelve la ruta, `rating`
+clampeado a `[0,10]`, `tagcache_update_numeric()` escribe. Llamado
+desde `job_ended()`'s camino de éxito real (`ok == true`), no desde el
+atajo `!s_marker.music` de `start_job()` -- ese atajo no tocó tagcache
+en absoluto esta vez, así que "al terminar bien [el import de
+música]" (`library-layout-v1.md`) no aplica ahí.
+
+**Fila de calificación (`metro_screen_nowplaying.c`)**: 5 estrellas,
+mapeadas ×2 al 0-10 nativo -- mismo convenio de números pares que
+`commit_rating()` de Aura (consultado read-only), así que una
+calificación puesta de cualquiera de los dos lados significa lo mismo
+en disco. `cycle_rating()` escribe `id3->rating` en memoria de
+inmediato (visible sin esperar ningún evento) y encola el mismo valor
+a tagcache vía `tagcache_update_numeric(id3->tagcache_idx - 1,
+tag_rating, ...)` -- mismo patrón `-1` que `apps/tagtree.c` usa
+internamente (`tagcache_idx` se guarda `+1`, 0 significa "sin
+asignar").
+
+**Bug real encontrado verificando el criterio "persiste tras
+reiniciar"** (no en el plan): `tagcache_update_numeric()` solo ENCOLA
+la escritura (cola async de 32 entradas de `apps/tagcache.c`) -- sin
+forzar el volcado, ni el import ni una calificación puesta a mano
+llegaban a disco (ni siquiera a la caché de RAM que
+`tagcache_get_numeric()` lee) hasta que la cola se llenara sola o el
+dispositivo apagara de verdad. Es la MISMA cola que R3-4
+(`docs/DESVIACIONES.md`) ya encontró para `lastplayed`, pero un gatillo
+DISTINTO: R3-4 arregló el apagado (`metro_main.c`, `SYS_POWEROFF`/
+`SYS_REBOOT`) -- útil para cualquier escritura pendiente en general,
+pero no ayuda a que una calificación recién importada o puesta a mano
+se vea DURANTE la misma sesión, potencialmente nunca si el usuario no
+apaga el dispositivo pronto. Corregido con `tagcache_shutdown()`
+explícito al final de `import_ratings()` y al final de
+`cycle_rating()` -- en este target (`ipod6g`, sin
+`HAVE_EEPROM_SETTINGS`) esa función es literalmente
+`run_command_queue(true)`, un volcado síncrono sin más efectos
+secundarios, seguro de llamar a media sesión, no solo al apagar de
+verdad. Encontrado con `DEBUGF` temporal en `import_ratings()` (path,
+línea, `idx_id`, rating escrito -- confirmó que el import en sí
+funcionaba perfecto) y en `rating_subtitle()` (`id3->path`/`rating`/
+`tagcache_idx` en cada redibujo -- confirmó que la LECTURA veía un
+valor viejo), ambos revertidos antes del commit.
+
+**Verificado en vivo** (simulador, `make install` primero, con un
+`ratings.cfg` de muestra en el simdisk -- 3 pistas reales + 1 ruta que
+ya no existe, para ejercitar el "ignorado, no error" de
+`tagcache_find_index()`): tras "sincronizar ahora" (Ajustes →
+Biblioteca), "Sunrise" (calificada 10 en el archivo) muestra "5/5" en
+Options sin haber tocado la fila nunca (`docs/screenshots/R3-F5-rating-imported.png`)
+-- la lectura corre por el listener de stock, confirmando la
+verificación de arriba. Calificar "Slow Turn" (sin calificación
+previa) desde Options, en el lugar, hasta "3/5"
+(`docs/screenshots/R3-F5-rating-set.png`) sobrevive cambiar de pista
+(siguiente/anterior) y volver. **Ambos casos** -- la importada y la
+puesta a mano -- se ven idénticos tras reiniciar el simulador de cero
+(dos procesos nuevos, sin ningún botón salvo navegar a la pista),
+confirmando que el fix de `tagcache_shutdown()` alcanza para el
+criterio de "hecho" de la fase sin depender de un apagado real. Build
+limpio en sim y target (mismos warnings preexistentes de `tile_cols`,
+nada nuevo). 6 suites de test de host en verde (678 checks, sin
+cambios -- `metro_sync.c`/`metro_screen_nowplaying.c` dependen de
+tagcache real, no host-testeables, mismo patrón que el resto de este
+archivo).

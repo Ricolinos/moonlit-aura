@@ -202,3 +202,10 @@ void metro_settings_artists_dir(char *out, size_t outsz)
 {
     strlcpy(out, METRO_DIR "/artists", outsz);
 }
+
+/* R3-F5/DD-7 (M-066): Studio writes this, Metro only ever reads it --
+ * same one-way relationship as artist_images.cfg above. */
+void metro_settings_ratings_cfg_path(char *out, size_t outsz)
+{
+    strlcpy(out, METRO_DIR "/ratings.cfg", outsz);
+}

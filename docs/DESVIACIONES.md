@@ -631,3 +631,60 @@ verifica interactivamente antes de R3-F9, ese es el lugar natural para
 cerrarlo del todo -- ya está en el alcance de esa fase ("simulador
 primero; hardware real solo en R3-F9"). R3-F5 (calificaciones) hereda
 el mismo fix sin trabajo adicional, al reusar la misma cola.
+
+---
+
+## R3-5 — Calificación: el listener de stock alcanza solo, sin callback propio -- y por qué casi se concluye lo contrario
+
+**El plan pedía exactamente esta verificación primero** (DD-7): antes
+de escribir ningún callback de `PLAYBACK_EVENT_TRACK_BUFFER`, calificar
+una pista en vivo, cambiar de pista, volver, y ver si el valor
+sobrevive -- porque dos hallazgos reales de la Fase 2 se contradecían
+(`INVESTIGACION-metro-r3.md` C.2: Aura necesita su propio callback
+"porque nadie más lo hace"; D.1: `tagtree_init()` sí corre sin
+condiciones en el árbol de Metro). Esta entrada documenta el resultado:
+**el listener de stock alcanza, no se escribió ningún callback nuevo**
+-- pero el primer intento de verificarlo casi concluye lo contrario,
+por una razón que no tiene nada que ver con el listener en sí.
+
+**Qué pasó**: la primera ronda de pruebas en el simulador headless
+(`sim_shot.sh` con botones inyectados) mostraba la calificación
+recién puesta desaparecer al volver a la pista -- parecía confirmar
+que sí hacía falta un callback propio, como Aura. Investigando más a
+fondo (con `DEBUGF` temporal en `metro_sync.c`/
+`metro_screen_nowplaying.c`, revertido antes del commit): las pistas
+de prueba de este repo duran **2 segundos** cada una
+(`gen_test_media.sh`), y la secuencia de botones para llegar hasta la
+fila de calificación (ocho o más pulsaciones, cada una con su propio
+`METRO_INJECT_PRESS_GAP`) tarda en inyectarse un tiempo real
+comparable o mayor a esos 2 segundos -- la pista bajo prueba ya había
+terminado y avanzado sola (reproducción continua) antes de llegar
+siquiera a calificarla, así que la "pista que no recordaba su
+calificación" ni siquiera era la misma pista. Confirmado leyendo el
+`id3->path` real en cada verificación vía `DEBUGF`: no era "Sunrise",
+eran pistas dos o tres lugares más adelante en el álbum.
+
+**Qué se hizo**: se pausó la reproducción (botón `PLAY`, justo después
+de arrancar la pista) antes de calificar y navegar -- elimina la
+presión de tiempo por completo, sin cambiar nada del mecanismo bajo
+prueba. Con eso, la secuencia real (calificar → `MENU` → `RIGHT`
+siguiente pista → `LEFT` pista anterior → reabrir Options) sí muestra
+la calificación intacta, confirmando que el listener de stock
+(`tagtree_buffer_event()`, `apps/tagtree.c`) restaura `tag_rating` sin
+ayuda. `docs/screenshots/R3-F5-rating-set.png` es esa verificación.
+
+**Un hallazgo real y distinto, encontrado en el camino** (no el que se
+estaba buscando): la escritura en sí (import y calificación manual)
+tampoco llegaba a verse -- ni siquiera dentro de la misma sesión --
+hasta forzar el volcado de la cola async de tagcache. Documentado en
+`DECISIONS.md` M-066, no aquí (es sobre la escritura, no sobre el
+listener de lectura que esta entrada verifica).
+
+**Impacto en `PLAN-metro-r3-maestro.md`**: ninguno en el criterio de
+"hecho" -- la corrección real fue de método de verificación (pausar
+antes de cronometrar botones contra pistas de 2 segundos), no de
+código. Vale la pena que cualquier verificación futura que dependa de
+"cambiar de pista y volver" en este simulador, con estos fixtures,
+pause la reproducción primero -- de lo contrario el resultado depende
+de cuántos botones hay que inyectar antes de llegar al punto de
+control, no de lo que en realidad se está probando.

@@ -141,6 +141,8 @@ enum metro_lang_id {
     LANG_PIVOT_QUICKPLAY,
     LANG_QUICKPLAY_EMPTY,
 
+    LANG_NP_RATING,
+
     LANG_COUNT
 };
 

@@ -273,6 +273,21 @@ aura-test-combo.jpg: Aura Test Combo
 dj-twist.jpg: DJ Twist: Remix Unit
 EOF
 
+echo "==> Generando ratings.cfg de prueba (test-media/aura/ratings.cfg)"
+# R3-F5/DD-7: <ruta absoluta>: <rating 0-10>, calcado del formato real
+# de Studio (CONTRATO-firmware-studio.md, import_ratings_from_studio()
+# de Aura consultado read-only) -- tres pistas con distintos valores
+# para ejercitar el mapeo x2 a estrellas (10->5, 6->3, 2->1), mas una
+# ruta que ya no existe en la biblioteca (ejercita el "ignorado, no es
+# error" de tagcache_find_index() devolviendo false).
+cat > "$OUT_DIR/aura/ratings.cfg" <<'EOF'
+# ratings.cfg v1 (CONTRATO-firmware-studio.md)
+/Music/Aura Test Combo/First Light/01 Sunrise.mp3: 10
+/Music/Aura Test Combo/Night Drive/01 Overpass.mp3: 6
+/Music/Wheel & Click/Analog Dreams/02 Ferrite.mp3: 2
+/Music/No Existe/archivo fantasma.mp3: 8
+EOF
+
 echo "==> Generando lista de prueba (test-media/Playlists)"
 mkdir -p "$OUT_DIR/Playlists"
 cat > "$OUT_DIR/Playlists/QA Favorites.m3u8" <<'EOF'
@@ -311,6 +326,9 @@ if [[ -d "$SIMDISK" ]]; then
     mkdir -p "$SIMDISK/.rockbox/aura/artists"
     cp "$OUT_DIR"/aura/artist_images.cfg "$SIMDISK/.rockbox/aura/"
     cp "$OUT_DIR"/aura/artists/*.jpg "$SIMDISK/.rockbox/aura/artists/"
+    # R3-F5/DD-7: mismo gate -- las rutas de ratings.cfg apuntan a
+    # pistas de esta misma biblioteca de prueba.
+    cp "$OUT_DIR"/aura/ratings.cfg "$SIMDISK/.rockbox/aura/"
   fi
 fi
 

@@ -115,4 +115,9 @@ void metro_settings_metro_cache_dir(const char *subdir, char *out, size_t outsz)
 void metro_settings_artist_images_cfg_path(char *out, size_t outsz);
 void metro_settings_artists_dir(char *out, size_t outsz);
 
+/* R3-F5/DD-7 (M-066): .../aura/ratings.cfg -- Studio's one-way ratings
+ * export (`<path absoluta>: <rating 0-10>` por línea), reimportado por
+ * metro_sync.c cada vez que el import de música termina bien. */
+void metro_settings_ratings_cfg_path(char *out, size_t outsz);
+
 #endif /* METRO_SETTINGS_H */
