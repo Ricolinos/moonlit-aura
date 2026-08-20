@@ -41,4 +41,31 @@ enum metro_ease_kind {
  * frame lands along it. */
 int metro_ease(enum metro_ease_kind kind, int i, int frames);
 
+/* R4/FA-9 (M-072): rampa del salto de búsqueda (seek) al sostener
+ * LEFT/RIGHT en Now Playing. Antes era un paso FIJO de 5000 ms por
+ * evento de repetición, y eso -- no el refresco del LCD ni la lógica de
+ * "hold" -- era la causa de que el recorrido se sintiera a brincos.
+ *
+ * Vive aquí, y no en la pantalla, por dos razones: es la misma familia
+ * que metro_ease() (una curva de "cuánto avanzo por paso"), y este
+ * módulo es C99 puro sin dependencias de Rockbox, así que la rampa
+ * queda cubierta por el arnés de host (test_motion.c) en vez de
+ * depender de sostener un botón en el simulador -- que el inyector de
+ * botones ni siquiera puede simular (hace press-release corto, nunca
+ * llega a BUTTON_REPEAT).
+ *
+ * Deliberadamente NO se reusa button_apply_acceleration(): esa función
+ * es específica de la rueda, lee la velocidad del wheel del bit 31 de
+ * get_action_data() (firmware/drivers/button.c:632-659), y un
+ * BUTTON_LEFT|BUTTON_REPEAT no trae ese dato -- devolvería 0. */
+#define METRO_SEEK_STEP_MIN_MS   1000
+#define METRO_SEEK_STEP_MAX_MS  10000
+#define METRO_SEEK_RAMP_EVERY       4
+
+/* `run` = cuántos eventos de búsqueda consecutivos van ya en esta
+ * racha (0 = el primero). Empieza en METRO_SEEK_STEP_MIN_MS y duplica
+ * cada METRO_SEEK_RAMP_EVERY eventos, con tope en
+ * METRO_SEEK_STEP_MAX_MS. Un `run` negativo se trata como 0. */
+long metro_seek_step_ms(int run);
+
 #endif /* METRO_MOTION_H */

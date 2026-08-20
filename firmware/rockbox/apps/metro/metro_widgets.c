@@ -154,3 +154,37 @@ void metro_widgets_draw_repeat_icon(int x, int y, bool one)
                          digit, metro_color_accent());
     }
 }
+
+/* Portado de draw_tri_stepped() (mpegplayer.c:796-807): una columna de
+ * 1 px por paso, alto decreciente, centrada verticalmente. */
+static void draw_tri_stepped(int x, int y, int w, int h, int dir)
+{
+    int s;
+
+    for (s = 0; s < w; s++)
+    {
+        int col = (dir > 0) ? s : (w - 1 - s);
+        int hh = h - (h * col) / w;
+        if (hh < 1)
+            hh = 1;
+        lcd_fillrect(x + s, y + (h - hh) / 2, 1, hh);
+    }
+}
+
+void metro_widgets_draw_play_icon(int x, int y, unsigned color)
+{
+    int s = METRO_WIDGETS_ICON_SIZE;
+
+    lcd_set_foreground(color);
+    draw_tri_stepped(x, y, s, s, 1);
+}
+
+void metro_widgets_draw_pause_icon(int x, int y, unsigned color)
+{
+    int s = METRO_WIDGETS_ICON_SIZE;
+    int bar_w = s / 4 > 2 ? s / 4 : 2;   /* MAX(size/4, 2), igual que el OSD */
+
+    lcd_set_foreground(color);
+    lcd_fillrect(x, y, bar_w, s);
+    lcd_fillrect(x + s - bar_w, y, bar_w, s);
+}

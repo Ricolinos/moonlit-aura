@@ -57,6 +57,19 @@ bool metro_music_is_playing(void)
     return (audio_status() & AUDIO_STATUS_PLAY) != 0;
 }
 
+void metro_music_playpause(void)
+{
+    /* El orden importa: una pista pausada tiene AMBOS bits
+     * (AUDIO_STATUS_PLAY | AUDIO_STATUS_PAUSE) en Rockbox, así que
+     * preguntar por PLAY primero nunca reanudaría nada. Preguntar por
+     * PAUSE primero es lo que ya hacían Now Playing y el visor; se
+     * conserva tal cual, no se "arregla" al centralizarlo. */
+    if (audio_status() & AUDIO_STATUS_PAUSE)
+        audio_resume();
+    else if (audio_status() & AUDIO_STATUS_PLAY)
+        audio_pause();
+}
+
 bool metro_music_now_playing(char *title_out, size_t title_sz,
                               char *sub_out, size_t sub_sz)
 {

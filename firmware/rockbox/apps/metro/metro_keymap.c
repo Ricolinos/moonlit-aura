@@ -28,6 +28,9 @@ static const struct button_mapping hub_mapping[] = {
     { MACT_NEXT,   BUTTON_SCROLL_FWD,                  BUTTON_NONE },
     { MACT_NEXT,   BUTTON_SCROLL_FWD | BUTTON_REPEAT,  BUTTON_NONE },
     { MACT_SELECT, BUTTON_SELECT | BUTTON_REL,         BUTTON_SELECT },
+    /* R4/FA-8 (M-071): PLAY controla la reproducción desde aquí también
+     * -- lo que suena no depende de en qué pantalla estés. */
+    { MACT_PLAYPAUSE, BUTTON_PLAY | BUTTON_REL,        BUTTON_PLAY },
     LAST_ITEM_IN_LIST
 };
 
@@ -45,6 +48,11 @@ static const struct button_mapping list_mapping[] = {
     { MACT_SELECT,     BUTTON_SELECT | BUTTON_REL,         BUTTON_SELECT },
     { MACT_BACK,       BUTTON_MENU | BUTTON_REL,           BUTTON_MENU },
     { MACT_HOME,       BUTTON_MENU | BUTTON_REPEAT,        BUTTON_NONE },
+    /* R4/FA-8 (M-071): igual que en el hub. Deliberadamente NO se
+     * agrega a dialog_mapping[] (un diálogo modal de sí/no debe seguir
+     * enfocado en su propia pregunta) ni a lock_mapping[] (con el
+     * candado puesto el aparato no ofrece ningún control -- M-068). */
+    { MACT_PLAYPAUSE,  BUTTON_PLAY | BUTTON_REL,           BUTTON_PLAY },
     LAST_ITEM_IN_LIST
 };
 

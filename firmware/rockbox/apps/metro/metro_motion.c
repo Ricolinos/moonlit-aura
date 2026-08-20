@@ -72,3 +72,14 @@ int metro_ease(enum metro_ease_kind kind, int i, int frames)
             return ease_linear(i, frames);
     }
 }
+
+long metro_seek_step_ms(int run)
+{
+    long step;
+
+    if (run < 0)
+        run = 0;
+
+    step = (long)METRO_SEEK_STEP_MIN_MS * (1 + run / METRO_SEEK_RAMP_EVERY);
+    return step > METRO_SEEK_STEP_MAX_MS ? METRO_SEEK_STEP_MAX_MS : step;
+}

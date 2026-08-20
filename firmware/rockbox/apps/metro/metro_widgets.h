@@ -58,6 +58,18 @@ void metro_widgets_draw_empty_state(const char *message);
 #define METRO_WIDGETS_ICON_SIZE 16
 
 void metro_widgets_draw_shuffle_icon(int x, int y);
+
+/* R4/FA-6 (M-073): glifos de transporte, METRO_WIDGETS_ICON_SIZE de
+ * lado. **Misma geometría exacta** que el OSD del reproductor de video
+ * (`draw_status_icon()`/`draw_tri_stepped()`,
+ * apps/plugins/mpegplayer/mpegplayer.c:796-845) -- se porta en vez de
+ * inventar otra precisamente para que el mismo estado se dibuje igual
+ * en música y en video. El triángulo se traza columna por columna (no
+ * con una primitiva de polígono, que Rockbox no tiene) y por eso
+ * queda "escalonado" a propósito: a 16 px se lee como triángulo y
+ * encaja con el lenguaje anguloso de Metro. */
+void metro_widgets_draw_play_icon(int x, int y, unsigned color);
+void metro_widgets_draw_pause_icon(int x, int y, unsigned color);
 void metro_widgets_draw_repeat_icon(int x, int y, bool one);
 
 #endif /* METRO_WIDGETS_H */

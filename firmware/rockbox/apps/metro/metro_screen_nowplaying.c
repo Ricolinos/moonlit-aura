@@ -45,8 +45,14 @@
 #include "metro_fb.h"
 #include "metro_keymap.h"
 #include "metro_lrc.h"
+#include "metro_motion.h" /* R4/FA-9: metro_seek_step_ms() */
 
-#define METRO_SEEK_STEP_MS      5000
+/* R4/FA-9 (M-072): sin un evento de búsqueda en este lapso, la racha
+ * se considera terminada (el usuario soltó el botón) y el paso vuelve
+ * a ser fino. Holgado respecto al intervalo de repetición del driver,
+ * para no reiniciarse a mitad de un hold. La rampa en sí vive en
+ * metro_motion.c (host-testeable). */
+#define METRO_SEEK_IDLE_TICKS   (HZ / 2)
 #define METRO_VOL_OVERLAY_TICKS (HZ * 3 / 2)
 #define METRO_NP_QUEUE_MAX      60
 
@@ -172,6 +178,20 @@ static bool ensure_lyrics_loaded(struct mp3entry *id3)
         return false;
 
     return metro_lrc_parse(&s_lrc, (size_t)n);
+}
+
+/* R4/FA-9 (M-072): racha de eventos consecutivos. Estado de sesión
+ * puro; la política de cuánto saltar es metro_seek_step_ms(). */
+static int  s_seek_run;
+static long s_seek_last_tick;
+
+static long seek_step_ms(void)
+{
+    if (current_tick - s_seek_last_tick > METRO_SEEK_IDLE_TICKS)
+        s_seek_run = 0; /* se soltó el botón: vuelve al paso fino */
+
+    s_seek_last_tick = current_tick;
+    return metro_seek_step_ms(s_seek_run++);
 }
 
 static void toggle_shuffle(void)
@@ -366,6 +386,31 @@ static int current_volume_pct(void)
 /* F10: real geometric icons (M-018) replacing F5-1's text badges --
  * right-aligned, repeat first (closer to the edge) then shuffle,
  * METRO_WIDGETS_ICON_SIZE square each with a small gap between. */
+/* R4/FA-6 (M-073): el hueco de iconografía más grande que tenía esta
+ * pantalla -- al pausar quedaba visualmente idéntica salvo que el
+ * tiempo dejaba de avanzar, sin ninguna forma de saberlo a simple
+ * vista.
+ *
+ * Va al extremo IZQUIERDO de la fila de glifos de estado (la de
+ * aleatorio/repetir, que se llena desde la derecha), así que no
+ * desplaza nada de lo que ya había.
+ *
+ * Asimetría deliberada de color: **pausa en acento, reproducción en
+ * secundario**. Reproducir es el estado normal y no necesita gritar;
+ * pausa es el estado que explica por qué no se oye nada, y es el que
+ * uno viene a buscar con la mirada. */
+static void draw_transport_indicator(void)
+{
+    int x = 12;
+    int y = 176;
+    int status = audio_status();
+
+    if (status & AUDIO_STATUS_PAUSE)
+        metro_widgets_draw_pause_icon(x, y, metro_color_accent());
+    else if (status & AUDIO_STATUS_PLAY)
+        metro_widgets_draw_play_icon(x, y, metro_color_secondary());
+}
+
 static void draw_mode_indicators(void)
 {
     int x = LCD_WIDTH - 12 - METRO_WIDGETS_ICON_SIZE;
@@ -507,6 +552,7 @@ void metro_screen_nowplaying_show(void)
         metro_draw_progress(0, 214, LCD_WIDTH, 4, pct);
 
         draw_mode_indicators();
+        draw_transport_indicator();
     }
 
     if (current_tick < s_vol_overlay_until)
@@ -540,7 +586,7 @@ void metro_screen_nowplaying_handle(int action, int steps)
             id3 = audio_current_track();
             if (id3)
             {
-                pos = (long)id3->elapsed - METRO_SEEK_STEP_MS;
+                pos = (long)id3->elapsed - seek_step_ms();
                 audio_ff_rewind(pos > 0 ? pos : 0);
             }
             break;
@@ -548,7 +594,7 @@ void metro_screen_nowplaying_handle(int action, int steps)
             id3 = audio_current_track();
             if (id3)
             {
-                pos = (long)id3->elapsed + METRO_SEEK_STEP_MS;
+                pos = (long)id3->elapsed + seek_step_ms();
                 audio_ff_rewind(pos < (long)id3->length ? pos : (long)id3->length);
             }
             break;
@@ -559,10 +605,7 @@ void metro_screen_nowplaying_handle(int action, int steps)
             toggle_shuffle();
             break;
         case MACT_PLAYPAUSE:
-            if (audio_status() & AUDIO_STATUS_PAUSE)
-                audio_resume();
-            else if (audio_status() & AUDIO_STATUS_PLAY)
-                audio_pause();
+            metro_music_playpause();
             break;
         case MACT_BACK:
             metro_screen_list_pop();

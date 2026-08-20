@@ -321,34 +321,51 @@ static void music_lists_refresh(void)
  * pivot of Música, the plan's recommended default -- the Zune-style
  * "you'll probably want to keep listening to this" landing surface).
  * on_select drills into that album's songs, same as the albums pivot
- * below. R3-F4/DD-5 (M-065): tile art is resolved from a REPRESENTATIVE
- * track of the album (its first song, alphabetically -- same order
- * metro_music_songs_of_album() already returns), not
- * audio_current_track() (nothing may even be playing right now). */
-static bool quickplay_thumb_cache_key(void *ctx, int index, char *out, size_t out_len)
-{
-    (void)ctx;
+ * below.
+ *
+ * R4/FA-5b (M-074): la fuente de miniaturas dejó de ser exclusiva de
+ * Quickplay. El pivot Álbumes necesita exactamente lo mismo -- una
+ * cuadrícula de álbumes con su carátula real -- así que en vez de
+ * duplicar el par cache_key/decode, la fuente lee AHORA la lista desde
+ * el `ctx` del pivot (el campo que struct metro_pivot ya tenía y que
+ * estos proveedores ignoraban). Una sola implementación sirve a los
+ * dos, y a cualquier cuadrícula de álbumes futura.
+ *
+ * R3-F4/DD-5 (M-065): la carátula se resuelve desde un track
+ * REPRESENTATIVO del álbum (su primera canción, en el mismo orden que
+ * metro_music_songs_of_album() ya devuelve), no desde
+ * audio_current_track() -- puede no haber nada sonando. */
+struct album_grid {
+    const metro_music_item_t *items;
+    const int *count;   /* puntero: la lista se re-llena en cada visita */
+};
 
-    if (index < 0 || index >= s_quickplay_n)
+static bool album_thumb_cache_key(void *ctx, int index, char *out, size_t out_len)
+{
+    const struct album_grid *g = (const struct album_grid *)ctx;
+
+    if (!g || index < 0 || index >= *g->count)
         return false;
 
-    /* Album seek alone, not a track path -- stable for as long as the
-     * album itself doesn't change, so a re-decode isn't forced just
-     * because quickplay's ORDER shifted (a different album moving to
-     * this same grid slot after more listening). */
-    snprintf(out, out_len, "album-%ld", (long)s_quickplay[index].seek);
+    /* Sólo el seek del álbum, no una ruta de track -- estable mientras
+     * el álbum no cambie, así que un re-decode no se fuerza sólo
+     * porque el ORDEN de la cuadrícula se movió (otro álbum cayendo en
+     * la misma casilla). Y como la clave es el álbum y no la
+     * cuadrícula, Quickplay y Álbumes COMPARTEN la caché en disco: una
+     * carátula ya decodificada por uno la reusa el otro. */
+    snprintf(out, out_len, "album-%ld", (long)g->items[index].seek);
     return true;
 }
 
-static bool quickplay_thumb_decode(void *ctx, int index, fb_data *dst)
+static bool album_thumb_decode(void *ctx, int index, fb_data *dst)
 {
+    const struct album_grid *g = (const struct album_grid *)ctx;
     metro_music_item_t track;
     char path[MAX_PATH];
-    (void)ctx;
 
-    if (index < 0 || index >= s_quickplay_n)
+    if (!g || index < 0 || index >= *g->count)
         return false;
-    if (metro_music_songs_of_album(s_quickplay[index].seek, &track, 1) < 1)
+    if (metro_music_songs_of_album(g->items[index].seek, &track, 1) < 1)
         return false;
     if (!metro_music_track_path(track.seek, path, sizeof(path)))
         return false;
@@ -356,14 +373,17 @@ static bool quickplay_thumb_decode(void *ctx, int index, fb_data *dst)
     return metro_albumart_decode_track_cover(path, dst);
 }
 
-static const struct metro_thumb_source quickplay_thumb_source = {
-    "albums", quickplay_thumb_cache_key, quickplay_thumb_decode
+static const struct metro_thumb_source album_thumb_source = {
+    "albums", album_thumb_cache_key, album_thumb_decode
 };
 
-static const fb_data *quickplay_pivot_get_tile(void *ctx, int index)
+static const fb_data *album_pivot_get_tile(void *ctx, int index)
 {
-    return metro_thumbs_get(&quickplay_thumb_source, ctx, index);
+    return metro_thumbs_get(&album_thumb_source, ctx, index);
 }
+
+static const struct album_grid s_quickplay_grid = { s_quickplay, &s_quickplay_n };
+static const struct album_grid s_albums_grid    = { s_albums,    &s_albums_n };
 
 static int quickplay_count(void *ctx) { (void)ctx; return s_quickplay_n; }
 
@@ -553,11 +573,16 @@ static void playlists_on_select(void *ctx, int index)
 static const struct metro_pivot music_pivots[] = {
     /* R3-F4/DD-5 (M-065), DA-1: first pivot -- the plan's recommended
      * default (open for the owner to flip at this phase's PARADA). */
-    { LANG_PIVOT_QUICKPLAY, quickplay_count, quickplay_get_row, quickplay_on_select, NULL,
-      METRO_TILE_COLS, quickplay_pivot_get_tile, LANG_QUICKPLAY_EMPTY },
+    { LANG_PIVOT_QUICKPLAY, quickplay_count, quickplay_get_row, quickplay_on_select,
+      (void *)&s_quickplay_grid,
+      METRO_TILE_COLS, album_pivot_get_tile, LANG_QUICKPLAY_EMPTY },
     { LANG_PIVOT_ARTISTS,   artists_count,   artists_get_row,   artists_on_select,   NULL,
       METRO_TILE_COLS, artist_pivot_get_tile },
-    { LANG_PIVOT_ALBUMS,    albums_count,    albums_get_row,    albums_on_select,    NULL },
+    /* R4/FA-5b (M-074): de lista de texto a cuadrícula con carátula
+     * real, reusando la misma fuente que Quickplay. */
+    { LANG_PIVOT_ALBUMS,    albums_count,    albums_get_row,    albums_on_select,
+      (void *)&s_albums_grid,
+      METRO_TILE_COLS, album_pivot_get_tile },
     { LANG_PIVOT_SONGS,     songs_count,     songs_get_row,     songs_on_select,     NULL },
     { LANG_PIVOT_GENRES,    genres_count,    genres_get_row,    genres_on_select,    NULL },
     { LANG_PIVOT_PLAYLISTS, playlists_count, playlists_get_row, playlists_on_select, NULL },
@@ -771,6 +796,9 @@ void metro_screen_hub_handle(int action, int steps)
             break;
         case MACT_SELECT:
             hub_on_select(NULL, metro_nav_sel(nav));
+            break;
+        case MACT_PLAYPAUSE:
+            metro_music_playpause();
             break;
         default:
             break;

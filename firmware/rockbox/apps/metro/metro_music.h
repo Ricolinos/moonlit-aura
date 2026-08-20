@@ -61,6 +61,18 @@ bool metro_music_db_ready(void);
 
 bool metro_music_is_playing(void);
 
+/* R4/FA-8 (M-071): alterna reproducción/pausa de lo que esté sonando.
+ * **No-op si no hay nada en reproducción** -- pulsar PLAY con la
+ * biblioteca detenida no debe arrancar algo por sorpresa, y ese es
+ * justamente el caso nuevo que trae esta fase (antes PLAY solo existía
+ * en pantallas que presuponen una pista viva).
+ *
+ * Compartido por las CUATRO pantallas que responden a PLAY: el hub y
+ * las listas (nuevas aquí), Now Playing y el visor de fotos. Las dos
+ * últimas ya traían esta misma pareja de llamadas copiada palabra por
+ * palabra; esta fase habría hecho cuatro copias de lo mismo. */
+void metro_music_playpause(void);
+
 /* Current track's visible title/subtitle ("<artist> - <album>"),
  * filled only if metro_music_is_playing(). Returns false (buffers left
  * untouched) otherwise. */

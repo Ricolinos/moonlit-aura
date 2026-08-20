@@ -27,6 +27,7 @@
 
 #include "metro_screen_photo_viewer.h"
 #include "metro_screen_list.h"
+#include "metro_music.h" /* R4/FA-8: metro_music_playpause() */
 #include "metro_draw.h"
 #include "metro_theme.h"
 #include "metro_lang.h"
@@ -460,12 +461,9 @@ void metro_screen_photo_viewer_handle(int action, int steps)
             metro_screen_list_pop_to_root();
             break;
         case MACT_PLAYPAUSE:
-            /* Same call pair as Now Playing (metro_screen_nowplaying.c)
-             * -- music keeps playing while the viewer is open, DD-10. */
-            if (audio_status() & AUDIO_STATUS_PAUSE)
-                audio_resume();
-            else if (audio_status() & AUDIO_STATUS_PLAY)
-                audio_pause();
+            /* La música sigue sonando con el visor abierto (DD-10); el
+             * toggle es el compartido de metro_music.c (R4/FA-8). */
+            metro_music_playpause();
             break;
         default:
             break;

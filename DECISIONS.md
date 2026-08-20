@@ -2289,3 +2289,151 @@ dueño tiene el iPod. Lo que reporte se anota en `ESTADO_FINAL.md`, y si
 algo hay que ajustar (tiempos de transición, presupuesto de miniaturas,
 la curva de CONTINUUM) sale en un commit de ajuste dentro de esta misma
 fase.
+
+## M-071 — R4/FA-8: PLAY controla la reproducción desde cualquier pantalla
+
+**Contexto**: primera fase de la ronda 4. El botón físico de Play/Pausa
+solo funcionaba dentro de Now Playing y del visor de fotos; desde el hub
+o cualquier lista no hacía nada.
+
+**Causa raíz — dos capas, ninguna era "interceptación"**: el botón nunca
+se enrutaba. (1) `BUTTON_PLAY` solo estaba mapeado en `player_mapping[]`
+y `viewer_mapping[]` de `metro_keymap.c`; ausente de `hub_mapping[]`,
+`list_mapping[]`, `dialog_mapping[]` y `lock_mapping[]`, y como toda
+tabla termina en `LAST_ITEM_IN_LIST` (no `__NEXTLIST`), un botón sin
+mapear resuelve a `ACTION_NONE` en vez de encadenar a `CONTEXT_STD`.
+(2) `MACT_PLAYPAUSE` solo se manejaba en dos pantallas. Cerrar una sola
+capa no habría hecho nada.
+
+**Qué se hizo**: `BUTTON_PLAY` agregado a hub y listas, más el caso
+correspondiente en sus manejadores. **No** se agregó a `dialog_mapping[]`
+(un diálogo modal de sí/no debe seguir enfocado en su propia pregunta) ni
+a `lock_mapping[]` — esa exclusión es deliberada de M-068 y se conserva:
+con el candado puesto el aparato no ofrece ningún control.
+
+**Reuso en vez de una cuarta copia**: la pareja
+`audio_status()`/`audio_pause()`/`audio_resume()` ya estaba duplicada
+palabra por palabra en Now Playing y en el visor; esta fase habría hecho
+cuatro copias. Se extrajo `metro_music_playpause()` a `metro_music.c` y
+las cuatro pantallas la llaman. Se conserva el orden original de las
+preguntas (PAUSE antes que PLAY) porque **una pista pausada tiene ambos
+bits** en Rockbox: preguntar por PLAY primero nunca reanudaría nada.
+
+**No-op si no hay nada sonando**, a propósito: pulsar PLAY con la
+biblioteca detenida no debe arrancar algo por sorpresa, y ese caso solo
+existe ahora que el botón vive en pantallas que no presuponen una pista.
+
+**Verificado en vivo** con `DEBUGF` temporal (revertido antes del
+commit): tres pulsaciones, tres transiciones reales de estado —
+`0x1`→pausa, `0x3`→reanuda desde el hub, y `0x1`→pausa desde dentro de
+una lista.
+
+## M-072 — R4/FA-9: la búsqueda deja de saltar de 5 en 5 segundos
+
+**Causa raíz**: no era refresco de LCD ni la lógica de "hold". El paso
+era **fijo**: `METRO_SEEK_STEP_MS 5000` por cada evento de repetición
+(`metro_screen_nowplaying.c`), así que sostener LEFT/RIGHT producía
+brincos de 5 s por definición.
+
+**Corrección a la suposición del plan de Fase 1**: ese plan proponía
+"reutilizar `button_apply_acceleration()`, ya presente". **Leyendo su
+implementación resultó inservible aquí**: es específica de la rueda —
+lee la velocidad del wheel del bit 31 de `get_action_data()`
+(`firmware/drivers/button.c:632-659`). Un `BUTTON_LEFT|BUTTON_REPEAT` no
+trae ese dato, así que habría devuelto **0**: peor que no acelerar. Se
+descartó y se escribió una rampa propia.
+
+**Dónde vive, y por qué ahí**: la política (`metro_seek_step_ms(run)`)
+está en `metro_motion.c`, no en la pantalla. Dos razones: es la misma
+familia que `metro_ease()` (una curva de "cuánto avanzo por paso"), y
+ese módulo es C99 puro sin dependencias de Rockbox, así que la rampa
+queda cubierta por el arnés de host. Eso importa más de lo normal aquí:
+**el inyector de botones del simulador no puede probar esto** — hace
+press-release corto y nunca llega a `BUTTON_REPEAT`. Sin la función
+pura, la única verificación posible habría sido sostener un botón a
+mano.
+
+La pantalla conserva solo el estado de sesión (la racha y su expiración
+por `current_tick`), que sí depende de Rockbox.
+
+**Forma**: arranca en 1000 ms y duplica cada 4 eventos consecutivos,
+con tope en 10000 ms; la racha se reinicia tras medio segundo sin
+eventos (el usuario soltó). Toque corto = ajuste fino; sostener =
+atravesar una pista larga sin eternizarse.
+
+**Verificado**: `test_motion.c` cubre el **contrato**, no los números
+exactos — arranca en el mínimo, no crece dentro del primer tramo, sube
+al completarlo, es monótona no decreciente en 500 iteraciones, satura
+en el tope, y un `run` negativo se trata como el primero. La suite pasó
+de 116 a 1625 checks.
+
+**Pendiente de hardware**: si el paso concreto se siente bien es
+afinación, y el simulador es mal juez (`INVESTIGACION.md` B.11).
+Además `audio_ff_rewind()` fuerza un re-seek del búfer que en el iPod
+real puede añadir su propio tirón — hipótesis no confirmada.
+
+## M-073 — R4/FA-6: indicador de reproducción/pausa en Now Playing
+
+**Causa raíz**: `metro_screen_nowplaying_show()` **nunca consultaba**
+`AUDIO_STATUS_PAUSE`; el flag solo aparecía en el manejador de entrada.
+Al pausar, la pantalla quedaba visualmente idéntica salvo que el tiempo
+dejaba de avanzar — sin ninguna forma de saberlo a simple vista.
+
+**Geometría portada, no inventada**: `metro_widgets_draw_play_icon()` y
+`..._pause_icon()` reproducen **exactamente** `draw_status_icon()` y
+`draw_tri_stepped()` del OSD del reproductor de video
+(`apps/plugins/mpegplayer/mpegplayer.c:796-845`), cambiando solo la
+primitiva de relleno. La razón de portarla en vez de dibujar otra es que
+el mismo estado se vea igual en música y en video. El triángulo se traza
+columna por columna (Rockbox no tiene primitiva de polígono) y queda
+escalonado a propósito: a 16 px se lee como triángulo y encaja con el
+lenguaje anguloso de Metro.
+
+**Dos decisiones de colocación:**
+
+- **Extremo izquierdo de la fila de glifos de estado** (la de
+  aleatorio/repetir, en `y=176`, que se llena desde la derecha). No
+  desplaza nada de lo que ya había.
+- **Asimetría de color deliberada: pausa en acento, reproducción en
+  secundario.** Reproducir es el estado normal y no necesita gritar;
+  pausa es el que explica por qué no se oye nada, y es el que uno viene
+  a buscar con la mirada.
+
+**Verificado**: `docs/screenshots/R4-FA6-playing.png` y
+`R4-FA6-paused.png`, comprobadas además de forma **mecánica** (sus
+SHA-256 diferentes: la pantalla ya no es idéntica entre ambos estados).
+
+## M-074 — R4/FA-5b: el pivot Álbumes pasa a cuadrícula con carátula real
+
+**Estado previo**: el pivot Álbumes era una lista de texto — la única
+entrada de `music_pivots[]` sin `tile_cols`/`get_tile`.
+
+**Reuso, no construcción**: Quickplay (R3-F4/M-065) ya renderizaba
+exactamente esto. En vez de duplicar el par `cache_key`/`decode`, la
+fuente de miniaturas dejó de cablear `s_quickplay[]` y **lee ahora la
+lista desde el `ctx` del pivot** — el campo que `struct metro_pivot` ya
+tenía y que estos proveedores ignoraban. Una sola implementación
+(`album_thumb_source`) sirve a los dos pivots y a cualquier cuadrícula
+de álbumes futura.
+
+**Efecto lateral bueno**: como la clave de caché es el **seek del
+álbum** y no la cuadrícula que lo muestra, Quickplay y Álbumes
+**comparten la caché en disco** — una carátula ya decodificada por uno
+la reusa el otro sin volver a decodificar.
+
+**Verificado en vivo** (`docs/screenshots/R4-FA5b-albums-grid.png`), con
+los tres caminos cubiertos por los fixtures: dos álbumes con carátula
+propia distinta (crema y naranja), cuatro heredando `/Music/cover.jpg`
+del directorio padre vía `find_albumart()` — azul sólido `0x3366CC`, que
+**es decodificación real, no un placeholder** (se comprobó contra el
+color del fixture) — y dos sin arte alguno cayendo al tile de acento con
+inicial ("A", "N").
+
+**Consecuencia a tener presente, no un defecto**:
+`metro_draw_tiles()` solo usa el título para la inicial dentro del tile;
+**no dibuja ninguna etiqueta de texto**. Al pasar de lista a cuadrícula,
+Álbumes pierde de pantalla el nombre del álbum y su artista. Es el mismo
+comportamiento que Artistas y Fotos ya tenían, y es lo que se pidió,
+pero con carátulas parecidas entre sí los álbumes dejan de ser
+distinguibles. Poner nombre bajo los tiles sería trabajo aparte y
+afectaría a las tres cuadrículas por igual.

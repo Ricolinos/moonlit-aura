@@ -30,6 +30,7 @@
 #include "metro_widgets.h"
 #include "metro_motion.h"
 #include "metro_transitions.h"
+#include "metro_music.h" /* R4/FA-8: metro_music_playpause() */
 
 static metro_nav_t s_nav;
 
@@ -243,6 +244,9 @@ void metro_screen_list_handle(int action, int steps)
             break;
         case MACT_HOME:
             metro_screen_list_pop_to_root();
+            break;
+        case MACT_PLAYPAUSE:
+            metro_music_playpause();
             break;
         default:
             break;

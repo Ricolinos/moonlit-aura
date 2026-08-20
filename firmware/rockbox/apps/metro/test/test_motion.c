@@ -100,6 +100,43 @@ static void test_ease_out_quad_shape(void)
     CHECK(metro_ease(METRO_EASE_OUT_QUAD, frames, frames) == 256);
 }
 
+/* R4/FA-9 (M-072): rampa del salto de búsqueda. Lo que importa
+ * verificar es el CONTRATO, no los números exactos: empieza fino,
+ * crece de forma monótona al sostener, y topa. */
+static void test_seek_ramp(void)
+{
+    int run;
+    long prev;
+
+    /* Arranca en el paso mínimo -- un toque corto ajusta con precisión. */
+    CHECK(metro_seek_step_ms(0) == METRO_SEEK_STEP_MIN_MS);
+
+    /* Dentro del primer tramo no crece todavía. */
+    for (run = 0; run < METRO_SEEK_RAMP_EVERY; run++)
+        CHECK(metro_seek_step_ms(run) == METRO_SEEK_STEP_MIN_MS);
+
+    /* Al completar un tramo, el paso sube. */
+    CHECK(metro_seek_step_ms(METRO_SEEK_RAMP_EVERY) > METRO_SEEK_STEP_MIN_MS);
+
+    /* Monótona no decreciente, y nunca por encima del tope. */
+    prev = 0;
+    for (run = 0; run < 500; run++)
+    {
+        long step = metro_seek_step_ms(run);
+        CHECK(step >= prev);
+        CHECK(step >= METRO_SEEK_STEP_MIN_MS);
+        CHECK(step <= METRO_SEEK_STEP_MAX_MS);
+        prev = step;
+    }
+
+    /* Sostener mucho satura en el tope, no crece sin límite. */
+    CHECK(metro_seek_step_ms(10000) == METRO_SEEK_STEP_MAX_MS);
+
+    /* Defensivo: un run negativo se trata como el primero. */
+    CHECK(metro_seek_step_ms(-1) == METRO_SEEK_STEP_MIN_MS);
+    CHECK(metro_seek_step_ms(-9999) == METRO_SEEK_STEP_MIN_MS);
+}
+
 int main(void)
 {
     test_endpoints();
@@ -107,6 +144,8 @@ int main(void)
     test_linear_is_exact();
     test_ease_out_expo_shape();
     test_ease_out_quad_shape();
+
+    test_seek_ramp();
 
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
