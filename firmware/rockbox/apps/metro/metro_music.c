@@ -649,6 +649,8 @@ int metro_music_list_playlists(char labels[][METRO_MUSIC_ITEM_LEN], int max)
         bool is_m3u = (len > 4 && !strcasecmp(entry->d_name + len - 4, ".m3u"));
         bool is_m3u8 = (len > 5 && !strcasecmp(entry->d_name + len - 5, ".m3u8"));
 
+        if (metro_fsutil_is_hidden_name(entry->d_name))
+            continue; /* R4/FA-2: `._Mi Lista.m3u8` no es una playlist */
         if (!is_m3u && !is_m3u8)
             continue;
 

@@ -27,6 +27,37 @@
 #ifndef METRO_FSUTIL_H
 #define METRO_FSUTIL_H
 
+#include <stdbool.h>
+
+/* R4/FA-2 (M-075): true para lo que NINGUNA lista de Metro debe
+ * mostrar jamás.
+ *
+ * El caso que motivó esto: macOS, al escribir en el FAT del iPod, deja
+ * sidecars AppleDouble llamados `._<nombre original>` -- y **conservan
+ * la extensión**. `._IMG_1234.jpg` pasaba el filtro de extensión (que
+ * compara solo el sufijo) y no es un directorio, así que se listaba
+ * como una foto más. Lo mismo con `._Mi Lista.m3u8` entre las
+ * playlists. Se observó en vivo en el iPod del dueño: `._rockbox.ipod`,
+ * `._version.txt`, `._sync-pending.json`, más `.Spotlight-V100`,
+ * `.Trashes` y `.fseventsd`.
+ *
+ * La regla es **el punto inicial**, no el `._` específico: en FAT un
+ * nombre que empieza con punto es oculto por convención, ninguna de las
+ * fuentes de contenido legítimo lo genera (Aura Studio sanea nombres;
+ * una copia manual tampoco), y así cubre de paso `.DS_Store`, los
+ * directorios de servicio de macOS, y `.`/`..`. Un punto en cualquier
+ * OTRA posición (`mi.foto.jpg`) no se ve afectado.
+ *
+ * Defensivo a propósito, y solo del lado del firmware (decisión del
+ * dueño): el usuario puede copiar archivos a mano sin que Studio
+ * intervenga, así que filtrar al leer es lo único que cubre todos los
+ * caminos. `static inline` en el header para que quede cubierto por el
+ * arnés de host sin arrastrar dependencias de Rockbox. */
+static inline bool metro_fsutil_is_hidden_name(const char *name)
+{
+    return name == NULL || name[0] == '.';
+}
+
 /* PLAN_MAESTRO.md S1.2: VIDEO_NAME_LEN/PHOTO_NAME_LEN, both 96 bytes
  * (contract: filenames <= 95 bytes UTF-8 including extension, + NUL). */
 #define METRO_FSUTIL_NAME_LEN 96

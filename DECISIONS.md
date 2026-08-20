@@ -2437,3 +2437,58 @@ comportamiento que Artistas y Fotos ya tenían, y es lo que se pidió,
 pero con carátulas parecidas entre sí los álbumes dejan de ser
 distinguibles. Poner nombre bajo los tiles sería trabajo aparte y
 afectaría a las tres cuadrículas por igual.
+
+## M-075 — R4/FA-2: los residuales de macOS dejan de contaminar las listas
+
+**Contexto**: el dueño reportó que el firmware indexaba archivos que
+empiezan con `._`. Observado en vivo en su iPod: `._rockbox.ipod`,
+`._version.txt`, `._sync-pending.json`, más `.Spotlight-V100`,
+`.Trashes` y `.fseventsd`.
+
+**Causa raíz**: `matches_any_ext()` (`metro_fsutil.c`) compara **solo el
+sufijo**. Un sidecar AppleDouble se llama `._IMG_1234.jpg` — **conserva
+la extensión** — así que pasaba el filtro, y como tampoco es un
+directorio, el chequeo de `ATTR_DIRECTORY` no lo atrapaba. No existía
+ningún filtro de archivos ocultos en todo `apps/metro/`.
+
+**Un segundo sitio, no reportado, encontrado leyendo**: el escaneo de
+playlists de `metro_music.c` tiene la misma comparación por sufijo, así
+que un `._Mi Lista.m3u8` aparecía como una **playlist fantasma** en la
+lista. Se corrigió igual.
+
+Un tercer sitio (`metro_thumbs.c`) escanea la caché propia comparando
+contra un prefijo que el firmware mismo genera (`album-<seek>`,
+`<archivo>.<mtime>`); un `._…` nunca coincide, así que no necesita el
+filtro y no se tocó.
+
+**La regla es el punto inicial, no el `._` específico**: en FAT un
+nombre que empieza con punto es oculto por convención, ninguna fuente de
+contenido legítimo lo genera (Studio sanea nombres, una copia manual
+tampoco), y de paso cubre `.DS_Store`, los directorios de servicio de
+macOS y `.`/`..`. Un punto en cualquier **otra** posición
+(`mi.foto.jpg`) no se ve afectado — esa es la guarda de regresión que
+importa.
+
+**Solo del lado del firmware** (decisión del dueño). Es la elección
+correcta además de la pedida: el usuario puede copiar archivos a mano
+sin que Studio intervenga, así que filtrar al **leer** es lo único que
+cubre todos los caminos.
+
+**Dónde vive**: `static inline` en `metro_fsutil.h`, no en el `.c`. Ese
+header no tiene dependencias de Rockbox, así que el predicado queda
+cubierto por el arnés de host (`test_fsutil.c`, 20 checks) sin necesidad
+de compilar el módulo entero — mismo criterio que M-072 con la rampa de
+búsqueda.
+
+**Verificado en vivo, antes y después** con residuales reales colocados
+en el simdisk (`docs/screenshots/R4-FA2-antes.png` /
+`R4-FA2-despues.png`): antes, la cuadrícula de Fotos abría con un tile
+de acento cuya inicial era **un punto literal** (`._diagram.jpg`, que no
+decodifica) seguido de un duplicado de `sunset.jpg`; después ambos
+desaparecen y entran dos fotos reales que estaban desplazadas fuera de
+la ventana. Las playlists muestran solo "QA Favorites", sin su fantasma.
+
+**Fixtures permanentes**: los AppleDouble se agregaron a
+`gen_test_media.sh` (con su magic real `0x00051607`) en vez de dejarlos
+como un experimento de esta fase, para que cualquier captura futura de
+las cuadrículas siga demostrando que el filtro aguanta.

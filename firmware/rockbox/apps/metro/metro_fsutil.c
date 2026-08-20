@@ -96,6 +96,8 @@ int metro_fsutil_list_by_ext_mtime(const char *dir, const char *const *exts, int
     {
         struct dirinfo info;
 
+        if (metro_fsutil_is_hidden_name(entry->d_name))
+            continue; /* R4/FA-2: AppleDouble y compañía */
         if (!matches_any_ext(entry->d_name, exts, n_exts))
             continue;
 

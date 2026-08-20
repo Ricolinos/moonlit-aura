@@ -273,6 +273,17 @@ aura-test-combo.jpg: Aura Test Combo
 dj-twist.jpg: DJ Twist: Remix Unit
 EOF
 
+# R4/FA-2 (M-075): residuales de macOS como fixtures PERMANENTES. Son
+# sidecars AppleDouble reales (magic 0x00051607) que conservan la
+# extension del archivo original -- exactamente el caso que se colaba
+# por el filtro de sufijo. Se generan siempre para que cualquier
+# captura futura de las cuadriculas siga demostrando que el filtro
+# aguanta, no solo la de la fase que lo introdujo.
+echo "==> Generando residuales de macOS de prueba (AppleDouble)"
+printf '\x00\x05\x16\x07appledouble de prueba' > "$OUT_DIR/Photos/._diagram.jpg"
+printf '\x00\x05\x16\x07appledouble de prueba' > "$OUT_DIR/Photos/._sunset.jpg"
+printf '\x00\x05\x16\x07appledouble de prueba' > "$OUT_DIR/Videos/._clip1.mpg"
+
 echo "==> Generando ratings.cfg de prueba (test-media/aura/ratings.cfg)"
 # R3-F5/DD-7: <ruta absoluta>: <rating 0-10>, calcado del formato real
 # de Studio (CONTRATO-firmware-studio.md, import_ratings_from_studio()
@@ -313,6 +324,9 @@ if [[ -d "$SIMDISK" ]]; then
     mkdir -p "$SIMDISK/Music" "$SIMDISK/Playlists"
     cp -R "$MUSIC_DIR"/. "$SIMDISK/Music/"
     cp "$OUT_DIR/Playlists"/*.m3u8 "$SIMDISK/Playlists/"
+    # R4/FA-2: el mismo caso, pero para playlists -- `._X.m3u8` termina
+    # en .m3u8 y aparecia como una lista fantasma.
+    printf '\x00\x05\x16\x07appledouble de prueba' > "$SIMDISK/Playlists/._QA Favorites.m3u8"
     cp "$OUT_DIR"/metro-test.* "$SIMDISK/Music/"
     cp "$OUT_DIR"/cover.jpg "$SIMDISK/Music/"
     # En la RAIZ del disco, no bajo Music/: find_albumart tambien busca
