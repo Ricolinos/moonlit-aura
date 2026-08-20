@@ -23,6 +23,8 @@
 
 #include "settings.h"
 #include "backlight.h"
+#include "powermgmt.h" /* R3-F6/DD-10: set_sleeptimer_duration()/get_sleep_timer() */
+#include "eq.h" /* R3-F6/DD-10: dsp_eq_enable()/dsp_set_eq_coefs() */
 
 #include "metro_screen_settings.h"
 #include "metro_screen_about.h"
@@ -42,10 +44,112 @@ static const enum metro_lang_id gfx_names[METRO_GFX_COUNT] = {
     LANG_GFX_LITE, LANG_GFX_FULL,
 };
 
+/* R3-F6/DD-10: cicla desactivado -> 15 -> 30 -> 60 -> 90 min llamando
+ * set_sleeptimer_duration() directo (firmware/powermgmt.c) -- sin
+ * pantalla propia, sin tocar apps/settings.h (Aura no implementa esta
+ * feature en absoluto, INVESTIGACION-metro-r3.md F.1). El índice de
+ * qué paso sigue se guarda aparte de get_sleep_timer() (que cuenta
+ * hacia abajo en tiempo real, no sirve como "posición en la lista" a
+ * ciclar) -- puramente de sesión, un temporizador de sueño reinicia en
+ * cada boot en el propio Rockbox stock también, no hay nada que
+ * persistir. */
+static const int sleep_steps_min[] = { 0, 15, 30, 60, 90 };
+#define SLEEP_STEPS_N (int)(sizeof(sleep_steps_min) / sizeof(sleep_steps_min[0]))
+static int s_sleep_step = 0;
+
+static void cycle_sleep(void)
+{
+    s_sleep_step = (s_sleep_step + 1) % SLEEP_STEPS_N;
+    set_sleeptimer_duration(sleep_steps_min[s_sleep_step]);
+}
+
+static const char *sleep_subtitle(void)
+{
+    static char buf[16];
+    int remaining_min = get_sleep_timer() / 60;
+
+    if (remaining_min <= 0)
+        return metro_lang_str(LANG_VALUE_OFF);
+
+    snprintf(buf, sizeof(buf), "%d min", remaining_min);
+    return buf;
+}
+
+/* R3-F6/DD-10: tabla propia de Metro, no la de settings.h (Aura sí
+ * necesita ese extern de 4 líneas porque reusa los defaults de stock;
+ * Metro no los reusa -- INVESTIGACION-metro-r3.md F.2, cero cambios a
+ * `apps/settings.h`). Forma de banda (tipo/corte/Q) igual para los 4
+ * presets, el mismo layout de 10 bandas que el menú EQ de stock usa
+ * por default (`apps/settings_list.c`) -- valores genéricos de
+ * ingeniería de audio, no código de Aura -- solo la GANANCIA por banda
+ * cambia de preset a preset. Ganancia en décimas de dB (`eq_menu.h`:
+ * EQ_GAIN_MIN/MAX = -240/240, o sea ±24.0 dB). */
+enum metro_eq_preset {
+    METRO_EQ_FLAT = 0,
+    METRO_EQ_BASS,
+    METRO_EQ_VOCAL,
+    METRO_EQ_BRIGHT,
+    METRO_EQ_PRESET_COUNT
+};
+
+static const enum metro_lang_id eq_preset_names[METRO_EQ_PRESET_COUNT] = {
+    LANG_EQ_FLAT, LANG_EQ_BASS, LANG_EQ_VOCAL, LANG_EQ_BRIGHT,
+};
+
+struct eq_band_shape { enum eq_filter_type type; int cutoff; int q; };
+static const struct eq_band_shape eq_shapes[EQ_NUM_BANDS] = {
+    { EQ_FILTER_LOW_SHELF,     32,  7 },
+    { EQ_FILTER_PEAK,          64, 10 },
+    { EQ_FILTER_PEAK,         125, 10 },
+    { EQ_FILTER_PEAK,         250, 10 },
+    { EQ_FILTER_PEAK,         500, 10 },
+    { EQ_FILTER_PEAK,        1000, 10 },
+    { EQ_FILTER_PEAK,        2000, 10 },
+    { EQ_FILTER_PEAK,        4000, 10 },
+    { EQ_FILTER_PEAK,        8000, 10 },
+    { EQ_FILTER_HIGH_SHELF, 16000,  7 },
+};
+
+static const int eq_preset_gains[METRO_EQ_PRESET_COUNT][EQ_NUM_BANDS] = {
+    /* plano */     {   0,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
+    /* graves */    {  60,  40,  20,   0,   0,   0,   0,   0,   0,   0 },
+    /* voz */       { -20, -10,   0,   0,  20,  40,  30,   0,   0,   0 },
+    /* brillante */ {   0,   0,   0,   0,   0,   0,   0,  30,  40,  50 },
+};
+
+static int s_eq_preset = METRO_EQ_FLAT;
+
+static void apply_eq_preset(enum metro_eq_preset preset)
+{
+    int i;
+
+    /* Plano == sin procesamiento -- apagar el DSP entero en vez de
+     * aplicar 10 bandas en 0 es más barato y más correcto (bypass
+     * real, no "todas las bandas midiendo cero"). */
+    dsp_eq_enable(preset != METRO_EQ_FLAT);
+
+    for (i = 0; i < EQ_NUM_BANDS; i++)
+    {
+        struct eq_band_setting band;
+
+        band.type   = eq_shapes[i].type;
+        band.cutoff = eq_shapes[i].cutoff;
+        band.q      = eq_shapes[i].q;
+        band.gain   = eq_preset_gains[preset][i];
+        dsp_set_eq_coefs(i, &band);
+    }
+}
+
+static void cycle_eq(void)
+{
+    s_eq_preset = (s_eq_preset + 1) % METRO_EQ_PRESET_COUNT;
+    apply_eq_preset((enum metro_eq_preset)s_eq_preset);
+}
+
 static int general_count(void *ctx)
 {
     (void)ctx;
-    return 5;
+    return 7;
 }
 
 static void general_get_row(void *ctx, int index, struct metro_row *out)
@@ -72,6 +176,16 @@ static void general_get_row(void *ctx, int index, struct metro_row *out)
             out->kind = METRO_ROW_SETTING;
             break;
         case 3:
+            out->title = metro_lang_str(LANG_SETTING_SLEEP);
+            out->subtitle = sleep_subtitle();
+            out->kind = METRO_ROW_SETTING;
+            break;
+        case 4:
+            out->title = metro_lang_str(LANG_SETTING_EQ);
+            out->subtitle = metro_lang_str(eq_preset_names[s_eq_preset]);
+            out->kind = METRO_ROW_SETTING;
+            break;
+        case 5:
             out->title = metro_lang_str(LANG_SETTING_LIBRARY);
             out->subtitle = NULL;
             out->kind = METRO_ROW_ACTION;
@@ -110,6 +224,14 @@ static void general_on_select(void *ctx, int index)
             break;
 
         case 3:
+            cycle_sleep();
+            break;
+
+        case 4:
+            cycle_eq();
+            break;
+
+        case 5:
             if (metro_widgets_confirm(metro_lang_str(LANG_HUB_SETTINGS),
                                        metro_lang_str(LANG_DIALOG_LIBRARY_TITLE)))
             {
@@ -132,6 +254,14 @@ static void general_on_select(void *ctx, int index)
                 metro_theme_set(metro_settings.theme);
                 metro_accent_set(metro_settings.accent);
                 metro_lang_set(metro_settings.language);
+
+                /* R3-F6/DD-10: sueño/EQ son de sesión, no parte de
+                 * metro_settings -- pero "restablecer ajustes" debería
+                 * verse consistente con el resto de esta fila. */
+                s_sleep_step = 0;
+                set_sleeptimer_duration(sleep_steps_min[s_sleep_step]);
+                s_eq_preset = METRO_EQ_FLAT;
+                apply_eq_preset((enum metro_eq_preset)s_eq_preset);
             }
             break;
     }

@@ -143,6 +143,13 @@ enum metro_lang_id {
 
     LANG_NP_RATING,
 
+    LANG_SETTING_SLEEP,
+    LANG_SETTING_EQ,
+    LANG_EQ_FLAT,
+    LANG_EQ_BASS,
+    LANG_EQ_VOCAL,
+    LANG_EQ_BRIGHT,
+
     LANG_COUNT
 };
 

@@ -133,6 +133,13 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_QUICKPLAY_EMPTY]     = "sin historial todavia -- reproduce algo primero",
 
     [LANG_NP_RATING]           = "calificacion",
+
+    [LANG_SETTING_SLEEP]      = "temporizador de sueno",
+    [LANG_SETTING_EQ]         = "ecualizador",
+    [LANG_EQ_FLAT]            = "plano",
+    [LANG_EQ_BASS]            = "graves",
+    [LANG_EQ_VOCAL]           = "voz",
+    [LANG_EQ_BRIGHT]          = "brillante",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -247,6 +254,13 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_QUICKPLAY_EMPTY]     = "nothing played yet -- play something first",
 
     [LANG_NP_RATING]           = "rating",
+
+    [LANG_SETTING_SLEEP]      = "sleep timer",
+    [LANG_SETTING_EQ]         = "equalizer",
+    [LANG_EQ_FLAT]            = "flat",
+    [LANG_EQ_BASS]            = "bass",
+    [LANG_EQ_VOCAL]           = "vocal",
+    [LANG_EQ_BRIGHT]          = "bright",
 };
 
 void metro_lang_set(enum metro_language lang)

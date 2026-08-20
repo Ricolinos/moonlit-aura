@@ -1976,3 +1976,78 @@ nada nuevo). 6 suites de test de host en verde (678 checks, sin
 cambios -- `metro_sync.c`/`metro_screen_nowplaying.c` dependen de
 tagcache real, no host-testeables, mismo patrón que el resto de este
 archivo).
+
+## M-067 — R3-F6: temporizador de sueño y presets de EQ como filas de Ajustes (cero pantallas nuevas)
+
+**Contexto**: sexta fase de la ronda 3 (`PLAN-metro-r3-maestro.md`
+DD-10), la más barata del backlog chico -- dos filas nuevas en el
+pivot General de Ajustes, cero pantallas propias, cero cambios a
+`apps/settings.h` ni a ningún otro archivo fuera de `apps/metro/`
+(`git diff --stat` verificado como criterio explícito de la fase).
+
+**Temporizador de sueño**: `set_sleeptimer_duration(int minutes)`/
+`get_sleep_timer()`/`get_sleep_timer_active()`
+(`firmware/powermgmt.c`) son API de core sin ninguna pantalla nativa
+detrás -- ni `do_menu()` ni nada que las reglas duras de Metro
+prohíban (`INVESTIGACION-metro-r3.md` F.1: Aura tampoco implementa
+esta feature, no hay puerto que hacer). La fila cicla
+`desactivado→15→30→60→90 min` -- el índice de qué paso sigue
+(`s_sleep_step`) se guarda aparte de `get_sleep_timer()`, que cuenta
+hacia ATRÁS en tiempo real (segundos restantes, no una posición
+estable en la lista de pasos) y por eso no sirve para decidir el
+próximo valor a ciclar, solo para el subtítulo. Puramente de sesión, a
+propósito: un temporizador de sueño reinicia en cada boot en el propio
+Rockbox stock también, no hay nada que persistir.
+
+**Presets de EQ**: tabla **propia** de Metro (`eq_shapes[]` +
+`eq_preset_gains[][]`, `metro_screen_settings.c`) -- NO el `extern
+eq_defaults[EQ_NUM_BANDS]` de 4 líneas que Aura sí necesitó en
+`apps/settings.h` para reusar los valores default de stock
+(`INVESTIGACION-metro-r3.md` F.2). Metro no reusa esos defaults, así
+que no necesita ese `extern` ni ningún cambio a `settings.h` -- API de
+aplicación pura (`dsp_eq_enable()`/`dsp_set_eq_coefs()`,
+`lib/rbcodec/dsp/eq.h`), ya accesible sin ese cambio. La FORMA de cada
+banda (tipo/frecuencia de corte/Q) es igual en los 4 presets -- el
+mismo layout de 10 bandas que el menú EQ de stock usa por default
+(`apps/settings_list.c`, valores genéricos de ingeniería de audio, no
+código de Aura) -- solo la GANANCIA por banda cambia entre "plano"
+(todo en 0, EQ deshabilitado por completo vía `dsp_eq_enable(false)` --
+bypass real, más barato y más correcto que 10 bandas midiendo cero),
+"graves" (boost en 32/64/125 Hz), "voz" (corte leve en 32/64 Hz, boost
+en 500/1000/2000 Hz) y "brillante" (boost en 4000/8000/16000 Hz).
+Ganancia en décimas de dB (`apps/menus/eq_menu.h`:
+EQ_GAIN_MIN/MAX = -240/240, o sea ±24.0 dB) -- confirmado leyendo el
+formateo `"%2d.%d"` del propio menú de EQ de stock, no asumido.
+También de sesión, no persiste en `metro_settings`/`aura.cfg` -- ni el
+plan ni el criterio de "hecho" de la fase piden sobrevivir un reinicio,
+y evita tocar el archivo de contrato con Aura Studio
+(`aura.cfg`/`AuraDeviceProbe`) para algo que no lo necesita.
+
+**Ambas filas al pivot General** (no uno de "Sonido" -- ese pivot no
+existe en Metro hoy; los tres reales son General/Pantalla/Acerca de,
+`INVESTIGACION-metro-r3.md` F.4 tenía un nombre equivocado ahí. DD-10
+ya cubría este caso: "si no existe uno de sonido, ambas al general").
+`general_count()` pasa de 5 a 7 filas; Biblioteca y Restablecer
+ajustes se corren de 3/4 a 5/6. "Restablecer ajustes" también reinicia
+sueño (a desactivado) y EQ (a plano) -- no forma parte del criterio de
+"hecho" de la fase, pero es la consistencia obvia con el resto de esa
+fila ya existente.
+
+**Verificado en vivo** (simulador, `make install` primero):
+`docs/screenshots/R3-F6-settings-sleep.png` (fila ciclada a "15 min",
+subtítulo real) y `R3-F6-settings-eq.png` (fila ciclada a "graves").
+El temporizador real arma -- confirmado con `DEBUGF` temporal en
+`cycle_sleep()` (revertido antes del commit): tras ciclar a 15 min,
+`get_sleep_timer()` devuelve 900 (segundos) y `get_sleep_timer_active()`
+es verdadero; a 30 min, 1800. Cambiar de preset de EQ altera las
+bandas -- verificado por inspección de estado (mismo `DEBUGF` temporal
+en `cycle_eq()`, no por oído, tal como pedía el criterio de "hecho" de
+la fase): preset "graves" con banda0=+6.0dB (60), "voz" con
+banda0=-2.0dB (-20) y banda5=+4.0dB (40), coincidiendo exactamente con
+la tabla. `git diff --stat` confirma **cero archivos fuera de
+`apps/metro/`** en el diff completo de la fase. Build limpio en sim y
+target (mismos warnings preexistentes de `tile_cols`, nada nuevo). 6
+suites de test de host en verde (678 checks, sin cambios --
+`metro_screen_settings.c` depende de `firmware/powermgmt.c`/
+`lib/rbcodec/dsp/eq.c` reales, no host-testeable, mismo patrón que
+`metro_sync.c`/`metro_screen_nowplaying.c` en R3-F5).
