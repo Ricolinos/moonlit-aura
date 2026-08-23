@@ -3081,3 +3081,11 @@ Todo estático (nunca en la pila de 8 KB, D-226): `.bss` pasa a 7.2 MB en ARM y 
 `apps/gui/usb_screen.c` (MODIFICATIONS.md, `Metro (M-088)`): en iPod 6G la pantalla principal llama `metro_screen_usb_show()` en vez de `bm_usblogo`, y el bucle sondea a `HZ/10` llamando `metro_screen_usb_tick()` (repinta solo la franja de 6 px de los puntos). `metro_apply_hygiene()` apaga `usb_hid` — el "modo teclado" USB de Rockbox no tiene lugar en Metro y además su rama del bucle nunca llegaba al tick. Puertas: `lcd_active()` y `animations != off` (los puntos se congelan).
 
 Verificado en simulador con `USB_INSERT`: `docs/screenshots/R5-usb-metro.png`.
+
+## M-089 — El glifo de la pantalla USB, suavizado (máscaras de cobertura de 8 bits)
+
+**Reporte del dueño (v0.5.2 en el iPod):** *"el icono de sincronización se ve un poco pixeleado… quizá utilizando alguno ya existente de alguna biblioteca de iconos gratuita."*
+
+M-088 dibujó el glifo de 16 px de la tabla monocroma escalado 2×: cada píxel se vuelve un bloque de 2×2, y en el panel real se nota. El icono ya era de una biblioteca libre (Fluent, MIT); lo que faltaba era el **tamaño**. Fluent publica `arrow_sync` solo hasta 24 px, pero el SVG es vectorial: rasterizado a 40 px con antialiasing sale limpio y con un trazo fino que empareja con el wordmark Light.
+
+**Decisión.** Segunda tabla generada, `metro_glyphs_table.c` (misma lista/pipeline de `gen_icons.py`, sección `GLYPHS`): máscaras de **cobertura de 8 bits** (un byte por píxel, el canal alfa tal cual), 1 600 bytes el de 40×40. `metro_widgets_draw_glyph()` las pinta mezclando el color elegido contra lo que haya debajo (`metro_fb_plot_alpha`), así que siguen sin RGB fijo y funcionan sobre cualquier fondo. La tabla monocroma de 16 px se queda para lo que se dibuja a 16 px; el glifo grande existe porque la pantalla USB no puede leer disco y necesita más de 16 px. Captura: `docs/screenshots/R5-usb-icono-antialias.png`.

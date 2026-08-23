@@ -21,6 +21,7 @@
 #define METRO_WIDGETS_H
 
 #include "metro_icons.h"
+#include "metro_glyphs.h"
 
 #include <stdbool.h>
 
@@ -87,5 +88,9 @@ void metro_widgets_draw_empty_state(const char *message);
  * set resuelve mejor (la batería, que es un indicador con relleno
  * proporcional, no un símbolo fijo). */
 void metro_widgets_draw_icon(enum metro_icon_id id, int x, int y, unsigned color);
+
+/* R5 (M-089): draws a big anti-aliased glyph (metro_glyphs.h) with its
+ * top-left at (x, y), blending `color` over what is already there. */
+void metro_widgets_draw_glyph(const struct metro_glyph *g, int x, int y, unsigned color);
 
 #endif /* METRO_WIDGETS_H */

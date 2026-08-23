@@ -35,9 +35,9 @@
  * theme). INITDATA_ATTR on that bitmap is a no-op on the S5L8702
  * (verified by Aura-Firmware, D-223), so it stays valid all session.
  *
- * Composition: the sync glyph (Fluent arrow_sync, 16px cell drawn at
- * 2x -- the only way to get a bigger glyph without disk, and the
- * chunky result reads as deliberate at this density), the wordmark,
+ * Composition: the sync glyph (Fluent arrow_sync rasterised at 40px
+ * with anti-aliasing, embedded as an 8-bit coverage mask -- M-089;
+ * the first cut scaled the 16px mask 2x and looked blocky), the wordmark,
  * and WP7's indeterminate progress: five accent dots that cross the
  * screen, fast at the edges and slow through the middle, staggered,
  * with a pause between sweeps. No text at all -- the only font left
@@ -54,11 +54,10 @@
 #include "metro_screen_usb.h"
 #include "metro_theme.h"
 #include "metro_fb.h"
-#include "metro_icons.h"
+#include "metro_widgets.h"
 #include "metro_settings.h"
 
-#define USB_ICON_SCALE   2
-#define USB_ICON_Y       60
+#define USB_ICON_Y       56   /* 40px anti-aliased glyph, M-089 */
 #define USB_WORDMARK_Y   84   /* ink rows 28..70 of the bitmap -> 112..154 on screen */
 #define USB_DOTS_Y       184
 #define USB_DOT          4
@@ -67,21 +66,6 @@
 #define USB_SWEEP_TICKS  (HZ * 2)     /* one dot, edge to edge */
 #define USB_PAUSE_TICKS  (HZ * 3 / 4) /* nothing on screen between sweeps */
 #define USB_PERIOD_TICKS (USB_SWEEP_TICKS + USB_DOT_STAGGER * (USB_DOTS - 1) + USB_PAUSE_TICKS)
-
-static void draw_icon_scaled(enum metro_icon_id id, int x, int y, int scale, unsigned color)
-{
-    const struct metro_icon *icon = &metro_icons[id];
-    int row, col;
-
-    lcd_set_foreground(color);
-    for (row = 0; row < METRO_ICON_SIZE; row++)
-    {
-        unsigned mask = icon->rows[row];
-        for (col = 0; col < METRO_ICON_SIZE; col++)
-            if (mask & (1u << (METRO_ICON_SIZE - 1 - col)))
-                lcd_fillrect(x + col * scale, y + row * scale, scale, scale);
-    }
-}
 
 /* The wordmark as a mask: luminance -> alpha of fg over bg. Done once
  * per full draw (31k pixels), never per tick. */
@@ -141,9 +125,12 @@ void metro_screen_usb_show(void)
     lcd_set_foreground(metro_color_bg());
     lcd_fillrect(0, 0, LCD_WIDTH, LCD_HEIGHT);
 
-    draw_icon_scaled(METRO_ICON_SYNC,
-                     (LCD_WIDTH - METRO_ICON_SIZE * USB_ICON_SCALE) / 2, USB_ICON_Y,
-                     USB_ICON_SCALE, metro_color_accent());
+    /* M-089: the 16px mask scaled 2x read as blocks on the real panel
+     * ("se ve pixeleado") -- the same Fluent glyph, rasterised at 40px
+     * with anti-aliasing and embedded as a coverage mask, drawn blended. */
+    metro_widgets_draw_glyph(&metro_glyph_sync_large,
+                             (LCD_WIDTH - metro_glyph_sync_large.width) / 2, USB_ICON_Y,
+                             metro_color_accent());
     draw_wordmark((LCD_WIDTH - bm_rockboxlogo.width) / 2, USB_WORDMARK_Y);
     draw_dots(current_tick);
     lcd_update();
