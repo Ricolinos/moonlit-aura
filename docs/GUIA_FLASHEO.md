@@ -34,6 +34,15 @@ Este es el comportamiento estándar de los bootloaders duales de
 Rockbox para iPod (`firmware/rockbox/utils/mks5lboot/README`,
 sección "Dual-Boot") — Metro-Aura lo hereda sin modificarlo.
 
+> **Salvedad confirmada en hardware (2026-08-23, ST-050 de Aura
+> Studio):** el dual boot **solo funciona en un iPod en formato
+> "winpod"** (restaurado con iTunes en Windows). Un iPod restaurado
+> desde Mac usa un esquema de particiones que el bootloader no lee, y
+> la combinación MENU **no arranca Apple** aunque el flasheo haya sido
+> dual. En ese caso la única diferencia real entre `--bl-inst` y
+> `--bl-inst --single` es que el segundo lo dice de frente. Aura Studio
+> ya instala siempre en modo single por esto.
+
 ## Advertencia: riesgo con Aura Studio (`DECISIONS.md` M-004)
 
 Si tienes **Aura Studio** instalado (la app hermana de este proyecto)
