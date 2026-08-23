@@ -162,6 +162,9 @@ enum metro_lang_id {
     LANG_EQ_VOCAL,
     LANG_EQ_BRIGHT,
 
+    /* R5-F3 (M-083) */
+    LANG_SETTING_VOLUME_LIMIT,
+
     LANG_COUNT
 };
 
@@ -219,5 +222,13 @@ void metro_lang_initial(const char *s, char *out, size_t outsz);
  *     de ordenamiento. Solo devuelve 0 para cadenas byte a byte
  *     idénticas. */
 int metro_lang_collate(const char *a, const char *b);
+
+/* R5-F3 (M-083): copia `s` a `out` en MAYÚSCULAS, con las mismas reglas
+ * de metro_lang_initial() aplicadas a cada carácter (ASCII a-z y las
+ * acentuadas de Latin-1 en UTF-8; cualquier otra secuencia se copia tal
+ * cual). Para la línea de artista del reproductor, que la maqueta del
+ * dueño lleva en versalitas. Trunca en frontera de carácter UTF-8, nunca
+ * a mitad de secuencia. */
+void metro_lang_upper(const char *s, char *out, size_t outsz);
 
 #endif /* METRO_LANG_H */

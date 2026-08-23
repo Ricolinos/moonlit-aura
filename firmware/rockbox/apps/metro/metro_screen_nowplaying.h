@@ -47,4 +47,10 @@ bool metro_screen_nowplaying_is_current(void);
 void metro_screen_nowplaying_show(void);
 void metro_screen_nowplaying_handle(int action, int steps);
 
+/* R5-F3 (M-083): true while the volume level ("00".."15") is on screen,
+ * held or fading -- metro_main.c redraws Now Playing several times a
+ * second during that window instead of its usual once-per-second, so
+ * the fade actually animates. */
+bool metro_screen_nowplaying_volume_visible(void);
+
 #endif /* METRO_SCREEN_NOWPLAYING_H */

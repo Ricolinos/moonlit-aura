@@ -30,6 +30,8 @@
 #include "playlist.h"
 #include "playlist_catalog.h"
 #include "audio.h"
+#include "sound.h"
+#include "settings.h"
 #include "dir.h"
 #include "file.h"
 #include "misc.h" /* read_line() */
@@ -42,6 +44,7 @@
 #include "metro_settings.h"
 #include "metro_artist_images.h"
 #include "metro_fsutil.h"
+#include "metro_volume.h"
 
 /* Enough unique values for a few thousand artists/albums/genres --
  * same size Aura-Firmware settled on for the same purpose (D-021).
@@ -68,6 +71,55 @@ void metro_music_playpause(void)
         audio_resume();
     else if (audio_status() & AUDIO_STATUS_PLAY)
         audio_pause();
+}
+
+int metro_music_volume_level(void)
+{
+    return metro_volume_level_from_db(global_status.volume,
+                                      sound_min(SOUND_VOLUME),
+                                      sound_max(SOUND_VOLUME));
+}
+
+void metro_music_volume_step(int delta)
+{
+    int level = metro_music_volume_level() + delta;
+    int db;
+
+    if (level < 0)
+        level = 0;
+    if (level > METRO_VOLUME_MAX_LEVEL)
+        level = METRO_VOLUME_MAX_LEVEL;
+
+    db = metro_volume_db_from_level(level, sound_min(SOUND_VOLUME),
+                                    sound_max(SOUND_VOLUME));
+    /* Same path as apps/misc.c adjust_volume(): write the status value
+     * and let setvol() clamp against volume_limit, push it to the codec
+     * and mark status dirty for persistence. */
+    global_status.volume = db;
+    setvol();
+}
+
+int metro_music_volume_limit_level(void)
+{
+    return metro_volume_level_from_db(global_settings.volume_limit,
+                                      sound_min(SOUND_VOLUME),
+                                      sound_max(SOUND_VOLUME));
+}
+
+void metro_music_set_volume_limit_level(int level)
+{
+    if (level < 0)
+        level = 0;
+    if (level > METRO_VOLUME_MAX_LEVEL)
+        level = METRO_VOLUME_MAX_LEVEL;
+
+    global_settings.volume_limit = metro_volume_db_from_level(
+        level, sound_min(SOUND_VOLUME), sound_max(SOUND_VOLUME));
+    settings_save();
+    /* Re-apply: sound_set_volume() clamps the current volume to the
+     * new limit, so lowering the limit below the current level takes
+     * effect right away instead of at the next wheel move. */
+    setvol();
 }
 
 bool metro_music_now_playing(char *title_out, size_t title_sz,

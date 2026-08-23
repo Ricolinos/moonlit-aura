@@ -74,6 +74,13 @@ void metro_fb_draw_turnstile_layer(const fb_data *src, int angle_index);
  * once, not a transition's only compositing step per frame. */
 void metro_fb_blend_over_color(const fb_data *img, unsigned bg_color, int alpha256);
 
+/* R5-F3 (M-083): the same per-channel blend the fades use, for ONE
+ * color -- `from` at alpha256 = 0, `to` at 256. For fading a piece of
+ * text toward the background (the volume level overlay in Now Playing,
+ * the paused-title breathing in the hub) without touching any frame
+ * buffer: the caller just draws the text in the returned color. */
+unsigned metro_fb_blend_color(unsigned from, unsigned to, int alpha256);
+
 /* R3-F8/DD-9 (M-069): rellena un rectángulo de color DENTRO de un
  * buffer off-screen (no en el LCD real) -- el único caso hasta ahora es
  * CONTINUUM borrando la ceja de la página de destino en `s_fb_to`

@@ -73,6 +73,19 @@ bool metro_music_is_playing(void);
  * palabra; esta fase habría hecho cuatro copias de lo mismo. */
 void metro_music_playpause(void);
 
+/* R5-F3 (M-083): volume on Metro's 00..15 scale (metro_volume.h). No
+ * state of its own -- always derived from global_status.volume, which
+ * Rockbox persists, via the round-trip-safe mapping. */
+int  metro_music_volume_level(void);
+/* Moves `delta` levels (clamped to 0..15), applies it through setvol()
+ * so Rockbox's own limit/persistence path runs. */
+void metro_music_volume_step(int delta);
+/* The "volume limit" setting on the same scale. Setting it also
+ * re-applies the current volume so it gets clamped immediately, and
+ * persists through settings_save(). */
+int  metro_music_volume_limit_level(void);
+void metro_music_set_volume_limit_level(int level);
+
 /* Current track's visible title/subtitle ("<artist> - <album>"),
  * filled only if metro_music_is_playing(). Returns false (buffers left
  * untouched) otherwise. */

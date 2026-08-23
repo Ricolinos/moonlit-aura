@@ -152,6 +152,8 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_EQ_BASS]            = "graves",
     [LANG_EQ_VOCAL]           = "voz",
     [LANG_EQ_BRIGHT]          = "brillante",
+
+    [LANG_SETTING_VOLUME_LIMIT] = "límite de volumen",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -283,6 +285,8 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_EQ_BASS]            = "bass",
     [LANG_EQ_VOCAL]           = "vocal",
     [LANG_EQ_BRIGHT]          = "bright",
+
+    [LANG_SETTING_VOLUME_LIMIT] = "volume limit",
 };
 
 void metro_lang_set(enum metro_language lang)
@@ -421,6 +425,36 @@ static int collate_key(const char **s)
      * que el orden sea estable y no se lea de más. */
     *s += 1;
     return 0x100 * 4 + (int)c;
+}
+
+void metro_lang_upper(const char *s, char *out, size_t outsz)
+{
+    size_t used = 0;
+
+    if (outsz == 0)
+        return;
+    out[0] = '\0';
+    if (!s)
+        return;
+
+    while (*s)
+    {
+        char ch[5];
+        size_t len;
+
+        /* metro_lang_initial() ya sabe medir y mayusculizar UN carácter
+         * UTF-8; aquí solo se encadena sobre toda la cadena. */
+        metro_lang_initial(s, ch, sizeof(ch));
+        len = strlen(ch);
+        if (len == 0)
+            break;
+        if (used + len + 1 > outsz)
+            break; /* no cabe entero: truncar en frontera de carácter */
+        memcpy(out + used, ch, len);
+        used += len;
+        s += len;
+    }
+    out[used] = '\0';
 }
 
 int metro_lang_collate(const char *a, const char *b)

@@ -104,6 +104,15 @@ static inline fb_data blend_pixel(fb_data from, fb_data to, int a)
     return LCD_RGBPACK(r, g, b);
 }
 
+unsigned metro_fb_blend_color(unsigned from, unsigned to, int alpha256)
+{
+    if (alpha256 < 0)
+        alpha256 = 0;
+    if (alpha256 > 256)
+        alpha256 = 256;
+    return blend_pixel((fb_data)from, (fb_data)to, alpha256);
+}
+
 void metro_fb_present_fade(const fb_data *from, const fb_data *to, int alpha256)
 {
     int x, y;

@@ -56,12 +56,22 @@ SIZE = 16
 # REPEAT_ONE se dibuja este mismo lazo mas el caracter '1' al lado,
 # que es el mecanismo que Metro ya usaba y si se lee. Ver DECISIONS.md
 # M-077.
+#
+# R5-F3 (M-083): star es la variante REGULAR (contorno) de Fluent -- es
+# el estilo de linea de la maqueta del dueno y a 16px binariza limpia.
+# shuffle/repeat_all se quedan en FILLED a proposito: se probo su
+# Regular y las puntas de flecha se fragmentan a esta densidad (el
+# Filled de Fluent para flechas es el mismo trazo de linea, solo mas
+# grueso -- no una silueta). previous/next son Filled por lo mismo.
 ICONS = [
     ("play",       "PLAY"),
     ("pause",      "PAUSE"),
     ("shuffle",    "SHUFFLE"),
     ("repeat_all", "REPEAT_ALL"),
     ("speaker",    "SPEAKER"),
+    ("star",       "STAR"),
+    ("previous",   "PREVIOUS"),
+    ("next",       "NEXT"),
 ]
 
 # Umbral sobre el canal ALFA, no sobre el color: los SVG de Fluent son

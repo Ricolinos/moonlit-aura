@@ -47,6 +47,7 @@
 #include "metro_fsutil.h"
 #include "metro_lrc.h"
 #include "metro_motion.h" /* R4/FA-9: metro_seek_step_ms() */
+#include "metro_volume.h" /* R5-F3: 00..15 */
 
 /* R4/FA-9 (M-072): sin un evento de búsqueda en este lapso, la racha
  * se considera terminada (el usuario soltó el botón) y el paso vuelve
@@ -54,8 +55,35 @@
  * para no reiniciarse a mitad de un hold. La rampa en sí vive en
  * metro_motion.c (host-testeable). */
 #define METRO_SEEK_IDLE_TICKS   (HZ / 2)
-#define METRO_VOL_OVERLAY_TICKS (HZ * 3 / 2)
 #define METRO_NP_QUEUE_MAX      60
+
+/* R5-F3 (M-083): el nivel de volumen ("00".."15") aparece al ajustar,
+ * se queda 3 s quieto desde el ÚLTIMO ajuste y luego se desvanece
+ * despacio hacia el fondo durante 1 s. El desvanecimiento es un fundido
+ * de color del texto (metro_fb_blend_color), no de un frame buffer --
+ * barato y sin estado gráfico. Con animations=off se corta en seco a
+ * los 3 s; respeta lcd_active() como toda animación. */
+#define METRO_VOL_HOLD_TICKS  (HZ * 3)
+#define METRO_VOL_FADE_TICKS  (HZ)
+#define METRO_VOL_FADE_STEPS  8
+
+/* Geometría del reproductor (maqueta del dueño, R5-F3). Píxeles fijos
+ * como en el resto de la app, no derivados de métricas de fuente. */
+#define NP_LEFT_X        12
+#define NP_VOL_Y         30   /* nivel de volumen, MFONT_LIST, sobre la carátula */
+#define NP_COVER_Y       56   /* 136px -> 192 */
+#define NP_COL_X        164   /* columna derecha */
+#define NP_MODE_Y        60   /* estrella / aleatorio / repetir, 16px */
+#define NP_MODE_PITCH    36
+#define NP_RING_Y        86   /* anillos de transporte, r=13 -> 27px -> 113 */
+#define NP_RING_R        13
+#define NP_RING_PITCH    36
+#define NP_ARTIST_Y     124   /* MFONT_LIST_SEL, mayúsculas */
+#define NP_ALBUM_Y      148   /* MFONT_LIST */
+#define NP_TITLE_Y      170   /* MFONT_LIST -> 190 */
+#define NP_BAR_Y        206   /* barra de progreso, con márgenes */
+#define NP_BAR_H          3
+#define NP_TIMES_Y      213   /* caption 14 -> 227, DEBAJO de la barra */
 
 /* --- sentinel page: never drawn/queried through the generic list path,
  * just a stack-bookkeeping placeholder metro_screen_nowplaying_is_current()
@@ -365,41 +393,110 @@ static void push_options(void)
     metro_screen_list_push(&options_page);
 }
 
-/* --- Now Playing itself: custom layout, PLAN_MAESTRO.md S1.4. ------- */
+/* --- Now Playing itself: custom layout, PLAN_MAESTRO.md S1.4 ---------
+ * R5-F3 (M-083): rediseñado sobre la maqueta del dueño. Carátula a la
+ * izquierda; a la derecha, una fila de tres glifos de estado (estrella /
+ * aleatorio / repetir, SIEMPRE visibles: terciario apagados, acento
+ * encendidos), una fila de tres anillos de transporte (anterior /
+ * play-pausa / siguiente, círculo de 1px sin antialias), y tres líneas
+ * ARTISTA (versalitas, semibold) / álbum / título. Abajo, la barra de
+ * progreso con márgenes y los tiempos DEBAJO de ella. El volumen ya no
+ * es una barra: es el nivel "00".."15" sobre la carátula, que aparece
+ * al ajustar y se desvanece. */
 
-static long s_vol_overlay_until = 0;
+static long s_vol_last_adjust_tick = -1;
 
-static int current_volume_pct(void)
+/* True mientras el nivel de volumen está en pantalla (quieto o
+ * desvaneciéndose): metro_main.c redibuja más seguido en ese lapso. */
+bool metro_screen_nowplaying_volume_visible(void)
 {
-    int min = sound_min(SOUND_VOLUME);
-    int max = sound_max(SOUND_VOLUME);
-    int pct;
-
-    if (max <= min)
-        return 0;
-
-    pct = (global_status.volume - min) * 100 / (max - min);
-    if (pct < 0) pct = 0;
-    if (pct > 100) pct = 100;
-    return pct;
+    if (s_vol_last_adjust_tick < 0)
+        return false;
+    return current_tick - s_vol_last_adjust_tick <
+           METRO_VOL_HOLD_TICKS + METRO_VOL_FADE_TICKS;
 }
 
-/* F10: real geometric icons (M-018) replacing F5-1's text badges --
- * right-aligned, repeat first (closer to the edge) then shuffle,
- * METRO_WIDGETS_ICON_SIZE square each with a small gap between. */
-/* R4/FA-6 (M-073): el hueco de iconografía más grande que tenía esta
- * pantalla -- al pausar quedaba visualmente idéntica salvo que el
- * tiempo dejaba de avanzar, sin ninguna forma de saberlo a simple
- * vista.
- *
- * Va al extremo IZQUIERDO de la fila de glifos de estado (la de
- * aleatorio/repetir, que se llena desde la derecha), así que no
- * desplaza nada de lo que ya había.
- *
- * Asimetría deliberada de color: **pausa en acento, reproducción en
- * secundario**. Reproducir es el estado normal y no necesita gritar;
- * pausa es el estado que explica por qué no se oye nada, y es el que
- * uno viene a buscar con la mirada. */
+static void draw_volume_level(void)
+{
+    char buf[4];
+    long age;
+    unsigned color = metro_color_fg();
+
+    if (!metro_screen_nowplaying_volume_visible())
+        return;
+
+    age = current_tick - s_vol_last_adjust_tick;
+    if (age >= METRO_VOL_HOLD_TICKS)
+    {
+        /* Fase de desvanecimiento. En pasos discretos (no por tick)
+         * para que cada cuadro sea un color distinto y visible, y
+         * porque ocho tonos bastan a esta densidad. Sin animaciones (o
+         * LCD apagado) no hay fundido: ya no se dibuja y punto. */
+        long into = age - METRO_VOL_HOLD_TICKS;
+        int step;
+
+        if (metro_settings.animations == METRO_ANIM_OFF || !lcd_active())
+            return;
+
+        step = (int)(into * METRO_VOL_FADE_STEPS / METRO_VOL_FADE_TICKS);
+        if (step >= METRO_VOL_FADE_STEPS)
+            return;
+        color = metro_fb_blend_color(metro_color_fg(), metro_color_bg(),
+                                     step * 256 / METRO_VOL_FADE_STEPS);
+    }
+
+    snprintf(buf, sizeof(buf), "%02d", metro_music_volume_level());
+    metro_draw_text(MFONT_LIST, NP_LEFT_X, NP_VOL_Y, buf, color);
+}
+
+/* Fila de estado: estrella (calificación > 0 -- lo que Studio exporta
+ * como "favorito" en ratings.cfg es la calificación, no hay otra
+ * bandera), aleatorio, repetir. Siempre los tres, el color dice el
+ * estado: terciario = apagado, acento = encendido. REPEAT_ONE lleva el
+ * "1" al lado del lazo (M-077). */
+static void draw_mode_row(struct mp3entry *id3)
+{
+    int x = NP_COL_X;
+    bool starred = id3 && id3->rating > 0;
+    bool repeat = global_settings.repeat_mode == REPEAT_ALL ||
+                  global_settings.repeat_mode == REPEAT_ONE;
+    unsigned on = metro_color_accent(), off = metro_color_tertiary();
+
+    metro_widgets_draw_icon(METRO_ICON_STAR, x, NP_MODE_Y, starred ? on : off);
+    x += NP_MODE_PITCH;
+    metro_widgets_draw_icon(METRO_ICON_SHUFFLE, x, NP_MODE_Y,
+                            global_settings.playlist_shuffle ? on : off);
+    x += NP_MODE_PITCH;
+    metro_widgets_draw_icon(METRO_ICON_REPEAT_ALL, x, NP_MODE_Y, repeat ? on : off);
+    if (global_settings.repeat_mode == REPEAT_ONE)
+        metro_draw_text(MFONT_CAPTION, x + METRO_WIDGETS_ICON_SIZE + 2, NP_MODE_Y,
+                        "1", on);
+}
+
+/* Fila de transporte: tres anillos. El del centro muestra el ESTADO,
+ * con la asimetría de M-073 conservada: play en fg mientras suena (lo
+ * normal no grita), pausa en acento (es lo que uno busca con la mirada
+ * cuando no se oye nada). */
+static void draw_transport_row(void)
+{
+    int x = NP_COL_X;
+    int status = audio_status();
+    unsigned ring = metro_color_fg();
+
+    metro_widgets_draw_icon_in_circle(METRO_ICON_PREVIOUS, x, NP_RING_Y, NP_RING_R,
+                                      ring, metro_color_fg());
+    x += NP_RING_PITCH;
+    if (status & AUDIO_STATUS_PAUSE)
+        metro_widgets_draw_icon_in_circle(METRO_ICON_PAUSE, x, NP_RING_Y, NP_RING_R,
+                                          ring, metro_color_accent());
+    else
+        metro_widgets_draw_icon_in_circle(METRO_ICON_PLAY, x, NP_RING_Y, NP_RING_R,
+                                          ring, metro_color_fg());
+    x += NP_RING_PITCH;
+    metro_widgets_draw_icon_in_circle(METRO_ICON_NEXT, x, NP_RING_Y, NP_RING_R,
+                                      ring, metro_color_fg());
+}
+
 /* R4/FA-7 (M-078): el fondo deja de ser la misma imagen que el tile.
  *
  * Tabla acordada con el dueño (Q7 de la Fase 1), leída por columnas:
@@ -411,11 +508,10 @@ static int current_volume_pct(void)
  *      no   |  sí   | carátula          | carátula real
  *      no   |  no   | plano (tema)      | acento + inicial
  *
- * La columna del TILE ya se comportaba así antes de esta fase (el
- * respaldo de acento + inicial existe desde F5), así que aquí solo
- * cambia la del FONDO. Y esa columna se reduce a una cascada: foto de
- * artista si la hay, si no la carátula, si no nada -- las cuatro filas
- * salen de esas dos preguntas en ese orden.
+ * La columna del TILE ya se comportaba así antes de esa fase (el
+ * respaldo de acento + inicial existe desde F5), así que ahí solo
+ * cambió la del FONDO. Y esa columna se reduce a una cascada: foto de
+ * artista si la hay, si no la carátula, si no nada.
  *
  * La política vive aquí y no en metro_albumart.c a propósito: ese
  * módulo decodifica, no decide (su propia cabecera ya lo dice para el
@@ -441,43 +537,6 @@ static bool load_background(void)
     }
 
     return metro_albumart_load_background();
-}
-
-static void draw_transport_indicator(void)
-{
-    int x = 12;
-    int y = 176;
-    int status = audio_status();
-
-    if (status & AUDIO_STATUS_PAUSE)
-        metro_widgets_draw_icon(METRO_ICON_PAUSE, x, y, metro_color_accent());
-    else if (status & AUDIO_STATUS_PLAY)
-        metro_widgets_draw_icon(METRO_ICON_PLAY, x, y, metro_color_secondary());
-}
-
-static void draw_mode_indicators(void)
-{
-    int x = LCD_WIDTH - 12 - METRO_WIDGETS_ICON_SIZE;
-    int y = 176;
-
-    if (global_settings.repeat_mode == REPEAT_ALL ||
-        global_settings.repeat_mode == REPEAT_ONE)
-    {
-        metro_widgets_draw_icon(METRO_ICON_REPEAT_ALL, x, y, metro_color_accent());
-        /* R4/FA-1 (M-077): el "1" va AL LADO del lazo, no encima.
-         * Fluent sí trae un `arrow_repeat_1`, pero su insignia se
-         * apelmaza en una mancha ilegible a 16px (se probaron tres
-         * variantes) -- así que se usa el lazo de Fluent y el dígito se
-         * dibuja aparte, que es el mecanismo que Metro ya usaba y sí se
-         * lee. */
-        if (global_settings.repeat_mode == REPEAT_ONE)
-            metro_draw_text(MFONT_CAPTION, x + METRO_WIDGETS_ICON_SIZE + 2, y,
-                             "1", metro_color_accent());
-        x -= METRO_WIDGETS_ICON_SIZE + 12;
-    }
-
-    if (global_settings.playlist_shuffle)
-        metro_widgets_draw_icon(METRO_ICON_SHUFFLE, x, y, metro_color_accent());
 }
 
 /* F12: 30% of the track's own art, scaled to fill the screen, behind
@@ -541,11 +600,31 @@ static void draw_lyrics_mode(struct mp3entry *id3)
     }
 }
 
+static void draw_progress_and_times(struct mp3entry *id3)
+{
+    char elapsed_buf[16], total_buf[16];
+    int w, h, pct;
+    int bar_w = LCD_WIDTH - 2 * NP_LEFT_X;
+
+    pct = id3->length > 0 ? (int)((unsigned long long)id3->elapsed * 100 / id3->length) : 0;
+    metro_draw_progress(NP_LEFT_X, NP_BAR_Y, bar_w, NP_BAR_H, pct);
+
+    format_time(elapsed_buf, sizeof(elapsed_buf), (long)id3->elapsed);
+    metro_draw_text(MFONT_CAPTION, NP_LEFT_X, NP_TIMES_Y, elapsed_buf,
+                    metro_color_secondary());
+
+    /* Derecha: duración total (la maqueta muestra dos cifras fijas a
+     * los extremos; restante cambiaría cada segundo y "baila"). */
+    format_time(total_buf, sizeof(total_buf), (long)id3->length);
+    lcd_setfont(metro_font_id(MFONT_CAPTION));
+    lcd_getstringsize((const unsigned char *)total_buf, &w, &h);
+    metro_draw_text(MFONT_CAPTION, LCD_WIDTH - NP_LEFT_X - w, NP_TIMES_Y, total_buf,
+                    metro_color_secondary());
+}
+
 void metro_screen_nowplaying_show(void)
 {
     struct mp3entry *id3;
-    char elapsed_buf[16], remaining_buf[16];
-    int w, h, pct;
     bool has_bg = metro_settings.graphics == METRO_GFX_FULL && load_background();
 
     if (has_bg)
@@ -558,57 +637,55 @@ void metro_screen_nowplaying_show(void)
 
     if (!metro_music_is_playing() || !(id3 = audio_current_track()))
     {
-        metro_draw_tile(12, 40, METRO_ALBUMART_SIZE, "?");
+        metro_draw_tile(NP_LEFT_X, NP_COVER_Y, METRO_ALBUMART_SIZE, "?");
         lcd_update();
         return;
     }
 
     if (s_lyrics_mode && ensure_lyrics_loaded(id3) && s_lrc.count > 0)
     {
-        /* Replaces the whole normal layout (art, title/artist/album,
-         * times, progress bar, mode icons) -- "pantalla completa"
-         * means the whole content area, not an overlay on top of it.
-         * The volume overlay below still applies on top regardless:
-         * it's transient feedback for an action just taken, not part
-         * of the layout this mode replaces. */
+        /* Replaces the whole normal layout (art, text, times, progress
+         * bar, mode icons) -- "pantalla completa" means the whole
+         * content area, not an overlay on top of it. The volume level
+         * below still applies on top regardless: it's transient
+         * feedback for an action just taken, not part of the layout
+         * this mode replaces. */
         draw_lyrics_mode(id3);
     }
     else
     {
+        char upper[METRO_MUSIC_ITEM_LEN];
+        int col_w = LCD_WIDTH - NP_COL_X - NP_LEFT_X;
+
         if (metro_albumart_load_current())
-            lcd_bitmap(metro_albumart_bitmap(), 12, 40, METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE);
+            lcd_bitmap(metro_albumart_bitmap(), NP_LEFT_X, NP_COVER_Y,
+                       METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE);
         else
-            metro_draw_tile(12, 40, METRO_ALBUMART_SIZE,
+            metro_draw_tile(NP_LEFT_X, NP_COVER_Y, METRO_ALBUMART_SIZE,
                              id3->album ? id3->album : (id3->title ? id3->title : "?"));
 
-        metro_draw_text_cut_right(MFONT_TITLE, 160, 44, id3->title ? id3->title : "?",
-                                   metro_color_fg(), LCD_WIDTH - 160);
-        if (id3->artist)
-            metro_draw_text_cut_right(MFONT_LIST, 160, 80, id3->artist,
-                                       metro_color_secondary(), LCD_WIDTH - 160);
-        if (id3->album)
-            metro_draw_text_cut_right(MFONT_CAPTION, 160, 104, id3->album,
-                                       metro_color_tertiary(), LCD_WIDTH - 160);
+        draw_mode_row(id3);
+        draw_transport_row();
 
-        format_time(elapsed_buf, sizeof(elapsed_buf), (long)id3->elapsed);
-        metro_draw_text(MFONT_CAPTION, 12, 200, elapsed_buf, metro_color_secondary());
+        /* ARTISTA / álbum / título -- el orden de la maqueta (y del Zune
+         * original): la línea fuerte es quién, luego de dónde, luego qué. */
+        metro_lang_upper(id3->artist ? id3->artist
+                                     : metro_lang_str(LANG_UNKNOWN_ARTIST),
+                         upper, sizeof(upper));
+        metro_draw_text_cut_right(MFONT_LIST_SEL, NP_COL_X, NP_ARTIST_Y, upper,
+                                   metro_color_fg(), col_w);
+        metro_draw_text_cut_right(MFONT_LIST, NP_COL_X, NP_ALBUM_Y,
+                                   id3->album ? id3->album
+                                              : metro_lang_str(LANG_UNKNOWN_ALBUM),
+                                   metro_color_secondary(), col_w);
+        metro_draw_text_cut_right(MFONT_LIST, NP_COL_X, NP_TITLE_Y,
+                                   id3->title ? id3->title : "?",
+                                   metro_color_secondary(), col_w);
 
-        format_time(remaining_buf, sizeof(remaining_buf),
-                    (long)(id3->length > id3->elapsed ? id3->length - id3->elapsed : 0));
-        lcd_setfont(metro_font_id(MFONT_CAPTION));
-        lcd_getstringsize((const unsigned char *)remaining_buf, &w, &h);
-        metro_draw_text(MFONT_CAPTION, LCD_WIDTH - 12 - w, 200, remaining_buf,
-                         metro_color_secondary());
-
-        pct = id3->length > 0 ? (int)((unsigned long long)id3->elapsed * 100 / id3->length) : 0;
-        metro_draw_progress(0, 214, LCD_WIDTH, 4, pct);
-
-        draw_mode_indicators();
-        draw_transport_indicator();
+        draw_progress_and_times(id3);
     }
 
-    if (current_tick < s_vol_overlay_until)
-        metro_widgets_draw_volume_overlay(current_volume_pct());
+    draw_volume_level();
 
     lcd_update();
 }
@@ -621,12 +698,12 @@ void metro_screen_nowplaying_handle(int action, int steps)
     switch (action)
     {
         case MACT_VOL_UP:
-            adjust_volume(steps);
-            s_vol_overlay_until = current_tick + METRO_VOL_OVERLAY_TICKS;
+            metro_music_volume_step(steps);
+            s_vol_last_adjust_tick = current_tick;
             break;
         case MACT_VOL_DOWN:
-            adjust_volume(-steps);
-            s_vol_overlay_until = current_tick + METRO_VOL_OVERLAY_TICKS;
+            metro_music_volume_step(-steps);
+            s_vol_last_adjust_tick = current_tick;
             break;
         case MACT_TRACK_PREV:
             audio_prev();

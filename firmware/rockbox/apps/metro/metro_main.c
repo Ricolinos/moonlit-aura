@@ -362,7 +362,12 @@ void metro_main(void)
              * 1.5s countdown all need to update on their own) -- redraw
              * it about once a second even without a button, instead of
              * only reacting to input like every other screen. */
-            if (at_player && current_tick - last_player_tick >= HZ)
+            /* R5-F3 (M-083): mientras el nivel de volumen está en
+             * pantalla (3 s quieto + 1 s de fundido) se redibuja a
+             * ~8 Hz para que el fundido se vea como tal; el resto del
+             * tiempo, la cadencia de siempre. */
+            if (at_player && current_tick - last_player_tick >=
+                    (metro_screen_nowplaying_volume_visible() ? HZ / 8 : HZ))
             {
                 last_player_tick = current_tick;
                 redraw_current();

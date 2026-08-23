@@ -81,6 +81,20 @@ ffmpeg -y -loglevel error \
   -metadata album="Album sin portada" \
   -c:a libmp3lame -b:a 128k "$OUT_DIR/SinArte/metro-test-noart.mp3"
 
+# R5-F3 (M-083): una pista LARGA (20 s). Todo lo demás dura <= 3 s, y eso
+# no alcanza para verificar nada temporizado en el reproductor: el nivel
+# de volumen se queda 3 s y se desvanece durante 1 s más -- con las
+# pistas cortas la canción se acababa antes que el fundido y la captura
+# mostraba la pantalla de "nada sonando", no el fundido. Artista/álbum
+# con acentos a propósito (ejercitan metro_lang_upper en la línea de
+# artista en versalitas).
+mkdir -p "$OUT_DIR/Cultura Profética/M.O.T.A"
+ffmpeg -y -loglevel error \
+  -f lavfi -i "sine=frequency=220:duration=20" \
+  -metadata title="Un deseo" -metadata artist="Cultura Profética" \
+  -metadata album="M.O.T.A" \
+  -c:a libmp3lame -b:a 128k "$OUT_DIR/Cultura Profética/M.O.T.A/01 Un deseo.mp3"
+
 echo "==> Generando $OUT_DIR/cover.jpg"
 gen_cover_jpg "0x3366CC" "200x200" "$OUT_DIR/cover.jpg"
 

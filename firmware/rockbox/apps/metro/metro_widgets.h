@@ -31,12 +31,27 @@
  * redraw whatever was behind it afterwards. */
 bool metro_widgets_confirm(const char *title, const char *question);
 
-/* Volume overlay (PLAN_MAESTRO.md S1.4): a 320x6 bar at y=232 plus a
- * "volume NN%" caption -- pure draw, no input loop of its own.
- * metro_screen_nowplaying.c calls this for ~1.5s after a wheel move on
- * the Now Playing screen and decides on its own when to stop calling
- * it (this widget has no timer state, it just draws one frame). */
-void metro_widgets_draw_volume_overlay(int pct);
+/* R5-F3 (M-083): the F5 volume bar ("320x6 at y=232 + 'volume NN%'")
+ * is gone -- Now Playing now shows the volume as a two-digit level
+ * ("00".."15") drawn by metro_screen_nowplaying.c itself; see
+ * metro_volume.h for the scale. Nothing else used the bar. */
+
+/* R5-F3 (M-083): 1px circle outline, centre (cx, cy), radius r --
+ * midpoint algorithm, integer only, NO anti-aliasing on purpose: at
+ * 320x240 a "soft" ring is a blurry ring, and the owner's spec asks
+ * for a perfect thin circle. Draws with lcd_drawpixel (8 points per
+ * step, ~6r pixels total -- trivial for r <= 16). */
+void metro_widgets_draw_circle(int cx, int cy, int r, unsigned color);
+
+/* R5-F3 (M-083): a metro_icons.h glyph centred inside a
+ * metro_widgets_draw_circle() ring. (x, y) is the top-left of the
+ * ring's bounding box, which is (2r+1) square; the 16px glyph is
+ * centred in it. Ring and glyph take separate colours because the
+ * player uses them for state (e.g. pause glyph in accent inside an fg
+ * ring). */
+void metro_widgets_draw_icon_in_circle(enum metro_icon_id id, int x, int y,
+                                        int r, unsigned ring_color,
+                                        unsigned glyph_color);
 
 /* F10: floating index letter, shown ~600ms after a fast scroll (steps
  * >= 3) stops moving -- PLAN_MAESTRO.md S1.4. `c` is the first

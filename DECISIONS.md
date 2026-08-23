@@ -2870,3 +2870,105 @@ Captura antes/después en
 `docs/screenshots/r5-f2-fuentes-ll-antes-despues.png` (arriba el estado
 anterior; segunda fila `-c 1`, la elegida; las demás, los descartes
 `-c 2`, `-L` y `-c 1 -L`).
+
+## M-083 — R5-F3: rediseño del reproductor sobre la maqueta del dueño
+
+**Encargo:** maqueta de 320×240 entregada por el dueño (carátula a la
+izquierda; a la derecha estrella/aleatorio/repetir, tres anillos de
+transporte, ARTISTA/álbum/título; barra de progreso con márgenes y
+tiempos debajo; volumen "10" sobre la carátula), más reglas explícitas:
+iconos de transporte "en un círculo perfecto y delgado, que cuides el
+antialiasing"; el volumen deja de ser barra y pasa a ser numérico `00`
+(silencio) a `15` (máximo), aparece al ajustar y se desvanece 3 s después
+"con un desvanecimiento lento"; "limitar volumen" usa la misma escala,
+"ya no dB"; estrella/aleatorio/repetir siempre visibles, tenues apagados y
+en acento encendidos.
+
+### Escala de volumen (`metro_volume.c`, puro, 204 checks)
+16 niveles sobre `sound_min..sound_max` de `SOUND_VOLUME` (−60…+12 dB en
+el iPod 6G, paso 1 dB; este target no tiene volumen perceptual). **El
+reproductor no guarda ningún nivel propio**: siempre se deriva de
+`global_status.volume`, que Rockbox ya persiste, mediante un mapeo con
+garantía de ida y vuelta (`level(db(L)) == L` para todo `L` y cualquier
+rango, y estrictamente creciente: dos niveles nunca comparten dB). Eso es
+lo que permite que cada muesca de rueda suba exactamente un nivel aunque
+el dB intermedio se redondee. Verificado en simulador: 05→06→07→08 con
+tres muescas.
+
+Nivel 00 = `sound_min` (−60 dB), no un mute del códec: a −60 dB no se oye
+nada en la práctica y así "00" sigue siendo un punto de la misma escala
+continua, no un estado aparte.
+
+### Límite de volumen
+Nueva fila en Ajustes › General, en la misma escala, sobre
+`global_settings.volume_limit` (Rockbox ya la aplica en
+`sound_set_volume()`, así que el límite se respeta también para cualquier
+ruta que no pase por Metro). Cinco presets que se ciclan con SELECT
+(15, 12, 10, 08, 06), mismo patrón que brillo y retroiluminación: los 16
+valores uno a uno serían quince pulsaciones en el peor caso, y un límite
+por debajo de 06 no tiene uso real. Al cambiarlo se reaplica el volumen
+actual, para que bajar el límite recorte de inmediato y no en la próxima
+muesca. "Restablecer ajustes" lo devuelve a 15.
+
+### Overlay de volumen
+`"%02d"` en MFONT_LIST sobre la carátula, en la esquina superior
+izquierda de la maqueta. 3 s quieto desde el ÚLTIMO ajuste, luego 1 s de
+fundido hacia el fondo en 8 pasos discretos de color
+(`metro_fb_blend_color`, expuesto de `metro_fb.c` para esto y para el
+hub de R5-F5) — un fundido de color del texto, no de frame buffer, así
+que no cuesta memoria. El bucle principal redibuja el reproductor a
+~8 Hz mientras el nivel está en pantalla (`metro_screen_nowplaying_volume_visible()`)
+y vuelve a 1 Hz después. Con `animations=off` o LCD apagado no hay
+fundido: se corta en seco a los 3 s. La barra de volumen de F5
+(`metro_widgets_draw_volume_overlay`) se eliminó; nada más la usaba.
+
+### Iconos
+Fluent System Icons (M-077), tres glifos nuevos: **estrella en variante
+Regular** (contorno — el estilo de línea de la maqueta; a 16 px binariza
+limpia) y **anterior/siguiente Filled**. Se probó la variante Regular de
+aleatorio y repetir: las puntas de flecha se fragmentan a 16 px (se
+conservan las Filled de R4, que para flechas son el mismo trazo de línea
+solo más grueso, no una silueta). Los SVG quedan commiteados en
+`firmware/assets/icons/` como los demás.
+
+Anillos: `metro_widgets_draw_circle()`, punto medio entero, 1 px, **sin
+antialias a propósito** — a esta densidad un anillo "suave" es un anillo
+borroso. r = 13 (27 px), glifo de 16 px centrado; con el padding interno
+de Fluent la tinta visible queda en ~12 px, como en la maqueta. El del
+centro muestra el ESTADO y conserva la asimetría de M-073: play en fg
+mientras suena, pausa en acento.
+
+### Texto
+Orden ARTISTA (versalitas, semibold) / álbum / título — el de la maqueta
+y el del Zune original: la línea fuerte es quién, luego de dónde, luego
+qué. `metro_lang_upper()` (8 checks nuevos) mayusculiza UTF-8 Latin-1
+encadenando `metro_lang_initial()`, trunca en frontera de carácter.
+Estrella = calificación > 0: lo único que Studio exporta a `ratings.cfg`
+es la calificación (1–5 ★ → 2–10); su bandera de favorito no viaja al
+dispositivo, así que no hay otra fuente posible.
+
+**Asumido, revisable:** la columna derecha mide 144 px y los tres textos
+van en los roles de 20 px de la app; un artista largo ("CULTURA
+PROFÉTICA" en semibold) se recorta por la derecha. La maqueta usa un
+cuerpo menor (~16 px); reproducirlo exige dos roles de fuente nuevos
+(`gen_fonts.sh`), que no se agregan en esta pasada. Tiempo de la derecha
+= duración total (la maqueta muestra dos cifras fijas; "restante"
+cambiaría cada segundo).
+
+### Fixture
+`gen_test_media.sh` gana una pista de 20 s ("Cultura Profética / M.O.T.A
+/ Un deseo", con acentos): todo lo demás dura ≤ 3 s y la canción se
+acababa antes que el fundido — la primera captura mostraba la pantalla
+de "nada sonando", no el fundido.
+
+**Hallazgo de proceso, anotado:** la verificación en simulador de M-081
+se hizo con un binario viejo. Un `git stash`/`pop` dejó `.o` compilados
+dentro de la ventana del stash con el mismo segundo de mtime que los
+`.c` restaurados, y `make` no los recompiló; el enlace falló recién al
+compilar R5-F3 (`metro_manifest_reload` indefinido). Se forzó la
+recompilación y se repitió la captura de About con el binario correcto —
+el resultado es el mismo, pero la evidencia anterior no valía. Regla
+práctica: tras `git stash pop`, `touch` de los archivos restaurados.
+
+Capturas: `docs/screenshots/R5-F3-reproductor.png`,
+`R5-F3-volumen-fundido.png`, `R5-F3-limite-volumen.png`.

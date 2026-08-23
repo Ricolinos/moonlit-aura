@@ -35,6 +35,8 @@
 #include "metro_settings.h"
 #include "metro_sync.h"
 #include "metro_main.h"
+#include "metro_music.h"  /* R5-F3: límite de volumen */
+#include "metro_volume.h"
 
 /* --- general: language, library update, reset settings ---------------- */
 
@@ -147,10 +149,42 @@ static void cycle_eq(void)
     apply_eq_preset((enum metro_eq_preset)s_eq_preset);
 }
 
+/* R5-F3 (M-083): límite de volumen en la escala 00..15 de Metro
+ * (metro_volume.h), nunca en dB. Cinco presets que se ciclan con SELECT,
+ * igual que brillo/retroiluminación -- 16 valores uno a uno serían
+ * quince pulsaciones en el peor caso, y un límite por debajo de 06 no
+ * tiene uso real. Persiste en global_settings.volume_limit (Rockbox). */
+static const int volume_limit_steps[] = { 15, 12, 10, 8, 6 };
+#define VOLUME_LIMIT_STEPS_N (int)(sizeof(volume_limit_steps) / sizeof(volume_limit_steps[0]))
+
+static const char *volume_limit_subtitle(void)
+{
+    static char buf[4];
+    snprintf(buf, sizeof(buf), "%02d", metro_music_volume_limit_level());
+    return buf;
+}
+
+static void cycle_volume_limit(void)
+{
+    int cur = metro_music_volume_limit_level();
+    int i, next = volume_limit_steps[0];
+
+    /* Siguiente preset ESTRICTAMENTE menor que el actual; si no hay
+     * (estamos en el más bajo, o en un valor raro por debajo), vuelve
+     * al máximo. */
+    for (i = 0; i < VOLUME_LIMIT_STEPS_N; i++)
+        if (volume_limit_steps[i] < cur)
+        {
+            next = volume_limit_steps[i];
+            break;
+        }
+    metro_music_set_volume_limit_level(next);
+}
+
 static int general_count(void *ctx)
 {
     (void)ctx;
-    return 8;
+    return 9;
 }
 
 static void general_get_row(void *ctx, int index, struct metro_row *out)
@@ -187,6 +221,11 @@ static void general_get_row(void *ctx, int index, struct metro_row *out)
             out->kind = METRO_ROW_SETTING;
             break;
         case 5:
+            out->title = metro_lang_str(LANG_SETTING_VOLUME_LIMIT);
+            out->subtitle = volume_limit_subtitle();
+            out->kind = METRO_ROW_SETTING;
+            break;
+        case 6:
             /* R3-F7/DD-8 (M-068): estado real del candado, no la
              * preferencia guardada -- ARMED y ACTIVE se ven igual desde
              * aquí (para llegar a esta fila el aparato ya está
@@ -197,7 +236,7 @@ static void general_get_row(void *ctx, int index, struct metro_row *out)
                                                               : LANG_VALUE_ON);
             out->kind = METRO_ROW_SETTING;
             break;
-        case 6:
+        case 7:
             out->title = metro_lang_str(LANG_SETTING_LIBRARY);
             out->subtitle = NULL;
             out->kind = METRO_ROW_ACTION;
@@ -244,6 +283,10 @@ static void general_on_select(void *ctx, int index)
             break;
 
         case 5:
+            cycle_volume_limit();
+            break;
+
+        case 6:
             /* R3-F7/DD-8 (M-068): con candado -> confirmar y quitarlo;
              * sin candado -> configurar uno nuevo (dos capturas). Quitar
              * pide confirmación (destruye la clave guardada), poner no
@@ -259,7 +302,7 @@ static void general_on_select(void *ctx, int index)
                 metro_screen_lock_setup();
             break;
 
-        case 6:
+        case 7:
             if (metro_widgets_confirm(metro_lang_str(LANG_HUB_SETTINGS),
                                        metro_lang_str(LANG_DIALOG_LIBRARY_TITLE)))
             {
@@ -290,6 +333,7 @@ static void general_on_select(void *ctx, int index)
                 set_sleeptimer_duration(sleep_steps_min[s_sleep_step]);
                 s_eq_preset = METRO_EQ_FLAT;
                 apply_eq_preset((enum metro_eq_preset)s_eq_preset);
+                metro_music_set_volume_limit_level(METRO_VOLUME_MAX_LEVEL);
             }
             break;
     }

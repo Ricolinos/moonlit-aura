@@ -350,3 +350,4 @@ metro/metro_motion.c
 metro/metro_transitions.c
 metro/metro_turnstile_table.c
 metro/metro_icons_table.c
+metro/metro_volume.c

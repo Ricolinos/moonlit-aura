@@ -29,8 +29,6 @@
 #include "metro_input.h"
 #include "metro_lang.h"
 
-#define METRO_VOLUME_OVERLAY_Y 232
-
 bool metro_widgets_confirm(const char *title, const char *question)
 {
     bool sel_yes = false; /* default to "no" -- the safe answer */
@@ -72,24 +70,6 @@ bool metro_widgets_confirm(const char *title, const char *question)
                 break;
         }
     }
-}
-
-void metro_widgets_draw_volume_overlay(int pct)
-{
-    char label[24];
-    /* R4/FA-1 (M-077): el overlay era texto puro ("volumen 42%"). Con
-     * el glifo de altavoz, el porcentaje solo ya dice qué es y la
-     * palabra sobra -- se gana claridad y se acorta la línea. El icono
-     * se alinea con el texto: METRO_ICON_SIZE (16) contra la caja de
-     * MFONT_CAPTION (14), así que un píxel abajo lo centra. */
-    int icon_y = METRO_VOLUME_OVERLAY_Y - 15;
-    int text_x = 12 + METRO_ICON_SIZE + 6;
-
-    metro_draw_progress(0, METRO_VOLUME_OVERLAY_Y, LCD_WIDTH, 6, pct);
-    metro_widgets_draw_icon(METRO_ICON_SPEAKER, 12, icon_y, metro_color_secondary());
-    snprintf(label, sizeof(label), "%d%%", pct);
-    metro_draw_text(MFONT_CAPTION, text_x, METRO_VOLUME_OVERLAY_Y - 14, label,
-                     metro_color_secondary());
 }
 
 #define METRO_INDEX_LETTER_SIZE 80
@@ -160,4 +140,48 @@ void metro_widgets_draw_icon(enum metro_icon_id id, int x, int y, unsigned color
             col += run;
         }
     }
+}
+
+void metro_widgets_draw_circle(int cx, int cy, int r, unsigned color)
+{
+    int x = r, y = 0;
+    int err = 1 - r;
+
+    if (r <= 0)
+        return;
+
+    lcd_set_foreground(color);
+    while (x >= y)
+    {
+        lcd_drawpixel(cx + x, cy + y);
+        lcd_drawpixel(cx + y, cy + x);
+        lcd_drawpixel(cx - y, cy + x);
+        lcd_drawpixel(cx - x, cy + y);
+        lcd_drawpixel(cx - x, cy - y);
+        lcd_drawpixel(cx - y, cy - x);
+        lcd_drawpixel(cx + y, cy - x);
+        lcd_drawpixel(cx + x, cy - y);
+        y++;
+        if (err < 0)
+            err += 2 * y + 1;
+        else
+        {
+            x--;
+            err += 2 * (y - x) + 1;
+        }
+    }
+}
+
+void metro_widgets_draw_icon_in_circle(enum metro_icon_id id, int x, int y,
+                                        int r, unsigned ring_color,
+                                        unsigned glyph_color)
+{
+    int cx = x + r, cy = y + r;
+
+    metro_widgets_draw_circle(cx, cy, r, ring_color);
+    /* The 16px glyph cell centred on the ring's centre; with r=13 that
+     * leaves 5px of air between cell and ring, and Fluent's own ~2px
+     * internal padding makes the visible ink ~12px. */
+    metro_widgets_draw_icon(id, cx - METRO_ICON_SIZE / 2, cy - METRO_ICON_SIZE / 2,
+                            glyph_color);
 }

@@ -165,6 +165,39 @@ static void test_collate(void)
     LT("", "a");
 }
 
+/* R5-F3 (M-083): metro_lang_upper -- la línea de artista del
+ * reproductor va en mayúsculas. */
+static void test_upper(void)
+{
+    char out[64];
+
+    metro_lang_upper("cultura profética", out, sizeof(out));
+    CHECK(strcmp(out, "CULTURA PROFÉTICA") == 0);
+
+    metro_lang_upper("m.o.t.a", out, sizeof(out));
+    CHECK(strcmp(out, "M.O.T.A") == 0);
+
+    /* ñ y ü suben; dígitos, signos y ya-mayúsculas quedan igual. */
+    metro_lang_upper("Año 2 - ñandú/ü", out, sizeof(out));
+    CHECK(strcmp(out, "AÑO 2 - ÑANDÚ/Ü") == 0);
+
+    /* Un carácter fuera de Latin-1 (€, 3 bytes) se copia intacto. */
+    metro_lang_upper("a€b", out, sizeof(out));
+    CHECK(strcmp(out, "A€B") == 0);
+
+    /* Truncado en frontera de carácter: "áb" no cabe entero en 3 bytes
+     * (á son 2 + NUL), así que sale "Á" y nunca medio "b" ni media á. */
+    metro_lang_upper("áb", out, 3);
+    CHECK(strcmp(out, "Á") == 0);
+    metro_lang_upper("xá", out, 3);
+    CHECK(strcmp(out, "X") == 0);
+
+    metro_lang_upper("", out, sizeof(out));
+    CHECK(out[0] == '\0');
+    metro_lang_upper(NULL, out, sizeof(out));
+    CHECK(out[0] == '\0');
+}
+
 int main(void)
 {
     test_ascii();
@@ -173,6 +206,7 @@ int main(void)
     test_multibyte_largo();
     test_degenerado();
     test_collate();
+    test_upper();
 
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
