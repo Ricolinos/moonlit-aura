@@ -2833,3 +2833,40 @@ catálogo de `metro_lang.c` usa inicializadores designados, y título y
 subtítulo de una fila salen de la misma llamada a `get_row`. Falta
 comparar el hash del `rockbox.ipod` instalado contra el del Release y ver
 una foto de la pantalla antes de tocar nada.
+
+## M-082 — R5-F2: la "ll" se fundía en un solo trazo ("pantalla" se leía "pantala")
+
+**Encargo del dueño:** *"al tener doble L minúscula no hay mucho espacio
+entre las dos l… 'Pantalla' se lee como 'Pantala' pero con una l gruesa
+muy extraña. ¿Hay forma de ponerle un poco de espacio, revisando todos los
+caracteres de la tipografía hasta conseguir el espacio ideal?"*
+
+**Diagnóstico.** Reproducible en el simulador (no era cosa del iPod): a
+48 px Light —el tamaño del encabezado de pivot, donde vive "pantalla"—
+las dos "l" de Selawik se rasterizan sin ningún píxel entre ellas. Los
+bearings laterales de la fuente, que a ese peso son fracciones de píxel,
+redondean a cero al convertir. A 20 px pasa lo mismo en grado menor
+("brillo" en semibold).
+
+**Qué se puede y qué no.** Las fuentes de Rockbox **no tienen kerning
+por pares**: no existe "ajustar solo la ll". Lo único ajustable es la
+separación global entre glifos (`convttf -c N`), y se comprobó que `N`
+fraccionario no sirve —el avance se redondea a píxel entero y `-c 0.5`
+produce una fuente idéntica—. El hinting ligero (`-L`) adelgaza los
+trazos pero **no** separa las "l": no era el problema.
+
+**Decisión.** `-c 1` en display (48), title (28), list (20) y listsel
+(20). **La caption de 14 px queda en 0**: no hay queja ahí y un píxel por
+glifo a ese tamaño es proporcionalmente mucho (7% del cuerpo) para un
+texto que ya es el más denso de la interfaz (subtítulos a la derecha,
+horas). `gen_fonts.sh` gana una cuarta columna por rol con el valor, para
+que la decisión quede en el generador y no en un comando suelto.
+
+**Efecto colateral asumido:** todo texto en esos cuatro roles es ~1 px
+por glifo más ancho. Se revisaron hub, ajustes (general y pantalla) y
+listas: los recortes por viewport (`metro_draw_text_cut_right`) y los
+subtítulos alineados a la derecha absorben la diferencia sin solaparse.
+Captura antes/después en
+`docs/screenshots/r5-f2-fuentes-ll-antes-despues.png` (arriba el estado
+anterior; segunda fila `-c 1`, la elegida; las demás, los descartes
+`-c 2`, `-L` y `-c 1 -L`).
