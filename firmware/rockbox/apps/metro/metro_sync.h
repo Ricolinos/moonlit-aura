@@ -92,4 +92,20 @@ bool metro_sync_request_manual(void);
  * de sync; el marcador se interpreta al siguiente arranque. */
 bool metro_sync_write_music_pending_marker(void);
 
+/* R5 (M-091, contrato v12): sello de biblioteca. /.aura/library-stamp
+ * solo cambia cuando un sync de Studio toca la musica; cada arbol anota
+ * en .rockbox/aura/db_stamp.txt contra que sello construyo su base.
+ *
+ * metro_sync_record_db_stamp(): al terminar BIEN una (re)construccion --
+ * la base activa ahora describe la biblioteca vigente. Crea el sello
+ * compartido si no existe.
+ *
+ * metro_sync_switch_needs_rebuild(outgoing_tree_root): para el cambio de
+ * firmware, DESPUES de los renombres. Crea el sello si falta (y lo anota
+ * como del saliente, cuya base esta al dia) y devuelve true si el arbol
+ * ACTIVO (el entrante, ya en /.rockbox) tiene sello distinto o no tiene
+ * -- es decir, si hay que dejar el marcador. */
+void metro_sync_record_db_stamp(void);
+bool metro_sync_switch_needs_rebuild(const char *outgoing_tree_root);
+
 #endif /* METRO_SYNC_H */

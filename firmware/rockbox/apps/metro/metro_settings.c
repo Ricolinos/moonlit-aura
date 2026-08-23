@@ -302,9 +302,12 @@ bool metro_firmware_switch_to_aura(void)
         return false;
     }
 
-    /* 4 y 5 */
+    /* 4 y 5 -- el marcador SOLO si la biblioteca cambio desde que Aura
+     * construyo su base (M-091, contrato v12): sin sync de por medio el
+     * cambio es instantaneo, sin "optimizando" de 5 minutos. */
     refresh_root_binary();
-    metro_sync_write_music_pending_marker();
+    if (metro_sync_switch_needs_rebuild(METRO_FW_DORMANT_METRO))
+        metro_sync_write_music_pending_marker();
 
     /* 6: en seco. Nada de lo de arriba queda pendiente de escribir. */
     system_reboot();

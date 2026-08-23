@@ -37,6 +37,9 @@
  * as "mail", kept separate from Metro's own settings/caches. */
 #define METRO_SYNC_DIR         "/.aura"
 #define METRO_SYNC_MARKER_PATH METRO_SYNC_DIR "/sync-pending.json"
+#define METRO_LIBRARY_STAMP_PATH METRO_SYNC_DIR "/library-stamp" /* M-091, v12 */
+#define METRO_DB_STAMP_SUBPATH   "/aura/db_stamp.txt"
+#define METRO_DB_STAMP_PATH      ROCKBOX_DIR METRO_DB_STAMP_SUBPATH
 
 /* A real marker is ~150 bytes; 1KB leaves room for future keys. */
 #define MARKER_BUF_SIZE 1024
@@ -88,6 +91,95 @@ static bool write_marker(const metro_sync_marker_t *m)
 static void remove_marker(void)
 {
     remove(METRO_SYNC_MARKER_PATH);
+}
+
+/* --- R5 (M-091, contrato v12): sello de biblioteca ------------------- */
+
+#define STAMP_BUF 64
+
+static int read_small_file(const char *path, char *buf, size_t bufsz)
+{
+    int fd = open(path, O_RDONLY);
+    ssize_t n;
+
+    if (fd < 0)
+        return -1;
+    n = read(fd, buf, bufsz - 1);
+    close(fd);
+    if (n <= 0)
+        return -1;
+    buf[n] = '\0';
+    /* una sola linea: recortar el salto final */
+    while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r'))
+        buf[--n] = '\0';
+    return (int)n;
+}
+
+static bool write_small_file(const char *path, const char *text)
+{
+    int fd = creat(path, 0666);
+    size_t len = strlen(text);
+
+    if (fd < 0)
+        return false;
+    write(fd, text, len);
+    write(fd, "\n", 1);
+    close(fd);
+    return true;
+}
+
+/* Sello nuevo: fecha-hora del RTC + ticks, opaco. Solo importa que sea
+ * distinto de cualquier anterior; se compara por igualdad exacta. */
+static void make_stamp(char *out, size_t outsz)
+{
+    struct tm *now = get_time();
+
+    if (now)
+        snprintf(out, outsz, "fw-%04d%02d%02dT%02d%02d%02d-%08lx",
+                 now->tm_year + 1900, now->tm_mon + 1, now->tm_mday,
+                 now->tm_hour, now->tm_min, now->tm_sec,
+                 (unsigned long)current_tick);
+    else
+        snprintf(out, outsz, "fw-%08lx", (unsigned long)current_tick);
+}
+
+/* Lee el sello compartido; si no existe lo crea. */
+static void ensure_library_stamp(char *out, size_t outsz)
+{
+    if (read_small_file(METRO_LIBRARY_STAMP_PATH, out, outsz) > 0)
+        return;
+    make_stamp(out, outsz);
+    if (!dir_exists(METRO_SYNC_DIR))
+        mkdir(METRO_SYNC_DIR);
+    write_small_file(METRO_LIBRARY_STAMP_PATH, out);
+}
+
+void metro_sync_record_db_stamp(void)
+{
+    char stamp[STAMP_BUF];
+
+    ensure_library_stamp(stamp, sizeof(stamp));
+    write_small_file(METRO_DB_STAMP_PATH, stamp);
+}
+
+bool metro_sync_switch_needs_rebuild(const char *outgoing_tree_root)
+{
+    char stamp[STAMP_BUF], recorded[STAMP_BUF], path[MAX_PATH];
+    bool had_stamp = read_small_file(METRO_LIBRARY_STAMP_PATH, stamp, sizeof(stamp)) > 0;
+
+    if (!had_stamp)
+    {
+        /* Arranque en frio del mecanismo: el saliente acaba de estar
+         * corriendo, su base SI esta al dia -- se sella y se anota, para
+         * que el proximo cambio de vuelta ya no reconstruya. */
+        ensure_library_stamp(stamp, sizeof(stamp));
+        snprintf(path, sizeof(path), "%s%s", outgoing_tree_root, METRO_DB_STAMP_SUBPATH);
+        write_small_file(path, stamp);
+    }
+
+    if (read_small_file(METRO_DB_STAMP_PATH, recorded, sizeof(recorded)) <= 0)
+        return true; /* el entrante nunca anoto: como antes de v12 */
+    return strcmp(recorded, stamp) != 0;
 }
 
 bool metro_sync_write_music_pending_marker(void)
@@ -192,6 +284,10 @@ metro_sync_state_t metro_sync_state(void)
 
 static void finish_ok(void)
 {
+    /* R5 (M-091, v12): la base recien (re)construida describe la
+     * biblioteca vigente -- se anota el sello, y con eso el proximo
+     * cambio de firmware de ida y vuelta sin sync no reconstruye. */
+    metro_sync_record_db_stamp();
     remove_marker();
     go_idle();
 }
