@@ -34,4 +34,16 @@
 void metro_screen_hub_show(void);
 void metro_screen_hub_handle(int action, int steps);
 
+/* R5-F5 (M-085): advances the "now playing" row's own animation
+ * (marquee while playing, breathing while paused) and repaints ONLY
+ * that row. metro_main.c calls it at ~20 Hz while the hub is the
+ * current screen and there is audio; it returns false -- and does
+ * nothing -- when there is nothing to animate (no audio, row scrolled
+ * out of view, animations=off, LCD asleep), so the caller can drop back
+ * to its idle cadence. Never called by show() itself. */
+bool metro_screen_hub_tick(void);
+/* Same predicate tick() uses, without drawing -- for the main loop to
+ * shorten its input wait while there is something to animate. */
+bool metro_screen_hub_wants_ticks(void);
+
 #endif /* METRO_SCREEN_HUB_H */

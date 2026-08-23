@@ -57,8 +57,17 @@ void metro_draw_text(enum metro_font_role role, int x, int y,
 void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
                                 const char *str, unsigned color, int clip_w)
 {
+    metro_draw_text_clipped(role, x, clip_w, x, y, str, color);
+}
+
+void metro_draw_text_clipped(enum metro_font_role role, int clip_x, int clip_w,
+                              int x, int y, const char *str, unsigned color)
+{
     struct viewport vp;
     struct viewport *old_vp;
+
+    if (clip_w <= 0)
+        return;
 
     /* viewport_set_defaults() -- NOT viewport_set_fullscreen() directly.
      * Both end up in lcd_init_viewport(), which READS vp->buffer before
@@ -84,7 +93,7 @@ void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
      * pointer copy of an already-valid buffer. */
     viewport_set_defaults(&vp, SCREEN_MAIN);
     vp.buffer = lcd_current_viewport->buffer;
-    vp.x = x;
+    vp.x = clip_x;
     vp.width = clip_w;
     vp.font = metro_font_id(role);
     vp.fg_pattern = color;
@@ -92,7 +101,7 @@ void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
     vp.drawmode = DRMODE_FG; /* M-051 -- see metro_draw_text() */
 
     old_vp = lcd_set_viewport(&vp);
-    lcd_putsxy(0, y - vp.y, (const unsigned char *)str);
+    lcd_putsxy(x - clip_x, y - vp.y, (const unsigned char *)str);
     lcd_set_viewport(old_vp);
 }
 

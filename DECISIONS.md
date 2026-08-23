@@ -3003,3 +3003,42 @@ acoplar `metro_draw.c` a una pantalla.
 
 Captura: `docs/screenshots/R5-F4-barra-estado.png` (arriba sonando,
 abajo en pausa).
+
+## M-085 — R5-F5: la fila "reproduciendo" del hub se mueve (marquesina) o respira (pausa)
+
+**Encargo:** *"mientras se esté reproduciendo, el texto (solo el nombre de
+la canción) tendrá un movimiento en loop, de derecha a izquierda,
+respetando el margen ya existente del lado izquierdo (del lado derecho se
+puede cortar). Cuando esté en pausa, permanecerá quieto pero parpadeando
+suavemente (no parpadeo real, un fade que lleve el texto a negros, durando
+más tiempo en la fase donde se vea claramente el texto que en la que no)."*
+
+**Marquesina.** 25 px/s (1 px cada 4 ticks), bucle sin costura: se
+dibujan dos copias del título a `ancho + 60 px` de distancia, recortadas
+a la ventana `[12, 320)` con el helper nuevo `metro_draw_text_clipped()`
+(la forma general de `cut_right`: posición absoluta, recorte
+independiente — el texto sale por DEBAJO del margen izquierdo, no lo
+invade). Corre siempre que suena, sea corto o largo el título: es el
+indicador de "hay música", no una solución a títulos largos.
+
+**Respiración.** Ciclo de 3 s: 1.7 s a color pleno, 0.4 s de fundido al
+fondo, 0.5 s invisible, 0.4 s de vuelta. La proporción visible/invisible
+(≈2.5:1) es la que pidió el dueño; el fundido es `metro_fb_blend_color`
+sobre el color del texto, como en M-083.
+
+**Sin estado acumulado.** Ambas animaciones se calculan desde
+`current_tick`: si el tick se salta cuadros (disco ocupado, LCD dormido)
+se reanudan donde les toca, no donde se quedaron, y no hay nada que
+reiniciar al entrar o salir del hub.
+
+**Costo.** `metro_screen_hub_tick()` repinta SOLO la franja de esa fila
+(`lcd_update_rect` de 320×52) a ~20 Hz; un `show()` completo a esa
+cadencia redibujaría cuatro textos de 48 px y subiría 150 KB al LCD por
+cuadro. El bucle principal acorta su espera de entrada a `HZ/20` solo
+mientras `metro_screen_hub_wants_ticks()` (hay audio, la fila está a la
+vista, `animations != off`, `lcd_active()`); el resto del tiempo no
+cambia nada. Con la pantalla apagada no se dibuja ni se despierta nada.
+
+Captura: `docs/screenshots/R5-F5-hub-marquesina-respiracion.png` (dos
+instantes sonando — el título en posiciones distintas —, tres en pausa —
+quieto, y atenuado en el tercero).

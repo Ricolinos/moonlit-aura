@@ -70,6 +70,14 @@ void metro_draw_text(enum metro_font_role role, int x, int y,
 void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
                                 const char *str, unsigned color, int clip_w);
 
+/* R5-F5 (M-085): the general form -- the string is positioned at
+ * absolute (x, y) but only the part inside [clip_x, clip_x + clip_w)
+ * is drawn; x may be LESS than clip_x (text sliding out to the left
+ * under a fixed margin -- the hub's marquee). metro_draw_text_cut_right
+ * is this with clip_x == x. */
+void metro_draw_text_clipped(enum metro_font_role role, int clip_x, int clip_w,
+                              int x, int y, const char *str, unsigned color);
+
 /* Top line: page_title in caption/secondary at the left, current time
  * (if the RTC has one) and battery percentage at the right. */
 void metro_draw_header(const char *page_title);

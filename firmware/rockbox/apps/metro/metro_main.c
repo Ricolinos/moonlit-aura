@@ -227,6 +227,7 @@ void metro_main(void)
 {
     long last_player_tick = 0;
     bool index_letter_was_pending = false;
+    long last_hub_tick = 0; /* R5-F5 */
 
     /* metro_apply_hygiene() already ran inside init() (apps/main.c) --
      * see metro_main.h for why it can't run here, after init() returns. */
@@ -304,7 +305,13 @@ void metro_main(void)
                                           : (at_player ? MCTX_PLAYER
                                                         : (at_viewer ? MCTX_VIEWER : MCTX_LIST));
         int steps = 1;
-        int action = metro_input_next(ctx, HZ / 10, &steps);
+        /* R5-F5 (M-085): espera más corta mientras la fila
+         * "reproduciendo" del hub se anima, para que el tick llegue a
+         * ~20 Hz; el resto del tiempo, la de siempre. */
+        int action = metro_input_next(ctx,
+                                      (at_root && metro_screen_hub_wants_ticks())
+                                          ? HZ / 20 : HZ / 10,
+                                      &steps);
 
         if (action & SYS_EVENT)
         {
@@ -379,6 +386,17 @@ void metro_main(void)
              * trigger that on its own otherwise. R2-F3: excluded while
              * in the photo viewer too -- neither this nor the thumb
              * engine below has anything to do on a full-screen photo. */
+            /* R5-F5 (M-085): la fila "reproduciendo" del hub se anima
+             * por su cuenta (marquesina / respiración) -- un repintado
+             * parcial a ~20 Hz, solo mientras hay audio y la fila está a
+             * la vista; metro_screen_hub_tick() decide y devuelve false
+             * cuando no hay nada que hacer. */
+            if (at_root && current_tick - last_hub_tick >= HZ / 20)
+            {
+                last_hub_tick = current_tick;
+                metro_screen_hub_tick();
+            }
+
             if (!at_root && !at_player && !at_viewer)
             {
                 bool pending = metro_screen_list_has_pending_redraw();

@@ -27,7 +27,10 @@
 #include "metro_screen_hub.h"
 #include "metro_screen_list.h"
 #include "metro_screen_settings.h"
+#include "audio.h"
+#include "backlight.h"
 #include "metro_screen_nowplaying.h"
+#include "metro_fb.h"
 #include "metro_music.h"
 #include "metro_video.h"
 #include "metro_photos.h"
@@ -756,12 +759,92 @@ static void hub_on_select(void *ctx, int index)
     }
 }
 
+/* R5-F5 (M-085): la fila "reproduciendo" del hub se mueve. Sonando, el
+ * título corre en bucle de derecha a izquierda bajo el margen izquierdo
+ * (x=12, que no se invade: el texto desaparece por debajo de él y
+ * reaparece por la derecha, donde sí puede cortarse); en pausa, se queda
+ * quieto y "respira": un fundido hacia el fondo y de vuelta, con la fase
+ * visible bastante más larga que la invisible. Todo relativo a
+ * current_tick, sin estado acumulado: si el tick se salta cuadros (disco
+ * ocupado, LCD dormido), la animación se reanuda donde le toca y no
+ * donde se quedó. Puertas: lcd_active() y animations != off. */
+#define METRO_HUB_MARQUEE_GAP      60        /* px entre repeticiones del título */
+#define METRO_HUB_MARQUEE_TICKS_PX 4         /* 1 px cada 4 ticks = 25 px/s */
+#define METRO_HUB_BREATH_PERIOD    (HZ * 3)  /* ciclo completo */
+#define METRO_HUB_BREATH_ON        (HZ * 17 / 10) /* 1.7 s a la vista */
+#define METRO_HUB_BREATH_FADE      (HZ * 4 / 10)  /* 0.4 s de ida, 0.4 s de vuelta */
+#define METRO_HUB_TEXT_X           12
+
+static bool hub_row_animates(void)
+{
+    return metro_settings.animations != METRO_ANIM_OFF && lcd_active();
+}
+
+/* 0 = color pleno, 256 = fondo. Triángulo con mesetas: ON visible,
+ * FADE bajando, el resto del periodo menos FADE invisible, FADE subiendo. */
+static int breath_alpha(long t)
+{
+    t %= METRO_HUB_BREATH_PERIOD;
+    if (t < METRO_HUB_BREATH_ON)
+        return 0;
+    t -= METRO_HUB_BREATH_ON;
+    if (t < METRO_HUB_BREATH_FADE)
+        return (int)(t * 256 / METRO_HUB_BREATH_FADE);
+    t -= METRO_HUB_BREATH_FADE;
+    if (t < METRO_HUB_BREATH_PERIOD - METRO_HUB_BREATH_ON - 2 * METRO_HUB_BREATH_FADE)
+        return 256;
+    t -= METRO_HUB_BREATH_PERIOD - METRO_HUB_BREATH_ON - 2 * METRO_HUB_BREATH_FADE;
+    return 256 - (int)(t * 256 / METRO_HUB_BREATH_FADE);
+}
+
+static void draw_now_playing_row(int y, bool selected)
+{
+    struct metro_row row;
+    unsigned color = selected ? metro_color_fg() : metro_color_secondary();
+    int clip_w = LCD_WIDTH - METRO_HUB_TEXT_X;
+
+    hub_get_row(NULL, 0, &row);
+
+    if (!hub_row_animates())
+    {
+        metro_draw_text(MFONT_DISPLAY, METRO_HUB_TEXT_X, y, row.title, color);
+        return;
+    }
+
+    if (audio_status() & AUDIO_STATUS_PAUSE)
+    {
+        color = metro_fb_blend_color(color, metro_color_bg(),
+                                     breath_alpha(current_tick));
+        metro_draw_text(MFONT_DISPLAY, METRO_HUB_TEXT_X, y, row.title, color);
+    }
+    else
+    {
+        int w, h, span, offset;
+
+        lcd_setfont(metro_font_id(MFONT_DISPLAY));
+        lcd_getstringsize((const unsigned char *)row.title, &w, &h);
+        span = w + METRO_HUB_MARQUEE_GAP;
+        offset = (int)((current_tick / METRO_HUB_MARQUEE_TICKS_PX) % span);
+
+        /* Dos copias: la que sale por la izquierda y la que entra por
+         * la derecha, a `span` de distancia -- el bucle no tiene
+         * costura. La segunda solo hace falta cuando ya asoma. */
+        metro_draw_text_clipped(MFONT_DISPLAY, METRO_HUB_TEXT_X, clip_w,
+                                 METRO_HUB_TEXT_X - offset, y, row.title, color);
+        if (METRO_HUB_TEXT_X - offset + span < LCD_WIDTH)
+            metro_draw_text_clipped(MFONT_DISPLAY, METRO_HUB_TEXT_X, clip_w,
+                                     METRO_HUB_TEXT_X - offset + span, y,
+                                     row.title, color);
+    }
+}
+
 void metro_screen_hub_show(void)
 {
     metro_nav_t *nav = metro_screen_nav();
     int first = metro_nav_first_visible(nav);
     int sel = metro_nav_sel(nav);
     int count = hub_count(NULL);
+    bool playing = metro_music_is_playing();
     int i, y = METRO_HUB_FIRST_Y;
 
     metro_draw_clear();
@@ -772,13 +855,43 @@ void metro_screen_hub_show(void)
         struct metro_row row;
         bool selected = (i == sel);
 
-        hub_get_row(NULL, i, &row);
-        metro_draw_text(MFONT_DISPLAY, 12, y, row.title,
-                         selected ? metro_color_fg() : metro_color_secondary());
+        if (playing && i == 0)
+        {
+            draw_now_playing_row(y, selected);
+        }
+        else
+        {
+            hub_get_row(NULL, i, &row);
+            metro_draw_text(MFONT_DISPLAY, METRO_HUB_TEXT_X, y, row.title,
+                             selected ? metro_color_fg() : metro_color_secondary());
+        }
         y += METRO_HUB_PITCH;
     }
 
     lcd_update();
+}
+
+bool metro_screen_hub_wants_ticks(void)
+{
+    return metro_music_is_playing() && hub_row_animates() &&
+           metro_nav_first_visible(metro_screen_nav()) == 0; /* fila a la vista */
+}
+
+bool metro_screen_hub_tick(void)
+{
+    metro_nav_t *nav = metro_screen_nav();
+
+    if (!metro_screen_hub_wants_ticks())
+        return false;
+
+    /* Solo esa fila: limpiar su franja y volverla a pintar. Más barato
+     * que un show() completo a 20 Hz (que redibuja cuatro textos de
+     * 48 px y sube 150 KB al LCD por cuadro). */
+    lcd_set_foreground(metro_color_bg());
+    lcd_fillrect(0, METRO_HUB_FIRST_Y, LCD_WIDTH, METRO_HUB_PITCH);
+    draw_now_playing_row(METRO_HUB_FIRST_Y, metro_nav_sel(nav) == 0);
+    lcd_update_rect(0, METRO_HUB_FIRST_Y, LCD_WIDTH, METRO_HUB_PITCH);
+    return true;
 }
 
 void metro_screen_hub_handle(int action, int steps)
