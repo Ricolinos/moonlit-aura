@@ -30,14 +30,23 @@
 
 static void draw_wordmark(void)
 {
+    /* R5 (M-092, encargo del dueño): "metro" y, debajo, "aura" -- la
+     * familia, en el cuerpo de título y color secundario. El bloque
+     * completo queda centrado; el mismo par vive en el bitmap embebido
+     * (gen_logo.py) que usan el arranque y la pantalla USB. */
     const char *text = "metro";
-    int w, h;
+    const char *sub = "aura";
+    int w, h, sw, sh, top;
 
     metro_draw_clear();
     lcd_setfont(metro_font_id(MFONT_DISPLAY));
     lcd_getstringsize((const unsigned char *)text, &w, &h);
-    metro_draw_text(MFONT_DISPLAY, (LCD_WIDTH - w) / 2, (LCD_HEIGHT - h) / 2,
-                     text, metro_color_fg());
+    lcd_setfont(metro_font_id(MFONT_TITLE));
+    lcd_getstringsize((const unsigned char *)sub, &sw, &sh);
+    top = (LCD_HEIGHT - (h + 4 + sh)) / 2;
+    metro_draw_text(MFONT_DISPLAY, (LCD_WIDTH - w) / 2, top, text, metro_color_fg());
+    metro_draw_text(MFONT_TITLE, (LCD_WIDTH - sw) / 2, top + h + 4, sub,
+                     metro_color_secondary());
 }
 
 void metro_screen_splash_show(void)
@@ -54,9 +63,15 @@ void metro_screen_splash_progress(int pct)
 
     draw_wordmark();
 
-    lcd_setfont(metro_font_id(MFONT_DISPLAY));
-    lcd_getstringsize((const unsigned char *)"metro", &w, &h);
-    bar_y = (LCD_HEIGHT + h) / 2 + METRO_SPLASH_BAR_GAP;
+    /* Debajo del bloque metro+aura (M-092). */
+    {
+        int sw, sh;
+        lcd_setfont(metro_font_id(MFONT_DISPLAY));
+        lcd_getstringsize((const unsigned char *)"metro", &w, &h);
+        lcd_setfont(metro_font_id(MFONT_TITLE));
+        lcd_getstringsize((const unsigned char *)"aura", &sw, &sh);
+        bar_y = (LCD_HEIGHT - (h + 4 + sh)) / 2 + h + 4 + sh + METRO_SPLASH_BAR_GAP;
+    }
 
     metro_draw_progress(bar_x, bar_y, METRO_SPLASH_BAR_WIDTH, METRO_SPLASH_BAR_HEIGHT, pct);
     lcd_update();

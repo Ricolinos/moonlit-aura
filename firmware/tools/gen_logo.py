@@ -19,24 +19,37 @@ FONT_PATH = ROOT_DIR / "firmware/assets/fonts-src/Selawik-Light.ttf"
 OUT_PATH = ROOT_DIR / "firmware/rockbox/apps/bitmaps/native/rockboxlogo.320x98x16.bmp"
 
 WIDTH, HEIGHT = 320, 98
+# R5 (M-092, encargo del dueno): el wordmark ya no es solo "metro" --
+# debajo, en menor cuerpo y gris (60% de luminancia: al dibujarse como
+# mascara queda atenuado respecto a "metro"), va "aura", la familia.
 TEXT = "metro"
+SUBTEXT = "aura"
 BG = (0, 0, 0)
 FG = (255, 255, 255)
+SUBFG = (153, 153, 153)
 
 
 def main():
-    font_size = 64
-    font = ImageFont.truetype(str(FONT_PATH), font_size)
+    font = ImageFont.truetype(str(FONT_PATH), 56)
+    subfont = ImageFont.truetype(str(FONT_PATH), 26)
 
     img = Image.new("RGB", (WIDTH, HEIGHT), BG)
     draw = ImageDraw.Draw(img)
 
     bbox = draw.textbbox((0, 0), TEXT, font=font)
     text_w = bbox[2] - bbox[0]
+    sbbox = draw.textbbox((0, 0), SUBTEXT, font=subfont)
+    sub_w = sbbox[2] - sbbox[0]
+    sub_h = sbbox[3] - sbbox[1]
+
+    # "metro" arriba, "aura" debajo con 8px de aire; el bloque completo
+    # centrado en el lienzo de 98px de alto.
     text_h = bbox[3] - bbox[1]
-    x = (WIDTH - text_w) // 2 - bbox[0]
-    y = (HEIGHT - text_h) // 2 - bbox[1]
-    draw.text((x, y), TEXT, font=font, fill=FG)
+    total_h = text_h + 8 + sub_h
+    top = (HEIGHT - total_h) // 2
+    draw.text(((WIDTH - text_w) // 2 - bbox[0], top - bbox[1]), TEXT, font=font, fill=FG)
+    draw.text(((WIDTH - sub_w) // 2 - sbbox[0], top + text_h + 8 - sbbox[1]),
+              SUBTEXT, font=subfont, fill=SUBFG)
 
     img.save(OUT_PATH, "BMP")
     print(f"==> Logo generado: {OUT_PATH} ({WIDTH}x{HEIGHT})")

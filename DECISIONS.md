@@ -3103,3 +3103,7 @@ Verificado en simulador con un árbol dormido de prueba: tras confirmar, `.rockb
 ## M-091 — El cambio de firmware deja de reconstruir la base sin motivo (contrato v12, sello de biblioteca)
 
 Mismo reporte y misma corrección que D-329 en Aura-Firmware (la causa era nuestra: el cambio de v10 dejaba `music: true` siempre). `/.aura/library-stamp` + `db_stamp.txt` por árbol; `finish_ok()` de `metro_sync.c` anota el sello al terminar bien cualquier (re)construcción; `metro_firmware_switch_to_aura()` solo escribe el marcador si los sellos difieren, con el arranque en frío que sella al saliente. Verificado en simulador: primer cambio → marcador + sello; ida y vuelta sin sync → sin marcador. Las rutas nuevas viven en `metro_sync.c` (dueño de `/.aura`) — regla de rutas del contrato.
+
+## M-092 — El wordmark pasa a "metro / aura" (encargo del dueño)
+
+*"Me gustaría que dijera 'metro' y abajo 'aura'."* Dos sitios, mismo par: el **bitmap embebido** (`gen_logo.py` → `rockboxlogo.320x98x16.bmp`: "metro" Selawik Light 56 + "aura" a 26 en gris 60% — al dibujarse como máscara queda atenuado) que usan el arranque y la pantalla USB (M-088), y el **splash de runtime** (`metro_screen_splash.c`: "metro" en display + "aura" en título/secundario, bloque centrado, barra de progreso debajo del bloque). Captura: `docs/screenshots/R5-splash-metro-aura.png`.
