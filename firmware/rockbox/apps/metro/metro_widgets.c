@@ -28,6 +28,7 @@
 #include "metro_theme.h"
 #include "metro_input.h"
 #include "metro_lang.h"
+#include "metro_fb.h"
 
 bool metro_widgets_confirm(const char *title, const char *question)
 {
@@ -142,32 +143,56 @@ void metro_widgets_draw_icon(enum metro_icon_id id, int x, int y, unsigned color
     }
 }
 
+/* Integer sqrt, rounded down. Inputs here are < 2^24 (distances in
+ * 8.8 fixed point squared), so the 32-bit loop is enough. */
+static unsigned isqrt32(unsigned v)
+{
+    unsigned res = 0, bit = 1u << 30;
+
+    while (bit > v)
+        bit >>= 2;
+    while (bit)
+    {
+        if (v >= res + bit)
+        {
+            v -= res + bit;
+            res = (res >> 1) + bit;
+        }
+        else
+            res >>= 1;
+        bit >>= 2;
+    }
+    return res;
+}
+
 void metro_widgets_draw_circle(int cx, int cy, int r, unsigned color)
 {
-    int x = r, y = 0;
-    int err = 1 - r;
+    int dx, dy;
+    int r256 = r * 256;
 
     if (r <= 0)
         return;
 
-    lcd_set_foreground(color);
-    while (x >= y)
+    for (dy = -r - 1; dy <= r + 1; dy++)
     {
-        lcd_drawpixel(cx + x, cy + y);
-        lcd_drawpixel(cx + y, cy + x);
-        lcd_drawpixel(cx - y, cy + x);
-        lcd_drawpixel(cx - x, cy + y);
-        lcd_drawpixel(cx - x, cy - y);
-        lcd_drawpixel(cx - y, cy - x);
-        lcd_drawpixel(cx + y, cy - x);
-        lcd_drawpixel(cx + x, cy - y);
-        y++;
-        if (err < 0)
-            err += 2 * y + 1;
-        else
+        for (dx = -r - 1; dx <= r + 1; dx++)
         {
-            x--;
-            err += 2 * (y - x) + 1;
+            /* distance in 8.8: sqrt((dx^2+dy^2) * 65536) = d * 256 */
+            unsigned d256 = isqrt32((unsigned)(dx * dx + dy * dy) << 16);
+            int diff = (int)d256 - r256;
+            int alpha;
+
+            if (diff < 0)
+                diff = -diff;
+            /* ~1.5px ring: full within 0.25px of r, gone at 1.25px. A
+             * strict 1px ring spreads over two pixel rows at half
+             * intensity and reads grey on the panel; this keeps it thin
+             * but solid. */
+            alpha = 320 - diff;
+            if (alpha > 256)
+                alpha = 256;
+            if (alpha > 0)
+                metro_fb_plot_alpha(cx + dx, cy + dy, color, alpha);
         }
     }
 }

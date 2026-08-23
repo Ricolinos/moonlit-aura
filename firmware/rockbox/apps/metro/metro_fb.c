@@ -113,6 +113,19 @@ unsigned metro_fb_blend_color(unsigned from, unsigned to, int alpha256)
     return blend_pixel((fb_data)from, (fb_data)to, alpha256);
 }
 
+void metro_fb_plot_alpha(int x, int y, unsigned color, int alpha256)
+{
+    fb_data *px;
+
+    if (x < 0 || y < 0 || x >= LCD_WIDTH || y >= LCD_HEIGHT || alpha256 <= 0)
+        return;
+    px = FBADDR(x, y);
+    if (alpha256 >= 256)
+        *px = (fb_data)color;
+    else
+        *px = blend_pixel(*px, (fb_data)color, alpha256);
+}
+
 void metro_fb_present_fade(const fb_data *from, const fb_data *to, int alpha256)
 {
     int x, y;

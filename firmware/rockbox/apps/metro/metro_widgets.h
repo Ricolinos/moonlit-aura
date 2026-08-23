@@ -36,11 +36,15 @@ bool metro_widgets_confirm(const char *title, const char *question);
  * ("00".."15") drawn by metro_screen_nowplaying.c itself; see
  * metro_volume.h for the scale. Nothing else used the bar. */
 
-/* R5-F3 (M-083): 1px circle outline, centre (cx, cy), radius r --
- * midpoint algorithm, integer only, NO anti-aliasing on purpose: at
- * 320x240 a "soft" ring is a blurry ring, and the owner's spec asks
- * for a perfect thin circle. Draws with lcd_drawpixel (8 points per
- * step, ~6r pixels total -- trivial for r <= 16). */
+/* R5-F3 (M-083) / corregido en M-086: 1px circle outline, centre
+ * (cx, cy), radius r -- ANTI-ALIASED. M-083 drew it with the plain
+ * midpoint algorithm and on the real panel it read as a staircase
+ * (owner: "se notan muy pixelizados"); the spec's "que cuides el
+ * antialiasing" meant smooth it, not avoid it. Coverage per pixel =
+ * 1 - |distance - r| over the ring's bounding box, blended over what
+ * is already there (metro_fb_plot_alpha), so it works on the flat
+ * background and over the dimmed album art alike. (2r+1)^2 integer
+ * sqrts per ring -- ~730 for r=13, three rings, once a second. */
 void metro_widgets_draw_circle(int cx, int cy, int r, unsigned color);
 
 /* R5-F3 (M-083): a metro_icons.h glyph centred inside a

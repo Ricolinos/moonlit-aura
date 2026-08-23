@@ -3042,3 +3042,13 @@ cambia nada. Con la pantalla apagada no se dibuja ni se despierta nada.
 Captura: `docs/screenshots/R5-F5-hub-marquesina-respiracion.png` (dos
 instantes sonando — el título en posiciones distintas —, tres en pausa —
 quieto, y atenuado en el tercero).
+
+## M-086 — Anillos del reproductor con antialiasing (corrige M-083)
+
+**Reporte del dueño tras probar v0.5.0 en el iPod:** *"solo no me gustaron los círculos… se notan muy pixelizados."*
+
+M-083 leyó "que cuides el antialiasing" como "sin antialiasing" y dibujó el anillo con el algoritmo de punto medio, a píxel entero. En el simulador ampliado se veía nítido; en el panel real de 320×240 se ve como una escalera. La lectura correcta era la obvia: suavizarlo.
+
+**Decisión.** Anillo por **cobertura**: para cada píxel del cuadro del anillo, la distancia al centro (raíz entera en 8.8) decide cuánta tinta lleva, y esa tinta se mezcla contra el píxel que **ya está debajo** (`metro_fb_plot_alpha`, nuevo en `metro_fb.c`: lee, mezcla, escribe en el viewport actual — real u offscreen). Así funciona igual sobre el fondo plano y sobre la carátula atenuada, y dentro de un frame pre-renderizado de transición. Grosor ≈ 1.5 px (pleno a ±0.25 px del radio, cero a ±1.25): un anillo de exactamente 1 px suavizado se reparte en dos filas a media intensidad y se ve gris; así queda delgado pero sólido. Costo: (2r+1)² raíces enteras por anillo, ~730 para r=13, tres anillos, una vez por segundo.
+
+Captura: `docs/screenshots/R5-anillos-antialias.png` (izquierda 1 px suavizado, derecha el elegido).

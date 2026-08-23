@@ -81,6 +81,14 @@ void metro_fb_blend_over_color(const fb_data *img, unsigned bg_color, int alpha2
  * buffer: the caller just draws the text in the returned color. */
 unsigned metro_fb_blend_color(unsigned from, unsigned to, int alpha256);
 
+/* R5 (M-086): plots ONE pixel of `color` at alpha256 over whatever is
+ * already in the CURRENT viewport's buffer (the real LCD, or an
+ * offscreen metro_fb_render() frame) -- read, blend, write. Out-of-
+ * screen coordinates are ignored. This is the primitive the
+ * anti-aliased ring uses; it is NOT for area fills (per-pixel
+ * read-modify-write is the slow path on purpose). */
+void metro_fb_plot_alpha(int x, int y, unsigned color, int alpha256);
+
 /* R3-F8/DD-9 (M-069): rellena un rectángulo de color DENTRO de un
  * buffer off-screen (no en el LCD real) -- el único caso hasta ahora es
  * CONTINUUM borrando la ceja de la página de destino en `s_fb_to`
