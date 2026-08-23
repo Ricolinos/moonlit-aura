@@ -90,6 +90,16 @@ static void remove_marker(void)
     remove(METRO_SYNC_MARKER_PATH);
 }
 
+bool metro_sync_write_music_pending_marker(void)
+{
+    metro_sync_marker_t m;
+
+    metro_sync_marker_init(&m);
+    m.version = METRO_SYNC_MARKER_VERSION_SUPPORTED;
+    m.music = true;
+    return write_marker(&m);
+}
+
 static void go_idle(void)
 {
     s_state = METRO_SYNC_IDLE;

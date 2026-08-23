@@ -156,6 +156,10 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_SETTING_VOLUME_LIMIT] = "límite de volumen",
 
     [LANG_LIST_TRUNCATED] = "…y más: la lista está llena",
+
+    [LANG_SETTING_SWITCH_TO_AURA]      = "cambiar a Aura",
+    [LANG_VALUE_NOT_INSTALLED]         = "no instalado",
+    [LANG_DIALOG_SWITCH_TO_AURA_TITLE] = "¿cambiar a Aura y reiniciar?",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -291,6 +295,10 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_SETTING_VOLUME_LIMIT] = "volume limit",
 
     [LANG_LIST_TRUNCATED] = "…and more: the list is full",
+
+    [LANG_SETTING_SWITCH_TO_AURA]      = "switch to Aura",
+    [LANG_VALUE_NOT_INSTALLED]         = "not installed",
+    [LANG_DIALOG_SWITCH_TO_AURA_TITLE] = "switch to Aura and restart?",
 };
 
 void metro_lang_set(enum metro_language lang)

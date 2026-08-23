@@ -85,4 +85,11 @@ void metro_sync_dismiss(void);
  * job is now active/queued (the caller should show the sync screen). */
 bool metro_sync_request_manual(void);
 
+/* R5 (M-090, contrato v10): deja /.aura/sync-pending.json con music=true
+ * y attempts=0 -- lo que el firmware que DESPIERTA tras un cambio de
+ * firmware necesita para reconstruir su propia base de datos (la base
+ * vive dentro de cada arbol). Misma escritura que usa el propio ciclo
+ * de sync; el marcador se interpreta al siguiente arranque. */
+bool metro_sync_write_music_pending_marker(void);
+
 #endif /* METRO_SYNC_H */

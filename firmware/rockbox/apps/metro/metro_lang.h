@@ -168,6 +168,11 @@ enum metro_lang_id {
     /* R5 (M-087): fila final cuando una lista llego a su tope */
     LANG_LIST_TRUNCATED,
 
+    /* R5 (M-090): cambio de firmware */
+    LANG_SETTING_SWITCH_TO_AURA,
+    LANG_VALUE_NOT_INSTALLED,
+    LANG_DIALOG_SWITCH_TO_AURA_TITLE,
+
     LANG_COUNT
 };
 

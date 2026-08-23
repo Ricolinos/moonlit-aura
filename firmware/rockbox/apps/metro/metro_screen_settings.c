@@ -184,7 +184,7 @@ static void cycle_volume_limit(void)
 static int general_count(void *ctx)
 {
     (void)ctx;
-    return 9;
+    return 10;
 }
 
 static void general_get_row(void *ctx, int index, struct metro_row *out)
@@ -239,6 +239,15 @@ static void general_get_row(void *ctx, int index, struct metro_row *out)
         case 7:
             out->title = metro_lang_str(LANG_SETTING_LIBRARY);
             out->subtitle = NULL;
+            out->kind = METRO_ROW_ACTION;
+            break;
+        case 8:
+            /* R5 (M-090, contrato v10): despertar el Aura dormido. Sin
+             * arbol dormido la fila queda con "no instalado" -- se ve,
+             * para que se sepa que existe la opcion, pero no hace nada. */
+            out->title = metro_lang_str(LANG_SETTING_SWITCH_TO_AURA);
+            out->subtitle = metro_firmware_aura_installed()
+                                ? NULL : metro_lang_str(LANG_VALUE_NOT_INSTALLED);
             out->kind = METRO_ROW_ACTION;
             break;
         default:
@@ -308,6 +317,17 @@ static void general_on_select(void *ctx, int index)
             {
                 metro_sync_request_manual();
                 metro_run_sync_screen_if_needed();
+            }
+            break;
+
+        case 8:
+            if (metro_firmware_aura_installed() &&
+                metro_widgets_confirm(metro_lang_str(LANG_HUB_SETTINGS),
+                                       metro_lang_str(LANG_DIALOG_SWITCH_TO_AURA_TITLE)))
+            {
+                /* Solo vuelve si no pudo; el aparato sigue siendo Metro y
+                 * la lista simplemente se redibuja. */
+                metro_firmware_switch_to_aura();
             }
             break;
 

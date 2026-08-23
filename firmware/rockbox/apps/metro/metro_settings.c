@@ -28,8 +28,13 @@
 #include "rtc.h"
 #include "string-extra.h"
 #include "timefuncs.h"
+#include "system.h"          /* system_reboot() -- M-090 */
+#include "settings.h"        /* settings_save() -- M-090 */
+#include "ata_idle_notify.h" /* call_storage_idle_notifys() -- M-090 */
+#include "tagcache.h"        /* tagcache_shutdown() -- M-090 */
 
 #include "metro_settings.h"
+#include "metro_sync.h" /* marcador de sync al cambiar de firmware -- M-090 */
 
 #define METRO_DIR      ROCKBOX_DIR "/aura"
 #define METRO_CFG_PATH METRO_DIR "/aura.cfg"
@@ -232,4 +237,76 @@ void metro_settings_artists_dir(char *out, size_t outsz)
 void metro_settings_ratings_cfg_path(char *out, size_t outsz)
 {
     strlcpy(out, METRO_DIR "/ratings.cfg", outsz);
+}
+
+/* --- R5 (M-090, contrato v10): cambio de firmware por renombre ------- */
+
+#define METRO_FW_ACTIVE_DIR    ROCKBOX_DIR        /* "/.rockbox" */
+#define METRO_FW_DORMANT_AURA  "/.firmware-aura"
+#define METRO_FW_DORMANT_METRO "/.firmware-metro"
+#define METRO_FW_ROOT_BINARY   "/rockbox.ipod"
+#define METRO_FW_TREE_BINARY   ROCKBOX_DIR "/rockbox.ipod"
+
+bool metro_firmware_aura_installed(void)
+{
+    return dir_exists(METRO_FW_DORMANT_AURA);
+}
+
+/* /rockbox.ipod := /.rockbox/rockbox.ipod, a trozos, con buffer estatico
+ * (nunca en la pila de 8 KB). No es fatal si falla: el bootloader
+ * prefiere el del arbol y este es solo el respaldo. */
+static void refresh_root_binary(void)
+{
+    static char buf[16 * 1024];
+    int in, out;
+    ssize_t n;
+
+    in = open(METRO_FW_TREE_BINARY, O_RDONLY);
+    if (in < 0)
+        return;
+    out = creat(METRO_FW_ROOT_BINARY, 0666);
+    if (out < 0)
+    {
+        close(in);
+        return;
+    }
+    while ((n = read(in, buf, sizeof(buf))) > 0)
+        if (write(out, buf, (size_t)n) != n)
+            break;
+    close(out);
+    close(in);
+}
+
+bool metro_firmware_switch_to_aura(void)
+{
+    if (!metro_firmware_aura_installed())
+        return false;
+    if (dir_exists(METRO_FW_DORMANT_METRO))
+        return false; /* no adivinar: Studio garantiza que no pase */
+
+    /* 1. todo lo de Metro al disco, AHORA */
+    metro_settings_save();
+    settings_save();
+    tagcache_shutdown();
+    call_storage_idle_notifys(true);
+
+    /* 2. saliente primero */
+    if (rename(METRO_FW_ACTIVE_DIR, METRO_FW_DORMANT_METRO) < 0)
+        return false;
+
+    /* 3. entrante */
+    if (rename(METRO_FW_DORMANT_AURA, METRO_FW_ACTIVE_DIR) < 0)
+    {
+        /* deshacer el paso 2: seguimos siendo Metro */
+        rename(METRO_FW_DORMANT_METRO, METRO_FW_ACTIVE_DIR);
+        return false;
+    }
+
+    /* 4 y 5 */
+    refresh_root_binary();
+    metro_sync_write_music_pending_marker();
+
+    /* 6: en seco. Nada de lo de arriba queda pendiente de escribir. */
+    system_reboot();
+    return true; /* no se alcanza */
 }
