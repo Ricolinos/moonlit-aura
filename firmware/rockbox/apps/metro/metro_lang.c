@@ -154,6 +154,8 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_EQ_BRIGHT]          = "brillante",
 
     [LANG_SETTING_VOLUME_LIMIT] = "límite de volumen",
+
+    [LANG_LIST_TRUNCATED] = "…y más: la lista está llena",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -287,6 +289,8 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_EQ_BRIGHT]          = "bright",
 
     [LANG_SETTING_VOLUME_LIMIT] = "volume limit",
+
+    [LANG_LIST_TRUNCATED] = "…and more: the list is full",
 };
 
 void metro_lang_set(enum metro_language lang)

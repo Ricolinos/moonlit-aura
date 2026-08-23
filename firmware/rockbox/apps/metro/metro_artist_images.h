@@ -30,11 +30,11 @@
 
 #include "metro_artist_images_parse.h"
 
-/* 300 entries, matching both the contract's own cap (B.1) and Metro's
- * existing METRO_MUSIC_MAX_ITEMS (metro_music.h) -- an entry only
- * matters for an artist that could actually show up in that same
- * list, so it can never need to hold more distinct artists than that. */
-#define METRO_ARTIST_IMAGES_MAX 300
+/* One entry per artist that could show up in the Artists list, so the
+ * cap is that list's (METRO_MUSIC_MAX_GROUPS, metro_music.h -- R5/M-087
+ * raised it from 300 to 2,000 together with the lists themselves). */
+#include "metro_music.h"
+#define METRO_ARTIST_IMAGES_MAX METRO_MUSIC_MAX_GROUPS
 
 struct metro_artist_image_entry {
     char filename[METRO_ARTIST_IMAGES_FILE_LEN];

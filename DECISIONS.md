@@ -3052,3 +3052,32 @@ M-083 leyó "que cuides el antialiasing" como "sin antialiasing" y dibujó el an
 **Decisión.** Anillo por **cobertura**: para cada píxel del cuadro del anillo, la distancia al centro (raíz entera en 8.8) decide cuánta tinta lleva, y esa tinta se mezcla contra el píxel que **ya está debajo** (`metro_fb_plot_alpha`, nuevo en `metro_fb.c`: lee, mezcla, escribe en el viewport actual — real u offscreen). Así funciona igual sobre el fondo plano y sobre la carátula atenuada, y dentro de un frame pre-renderizado de transición. Grosor ≈ 1.5 px (pleno a ±0.25 px del radio, cero a ±1.25): un anillo de exactamente 1 px suavizado se reparte en dos filas a media intensidad y se ve gris; así queda delgado pero sólido. Costo: (2r+1)² raíces enteras por anillo, ~730 para r=13, tres anillos, una vez por segundo.
 
 Captura: `docs/screenshots/R5-anillos-antialias.png` (izquierda 1 px suavizado, derecha el elegido).
+
+## M-087 — Las listas de Música se cortaban en 300 ("no hay canciones después de la E")
+
+**Reporte del dueño:** con una biblioteca grande, Canciones muestra 300 y se detiene en la E, en Metro **y** en Aura.
+
+**Causa.** `METRO_MUSIC_MAX_ITEMS = 300` (heredado tal cual de `AURA_MUSIC_MAX_ITEMS`), un solo tope para todas las listas: canciones, artistas, álbumes, géneros, listas y las sublistas. Tagcache entrega los títulos **ya ordenados**, así que las primeras 300 que caben son de la A hasta donde alcance — y no había ningún aviso en pantalla. Las canciones están en el disco y en la base; la pantalla no tenía dónde ponerlas.
+
+**Decisión.** Un tope por clase de lista, dimensionado para una biblioteca real en un aparato de 64 MB:
+- `METRO_MUSIC_MAX_SONGS = 5000` (lista plana, canciones de un género, y la lista de reproducción que se arma al elegir una canción).
+- `METRO_MUSIC_MAX_GROUPS = 2000` (artistas, álbumes, géneros, listas, álbumes de un artista, canciones de un álbum). `METRO_ARTIST_IMAGES_MAX` sigue a este tope (era 300 por la misma herencia).
+Todo estático (nunca en la pila de 8 KB, D-226): `.bss` pasa a 7.2 MB en ARM y el búfer de audio queda en ≈55 MB. Los recorridos de tagcache que llenan las listas corren contra la copia en RAM (`tagcache_ram`, ya activado en `metro_main.c`), y el ordenamiento por inserción sobre entrada casi ordenada es cercano a lineal.
+
+**El tope ya no es silencioso:** las listas de filas (canciones, géneros, canciones de un género/álbum) agregan una fila final terciaria "…y más: la lista está llena" cuando llegan al tope (`LANG_LIST_TRUNCATED`); las cuadrículas (artistas, álbumes) no, porque su índice es el de un tile real.
+
+**Pendiente:** (1) cronometrar en el iPod cuánto tarda entrar a Música con miles de canciones — si molesta, cargar cada pivot la primera vez que se abre en vez de las cinco listas al entrar; (2) la misma corrección en Aura-Firmware, en su propia sesión (regla de contención). Capturas: lista de canciones sin cambios visuales.
+
+## M-088 — Pantalla USB propia: el logo de Rockbox desaparece
+
+**Reporte del dueño:** *"Al conectarlo vía USB todavía aparece el gráfico feo de Rockbox. Ayúdame a cambiar esa pantalla por algo que Metro hubiera hecho como indicio de conexión USB/sincronización."*
+
+**Qué pasaba.** `metro_main.c` dibujaba la pantalla de Metro un instante y luego `default_event_handler()` entregaba el LCD a `gui_usb_screen_run()` de Rockbox, que pintaba `bm_usblogo` durante toda la sesión (DESVIACIONES F9-1 lo documentaba como deuda).
+
+**Restricción dura.** Mientras el Mac tiene el disco, `font_disable_all()` descarga las fuentes a propósito y no se puede leer nada del volumen. Todo lo que se dibuje tiene que estar embebido en el binario. Lo que sí lo está: los colores del tema (enum en RAM), la tabla de iconos (`metro_icons_table.c`) y el wordmark "metro" (`bm_rockboxlogo`, 320×98, generado por `gen_logo.py`, compilado por `bmp2rb`; `INITDATA_ATTR` es no-op en S5L8702, D-223 de Aura).
+
+**Decisión.** `metro_screen_usb.c` se reescribe con solo eso: el wordmark dibujado **como máscara** (la luminancia de cada píxel es la mezcla fondo→texto, `metro_fb_plot_alpha`), con lo que sale bien en tema claro y oscuro — un `lcd_bitmap` plano pintaría una losa negra en el claro; el glifo `arrow_sync` de Fluent (nuevo en la tabla) a 2× en acento arriba; y debajo el **indicador indeterminado de WP7**: cinco puntos en acento que cruzan la pantalla rápido en los bordes y lento por el centro, escalonados, con pausa entre barridos — geometría pura. **Sin texto**: la única fuente disponible sería la sysfont de 8 px de Rockbox, que no tiene nada que ver con Metro.
+
+`apps/gui/usb_screen.c` (MODIFICATIONS.md, `Metro (M-088)`): en iPod 6G la pantalla principal llama `metro_screen_usb_show()` en vez de `bm_usblogo`, y el bucle sondea a `HZ/10` llamando `metro_screen_usb_tick()` (repinta solo la franja de 6 px de los puntos). `metro_apply_hygiene()` apaga `usb_hid` — el "modo teclado" USB de Rockbox no tiene lugar en Metro y además su rama del bucle nunca llegaba al tick. Puertas: `lcd_active()` y `animations != off` (los puntos se congelan).
+
+Verificado en simulador con `USB_INSERT`: `docs/screenshots/R5-usb-metro.png`.

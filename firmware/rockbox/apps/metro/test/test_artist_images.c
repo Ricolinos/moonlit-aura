@@ -194,11 +194,18 @@ static void test_index_caps_at_300(void)
     }
 
     CHECK(idx.count == METRO_ARTIST_IMAGES_MAX);
-    /* Los primeros 300 SI quedaron indexados -- solo el excedente se
-     * descarta, no un bloque arbitrario. */
-    CHECK(metro_artist_images_lookup(&idx, "Artist Number 0000") != NULL);
-    CHECK(metro_artist_images_lookup(&idx, "Artist Number 0299") != NULL);
-    CHECK(metro_artist_images_lookup(&idx, "Artist Number 0300") == NULL);
+    /* Los primeros MAX SI quedaron indexados -- solo el excedente se
+     * descarta, no un bloque arbitrario. (R5/M-087: el tope ya no es
+     * 300 fijo sino el de la lista de artistas; el test sigue al tope.) */
+    {
+        char first[40], last_in[40], first_out[40];
+        snprintf(first, sizeof(first), "Artist Number %04d", 0);
+        snprintf(last_in, sizeof(last_in), "Artist Number %04d", METRO_ARTIST_IMAGES_MAX - 1);
+        snprintf(first_out, sizeof(first_out), "Artist Number %04d", METRO_ARTIST_IMAGES_MAX);
+        CHECK(metro_artist_images_lookup(&idx, first) != NULL);
+        CHECK(metro_artist_images_lookup(&idx, last_in) != NULL);
+        CHECK(metro_artist_images_lookup(&idx, first_out) == NULL);
+    }
 }
 
 int main(void)

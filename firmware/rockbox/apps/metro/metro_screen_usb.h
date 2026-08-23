@@ -27,4 +27,10 @@
 
 void metro_screen_usb_show(void);
 
+/* R5 (M-088): advances the dots of the WP7 indeterminate progress and
+ * repaints ONLY their strip. Called ~10x/s from the Metro hook inside
+ * gui_usb_screen_run() (apps/gui/usb_screen.c) while the cable is in.
+ * Safe with fonts disabled: draws nothing that lives on disk. */
+void metro_screen_usb_tick(void);
+
 #endif /* METRO_SCREEN_USB_H */

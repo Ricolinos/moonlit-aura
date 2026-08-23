@@ -275,16 +275,16 @@ static void build_photos_page(void)
 static metro_music_item_t s_quickplay[METRO_QUICKPLAY_MAX];
 static int s_quickplay_n;
 
-static metro_music_item_t s_artists[METRO_MUSIC_MAX_ITEMS];
+static metro_music_item_t s_artists[METRO_MUSIC_MAX_GROUPS];
 static int s_artists_n;
-static metro_music_item_t s_albums[METRO_MUSIC_MAX_ITEMS];
+static metro_music_item_t s_albums[METRO_MUSIC_MAX_GROUPS];
 static int s_albums_n;
-static metro_music_item_t s_songs[METRO_MUSIC_MAX_ITEMS];
+static metro_music_item_t s_songs[METRO_MUSIC_MAX_SONGS];
 static int s_songs_n;
-static metro_music_item_t s_genres[METRO_MUSIC_MAX_ITEMS];
+static metro_music_item_t s_genres[METRO_MUSIC_MAX_GROUPS];
 static int s_genres_n;
-static char s_playlist_files[METRO_MUSIC_MAX_ITEMS][METRO_MUSIC_ITEM_LEN];
-static char s_playlist_names[METRO_MUSIC_MAX_ITEMS][METRO_MUSIC_ITEM_LEN];
+static char s_playlist_files[METRO_MUSIC_MAX_GROUPS][METRO_MUSIC_ITEM_LEN];
+static char s_playlist_names[METRO_MUSIC_MAX_GROUPS][METRO_MUSIC_ITEM_LEN];
 static int s_playlists_n;
 
 static void music_lists_refresh(void)
@@ -304,12 +304,12 @@ static void music_lists_refresh(void)
      * covers that case, not a placeholder row. */
     s_quickplay_n = metro_music_recent_albums(s_quickplay, METRO_QUICKPLAY_MAX);
 
-    s_artists_n = metro_music_artists(s_artists, METRO_MUSIC_MAX_ITEMS);
-    s_albums_n  = metro_music_albums(s_albums, METRO_MUSIC_MAX_ITEMS);
-    s_songs_n   = metro_music_songs(s_songs, METRO_MUSIC_MAX_ITEMS);
-    s_genres_n  = metro_music_genres(s_genres, METRO_MUSIC_MAX_ITEMS);
+    s_artists_n = metro_music_artists(s_artists, METRO_MUSIC_MAX_GROUPS);
+    s_albums_n  = metro_music_albums(s_albums, METRO_MUSIC_MAX_GROUPS);
+    s_songs_n   = metro_music_songs(s_songs, METRO_MUSIC_MAX_SONGS);
+    s_genres_n  = metro_music_genres(s_genres, METRO_MUSIC_MAX_GROUPS);
 
-    s_playlists_n = metro_music_list_playlists(s_playlist_files, METRO_MUSIC_MAX_ITEMS);
+    s_playlists_n = metro_music_list_playlists(s_playlist_files, METRO_MUSIC_MAX_GROUPS);
     for (i = 0; i < s_playlists_n; i++)
         metro_music_playlist_display_name(s_playlist_files[i], s_playlist_names[i],
                                            METRO_MUSIC_ITEM_LEN);
@@ -464,7 +464,7 @@ static void artists_get_row(void *ctx, int index, struct metro_row *out)
     out->kind = METRO_ROW_NAV;
 }
 
-static metro_music_item_t s_artist_albums[METRO_MUSIC_MAX_ITEMS];
+static metro_music_item_t s_artist_albums[METRO_MUSIC_MAX_GROUPS];
 static int s_artist_albums_n;
 static char s_artist_albums_title[METRO_MUSIC_ITEM_LEN];
 
@@ -493,7 +493,7 @@ static void artists_on_select(void *ctx, int index)
 {
     (void)ctx;
     s_artist_albums_n = metro_music_albums_of_artist(s_artists[index].seek,
-                                                       s_artist_albums, METRO_MUSIC_MAX_ITEMS);
+                                                       s_artist_albums, METRO_MUSIC_MAX_GROUPS);
     strlcpy(s_artist_albums_title, s_artists[index].label, sizeof(s_artist_albums_title));
     artist_albums_page.title_dynamic = s_artist_albums_title;
     metro_screen_list_push(&artist_albums_page);
@@ -517,13 +517,37 @@ static void albums_on_select(void *ctx, int index)
     open_album_songs(s_albums[index].seek, s_albums[index].label);
 }
 
+/* R5 (M-087): una lista que llego a su tope lo DICE -- una fila final,
+ * terciaria, sin accion. Antes el tope (300) era silencioso y una
+ * biblioteca de 1,200 canciones "terminaba en la E" sin pista alguna.
+ * Solo para las listas de filas; las cuadriculas (artistas, albumes)
+ * no reciben una fila extra porque su indice es el de un tile real. */
+static int truncated_count(int n, int max)
+{
+    return n >= max ? n + 1 : n;
+}
+
+static bool truncated_row(int index, int n, int max, struct metro_row *out)
+{
+    if (n >= max && index >= n)
+    {
+        out->title = metro_lang_str(LANG_LIST_TRUNCATED);
+        out->subtitle = NULL;
+        out->kind = METRO_ROW_ACTION;
+        return true;
+    }
+    return false;
+}
+
 /* pivot: songs (all, alphabetical) -> on_select plays from that row on */
 
-static int songs_count(void *ctx) { (void)ctx; return s_songs_n; }
+static int songs_count(void *ctx) { (void)ctx; return truncated_count(s_songs_n, METRO_MUSIC_MAX_SONGS); }
 
 static void songs_get_row(void *ctx, int index, struct metro_row *out)
 {
     (void)ctx;
+    if (truncated_row(index, s_songs_n, METRO_MUSIC_MAX_SONGS, out))
+        return;
     out->title = s_songs[index].label;
     out->subtitle = s_songs[index].subtitle[0] ? s_songs[index].subtitle : NULL;
     out->kind = METRO_ROW_ACTION;
@@ -532,17 +556,21 @@ static void songs_get_row(void *ctx, int index, struct metro_row *out)
 static void songs_on_select(void *ctx, int index)
 {
     (void)ctx;
+    if (index >= s_songs_n)
+        return; /* la fila "...y mas" no hace nada */
     if (metro_music_play_all_songs(index))
         metro_screen_nowplaying_push();
 }
 
 /* pivot: genres -> on_select drills into that genre's songs */
 
-static int genres_count(void *ctx) { (void)ctx; return s_genres_n; }
+static int genres_count(void *ctx) { (void)ctx; return truncated_count(s_genres_n, METRO_MUSIC_MAX_GROUPS); }
 
 static void genres_get_row(void *ctx, int index, struct metro_row *out)
 {
     (void)ctx;
+    if (truncated_row(index, s_genres_n, METRO_MUSIC_MAX_GROUPS, out))
+        return;
     out->title = s_genres[index].label;
     out->subtitle = NULL;
     out->kind = METRO_ROW_NAV;
@@ -551,6 +579,8 @@ static void genres_get_row(void *ctx, int index, struct metro_row *out)
 static void genres_on_select(void *ctx, int index)
 {
     (void)ctx;
+    if (index >= s_genres_n)
+        return; /* la fila "...y mas" no hace nada */
     open_genre_songs(s_genres[index].seek, s_genres[index].label);
 }
 
@@ -596,16 +626,18 @@ static const struct metro_page music_page = { LANG_HUB_MUSIC, music_pivots, 6, N
  * top-level albums pivot or an artist's albums (only one such page can
  * ever be on the nav stack at a time, see metro_page.h). */
 
-static metro_music_item_t s_album_songs[METRO_MUSIC_MAX_ITEMS];
+static metro_music_item_t s_album_songs[METRO_MUSIC_MAX_GROUPS];
 static int s_album_songs_n;
 static int32_t s_album_songs_seek;
 static char s_album_songs_title[METRO_MUSIC_ITEM_LEN];
 
-static int album_songs_count(void *ctx) { (void)ctx; return s_album_songs_n; }
+static int album_songs_count(void *ctx) { (void)ctx; return truncated_count(s_album_songs_n, METRO_MUSIC_MAX_GROUPS); }
 
 static void album_songs_get_row(void *ctx, int index, struct metro_row *out)
 {
     (void)ctx;
+    if (truncated_row(index, s_album_songs_n, METRO_MUSIC_MAX_GROUPS, out))
+        return;
     out->title = s_album_songs[index].label;
     out->subtitle = s_album_songs[index].subtitle[0] ? s_album_songs[index].subtitle : NULL;
     out->kind = METRO_ROW_ACTION;
@@ -614,6 +646,8 @@ static void album_songs_get_row(void *ctx, int index, struct metro_row *out)
 static void album_songs_on_select(void *ctx, int index)
 {
     (void)ctx;
+    if (index >= s_album_songs_n)
+        return; /* la fila "...y mas" no hace nada */
     if (metro_music_play_songs_of_album(s_album_songs_seek, index))
         metro_screen_nowplaying_push();
 }
@@ -626,7 +660,7 @@ static struct metro_page album_songs_page = { LANG_PIVOT_SONGS, album_songs_pivo
 static void open_album_songs(int32_t album_seek, const char *album_label)
 {
     s_album_songs_seek = album_seek;
-    s_album_songs_n = metro_music_songs_of_album(album_seek, s_album_songs, METRO_MUSIC_MAX_ITEMS);
+    s_album_songs_n = metro_music_songs_of_album(album_seek, s_album_songs, METRO_MUSIC_MAX_GROUPS);
     strlcpy(s_album_songs_title, album_label, sizeof(s_album_songs_title));
     album_songs_page.title_dynamic = s_album_songs_title;
     metro_screen_list_push(&album_songs_page);
@@ -634,16 +668,18 @@ static void open_album_songs(int32_t album_seek, const char *album_label)
 
 /* Shared "songs of one genre" subpage -- same reuse rule as above. */
 
-static metro_music_item_t s_genre_songs[METRO_MUSIC_MAX_ITEMS];
+static metro_music_item_t s_genre_songs[METRO_MUSIC_MAX_SONGS];
 static int s_genre_songs_n;
 static int32_t s_genre_songs_seek;
 static char s_genre_songs_title[METRO_MUSIC_ITEM_LEN];
 
-static int genre_songs_count(void *ctx) { (void)ctx; return s_genre_songs_n; }
+static int genre_songs_count(void *ctx) { (void)ctx; return truncated_count(s_genre_songs_n, METRO_MUSIC_MAX_SONGS); }
 
 static void genre_songs_get_row(void *ctx, int index, struct metro_row *out)
 {
     (void)ctx;
+    if (truncated_row(index, s_genre_songs_n, METRO_MUSIC_MAX_SONGS, out))
+        return;
     out->title = s_genre_songs[index].label;
     out->subtitle = s_genre_songs[index].subtitle[0] ? s_genre_songs[index].subtitle : NULL;
     out->kind = METRO_ROW_ACTION;
@@ -652,6 +688,8 @@ static void genre_songs_get_row(void *ctx, int index, struct metro_row *out)
 static void genre_songs_on_select(void *ctx, int index)
 {
     (void)ctx;
+    if (index >= s_genre_songs_n)
+        return; /* la fila "...y mas" no hace nada */
     if (metro_music_play_songs_of_genre(s_genre_songs_seek, index))
         metro_screen_nowplaying_push();
 }
@@ -664,7 +702,7 @@ static struct metro_page genre_songs_page = { LANG_PIVOT_SONGS, genre_songs_pivo
 static void open_genre_songs(int32_t genre_seek, const char *genre_label)
 {
     s_genre_songs_seek = genre_seek;
-    s_genre_songs_n = metro_music_songs_of_genre(genre_seek, s_genre_songs, METRO_MUSIC_MAX_ITEMS);
+    s_genre_songs_n = metro_music_songs_of_genre(genre_seek, s_genre_songs, METRO_MUSIC_MAX_SONGS);
     strlcpy(s_genre_songs_title, genre_label, sizeof(s_genre_songs_title));
     genre_songs_page.title_dynamic = s_genre_songs_title;
     metro_screen_list_push(&genre_songs_page);

@@ -165,6 +165,9 @@ enum metro_lang_id {
     /* R5-F3 (M-083) */
     LANG_SETTING_VOLUME_LIMIT,
 
+    /* R5 (M-087): fila final cuando una lista llego a su tope */
+    LANG_LIST_TRUNCATED,
+
     LANG_COUNT
 };
 

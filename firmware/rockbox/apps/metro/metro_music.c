@@ -248,7 +248,7 @@ static void format_duration(char *out, size_t outsz, long ms)
 /* Scratch for run_search()'s two sort orders -- static, not on the
  * 8KB UI thread stack (same D-226 concern Aura-Firmware documents for
  * its own equivalent buffers). */
-static long s_tracknum[METRO_MUSIC_MAX_ITEMS];
+static long s_tracknum[METRO_MUSIC_MAX_SONGS];
 
 static void sort_by_label(metro_music_item_t *items, int n)
 {
@@ -413,7 +413,7 @@ int metro_music_albums(metro_music_item_t *out, int max)
  * would for two same-named songs on different albums, which would
  * undercount real plays. Aggregates max(lastplayed) per album NAME in
  * a local table (no cap on the SCAN itself, only on how many distinct
- * albums it can hold -- D.2's own concern about METRO_MUSIC_MAX_ITEMS
+ * albums it can hold -- D.2's own concern about METRO_MUSIC_MAX_GROUPS
  * biasing toward the first tracks in index order doesn't apply here,
  * every track gets visited), then resolves each of the top `max`
  * picks back to a real metro_music_albums() entry (its actual
@@ -432,8 +432,8 @@ int metro_music_recent_albums(metro_music_item_t *out, int max)
     char buf[MAX_PATH];
     /* static: 300 * ~72 =~ 21KB, same D-226 stack concern as the other
      * large tables in this file. */
-    static struct metro_music_recent_agg agg[METRO_MUSIC_MAX_ITEMS];
-    static metro_music_item_t all_albums[METRO_MUSIC_MAX_ITEMS];
+    static struct metro_music_recent_agg agg[METRO_MUSIC_MAX_GROUPS];
+    static metro_music_item_t all_albums[METRO_MUSIC_MAX_GROUPS];
     int agg_n = 0;
     int all_n, i, a, b, out_n;
 
@@ -461,7 +461,7 @@ int metro_music_recent_albums(metro_music_item_t *out, int max)
 
         if (i == agg_n)
         {
-            if (agg_n >= METRO_MUSIC_MAX_ITEMS)
+            if (agg_n >= METRO_MUSIC_MAX_GROUPS)
                 continue; /* distinct-album index full -- same 300 cap as everywhere else */
             strlcpy(agg[i].album, album, sizeof(agg[i].album));
             agg[i].lastplayed = lastplayed;
@@ -491,7 +491,7 @@ int metro_music_recent_albums(metro_music_item_t *out, int max)
 
     /* Resolve each pick's real tag_album seek -- see the function's
      * own doc comment above for why. */
-    all_n = metro_music_albums(all_albums, METRO_MUSIC_MAX_ITEMS);
+    all_n = metro_music_albums(all_albums, METRO_MUSIC_MAX_GROUPS);
     out_n = 0;
     for (i = 0; i < agg_n && out_n < max; i++)
     {
@@ -557,14 +557,14 @@ int metro_music_songs_of_genre(int32_t genre_seek, metro_music_item_t *out, int 
  * otherwise), so the row index chosen on screen is always the track
  * that starts playing. Static scratch: up to 300 tracks' worth of ids
  * (1.2KB) or titles (18.75KB) doesn't fit the 8KB UI thread stack
- * (D-226, same as Aura-Firmware). */
+ * (D-226, same as Aura-Firmware). R5/M-087: song-sized (5,000). */
 static bool insert_matching_tracks(int filter_tag, int32_t filter_seek, bool album_order)
 {
     struct tagcache_search tcs;
     char path[MAX_PATH];
-    static int32_t s_ids[METRO_MUSIC_MAX_ITEMS];
-    static long s_nums[METRO_MUSIC_MAX_ITEMS];
-    static char s_titles[METRO_MUSIC_MAX_ITEMS][METRO_MUSIC_ITEM_LEN];
+    static int32_t s_ids[METRO_MUSIC_MAX_SONGS];
+    static long s_nums[METRO_MUSIC_MAX_SONGS];
+    static char s_titles[METRO_MUSIC_MAX_SONGS][METRO_MUSIC_ITEM_LEN];
     int n = 0, a, b, inserted = 0;
 
     if (!tagcache_is_usable())
@@ -578,7 +578,7 @@ static bool insert_matching_tracks(int filter_tag, int32_t filter_seek, bool alb
 
     playlist_create(NULL, NULL);
 
-    while (n < METRO_MUSIC_MAX_ITEMS && tagcache_get_next(&tcs, path, sizeof(path)))
+    while (n < METRO_MUSIC_MAX_SONGS && tagcache_get_next(&tcs, path, sizeof(path)))
     {
         s_ids[n] = tcs.idx_id;
         if (album_order)
@@ -721,11 +721,11 @@ bool metro_music_play_playlist(int index)
 {
     char dir[MAX_PATH];
     /* static: 300*64 = 18.75KB, same D-226 stack concern as above. */
-    static char labels[METRO_MUSIC_MAX_ITEMS][METRO_MUSIC_ITEM_LEN];
+    static char labels[METRO_MUSIC_MAX_GROUPS][METRO_MUSIC_ITEM_LEN];
     int n;
 
     catalog_get_directory(dir, sizeof(dir));
-    n = metro_music_list_playlists(labels, METRO_MUSIC_MAX_ITEMS);
+    n = metro_music_list_playlists(labels, METRO_MUSIC_MAX_GROUPS);
     if (index < 0 || index >= n)
         return false;
 

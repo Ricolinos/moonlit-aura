@@ -55,6 +55,8 @@ enum metro_icon_id {
     METRO_ICON_STAR,
     METRO_ICON_PREVIOUS,
     METRO_ICON_NEXT,
+    /* R5 (M-088): pantalla USB */
+    METRO_ICON_SYNC,
     METRO_ICON_COUNT
 };
 

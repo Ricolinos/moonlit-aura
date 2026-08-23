@@ -43,6 +43,9 @@
 #include "icons.h"
 
 #include "bitmaps/usblogo.h"
+#ifdef IPOD_6G
+#include "metro/metro_screen_usb.h" /* Metro (M-088): own USB screen, embedded assets only */
+#endif
 
 #ifdef HAVE_REMOTE_LCD
 #include "bitmaps/remote_usblogo.h"
@@ -100,7 +103,15 @@ static void handle_usb_events(struct viewport *title)
         {
             /* hid emits the event in get_action */
             send_event(GUI_EVENT_ACTIONUPDATE, NULL);
+#ifdef IPOD_6G
+            /* Metro (M-088): poll 5x faster so the dots animate; the
+             * tick only repaints their 6px strip. metro_main.c turns
+             * usb_hid off, so this is the branch that runs. */
+            button = button_get_w_tmo(HZ/10);
+            metro_screen_usb_tick();
+#else
             button = button_get_w_tmo(HZ/2);
+#endif
         }
         if (button == SYS_USB_DISCONNECTED)
             return;
@@ -214,6 +225,19 @@ static void usb_screens_draw(struct usb_screen_vps_t *usb_screen_vps_ar)
         last_vp = screen->set_viewport(parent);
         screen->clear_viewport();
         screen->backlight_on();
+#ifdef IPOD_6G
+        /* Metro (M-088): the stock USB logo never shows on the iPod
+         * 6G; Metro's own screen (wordmark + sync glyph + WP7 dots,
+         * all compiled in -- fonts are disabled here on purpose) takes
+         * the whole LCD. `logo`/`logos` stay for the other targets. */
+        (void)logo; (void)logos;
+        if (i == SCREEN_MAIN)
+        {
+            screen->set_viewport(last_vp);
+            metro_screen_usb_show();
+            continue;
+        }
+#endif
         screen->set_viewport(logo);
         screen->bmp(logos[i], 0, 0);
         screen->set_viewport(last_vp);

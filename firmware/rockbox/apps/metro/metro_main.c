@@ -60,6 +60,12 @@
 void metro_apply_hygiene(void)
 {
     global_settings.statusbar = STATUSBAR_OFF;
+    /* R5 (M-088): Rockbox's USB "keypad mode" (HID) has no place in
+     * Metro -- and with it on, gui_usb_screen_run() takes the HID
+     * branch of its loop, which never reaches Metro's animation tick. */
+#ifdef USB_ENABLE_HID /* not defined in the simulator build */
+    global_settings.usb_hid = false;
+#endif
     global_settings.backdrop_file[0] = '-';
     global_settings.backdrop_file[1] = '\0';
     global_settings.show_shutdown_message = false;

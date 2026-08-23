@@ -72,6 +72,7 @@ ICONS = [
     ("star",       "STAR"),
     ("previous",   "PREVIOUS"),
     ("next",       "NEXT"),
+    ("sync",       "SYNC"),  # R5/M-088: pantalla USB
 ]
 
 # Umbral sobre el canal ALFA, no sobre el color: los SVG de Fluent son

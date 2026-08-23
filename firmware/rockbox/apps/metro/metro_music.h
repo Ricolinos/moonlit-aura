@@ -36,7 +36,25 @@
 
 #define METRO_MUSIC_ITEM_LEN      64
 #define METRO_MUSIC_SUBTITLE_LEN  40
-#define METRO_MUSIC_MAX_ITEMS     300
+/* R5 (M-087): capacity of the library lists. They were a single
+ * METRO_MUSIC_MAX_ITEMS = 300 (inherited from Aura-Firmware) for every
+ * list, and tagcache hands titles back already sorted -- so a 1,200-song
+ * library showed exactly the first 300 titles and stopped at the "E",
+ * with nothing on screen to say so (owner's report). One cap per kind
+ * of list now, sized for a real library on a 64MB device:
+ *   - songs (the flat list, a genre's songs, the playlist built when a
+ *     song is picked): 5,000 -- 108 bytes each = 540KB per array.
+ *   - groups (artists, albums, genres, playlists, an artist's albums,
+ *     an album's songs): 2,000 -- 216KB per array.
+ * All static (never on the 8KB UI stack, D-226); the whole set is
+ * ~3.5MB of .bss, which on this target only shrinks the audio buffer.
+ * The tagcache walk that fills them runs against the RAM copy
+ * (tagcache_ram, metro_main.c), so a full walk is RAM-speed. */
+#define METRO_MUSIC_MAX_SONGS     5000
+#define METRO_MUSIC_MAX_GROUPS    2000
+/* Kept as the group cap for the few callers that don't care which
+ * list they hold (artist image index, playlists). */
+#define METRO_MUSIC_MAX_ITEMS     METRO_MUSIC_MAX_GROUPS
 
 typedef struct {
     char label[METRO_MUSIC_ITEM_LEN];

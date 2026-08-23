@@ -120,6 +120,16 @@ vivo en `DECISIONS.md`.
 
 ### F9 (2026-08-20)
 
+- `apps/gui/usb_screen.c` (M-088): tres bloques `#ifdef IPOD_6G`, marcados
+  `Metro (M-088)` — `#include "metro/metro_screen_usb.h"`; en
+  `usb_screens_draw()` la pantalla principal llama
+  `metro_screen_usb_show()` en vez de pintar `bm_usblogo` (el logo
+  genérico "USB"); y en el bucle de `handle_usb_events()` el sondeo pasa
+  de `HZ/2` a `HZ/10` y llama `metro_screen_usb_tick()` en cada vuelta,
+  para animar los puntos del indicador indeterminado. Sin cambio en la
+  lógica USB/HID ni en el resto de targets. Todo lo que Metro dibuja ahí
+  está embebido en el binario (`font_disable_all()` sigue corriendo
+  antes, sin tocarse).
 - `apps/gui/splash.c` (M-037): un solo gancho de una línea —
   `metro_splash_translate(splash_buf, sizeof(splash_buf))`, corre
   justo después de que `vsnprintf()` resuelve el mensaje (con
