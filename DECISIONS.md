@@ -2972,3 +2972,34 @@ práctica: tras `git stash pop`, `touch` de los archivos restaurados.
 
 Capturas: `docs/screenshots/R5-F3-reproductor.png`,
 `R5-F3-volumen-fundido.png`, `R5-F3-limite-volumen.png`.
+
+## M-084 — R5-F4: play/pausa en la barra de estado, y la barra alineada en un solo eje
+
+**Encargo:** *"cuando salgamos del reproductor, necesitamos tener una
+indicación de que hay música en pausa o reproduciéndose… el icono de Play
+o Pausa en la barra de estado a un lado del reloj. Todos los elementos de
+la barra de estado deben estar alineados en su eje horizontal."*
+
+**Qué había.** Título de página y reloj (caption 14 px) en `y=4`, batería
+(9 px) también en `y=4`. Ampliada la captura: los dígitos del reloj
+ocupan las filas 7–15 (centro 11) y la batería las 4–12 (centro 8.5):
+flotaba ~2.5 px por encima del texto. No se notaba a simple vista, pero
+es exactamente la falta de armonía que el dueño describe.
+
+**Decisión.** Un solo eje: el centro vertical de los dígitos (fila 11).
+Batería en `y=7` (7–15, idéntico a los dígitos). Glifo de transporte
+(Fluent 16 px, tinta en filas 2–13 de su celda) en `y=3` → tinta en 5–16,
+centro 10.5. Las tres constantes viven juntas en `metro_draw.c`
+(`METRO_HEADER_*_Y`) para que el próximo elemento de la barra no vuelva
+a inventarse su propia altura.
+
+El glifo va a la **izquierda del reloj** (6 px de aire), solo cuando hay
+audio (sonando o en pausa); sin audio no se dibuja nada. Misma asimetría
+de color de M-073: play en secundario, pausa en acento. Se dibuja en
+`metro_draw_header()`, así que aparece en todas las pantallas —
+incluido el reproductor, donde es redundante con el anillo central pero
+no estorba; hacer que el encabezado supiera "estoy en Now Playing" sería
+acoplar `metro_draw.c` a una pantalla.
+
+Captura: `docs/screenshots/R5-F4-barra-estado.png` (arriba sonando,
+abajo en pausa).

@@ -25,6 +25,8 @@
 #include "timefuncs.h"
 
 #include "metro_draw.h"
+#include "metro_widgets.h"
+#include "audio.h"
 #include "metro_theme.h"
 #include "metro_lang.h"
 
@@ -99,6 +101,11 @@ void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
  * outlined regardless of charge level; a negative battery_level()
  * (charge unknown, e.g. running off USB power in the sim) just draws
  * the empty outline with no fill instead of Rockbox's own "--%". */
+/* R5-F4 (M-084): eje de la barra de estado -- ver metro_draw_header(). */
+#define METRO_HEADER_TEXT_Y     4
+#define METRO_HEADER_ICON_Y     3
+#define METRO_HEADER_BATTERY_Y  7
+
 #define METRO_BATTERY_W     18
 #define METRO_BATTERY_H     9
 #define METRO_BATTERY_NUB_W 2
@@ -133,7 +140,18 @@ void metro_draw_header(const char *page_title)
     char timebuf[8];
     int w, h;
 
-    metro_draw_text(MFONT_CAPTION, METRO_DRAW_LEFT_X, 4, page_title,
+    /* R5-F4 (M-084): todo lo de la barra comparte UN eje horizontal, el
+     * centro vertical de los dígitos del reloj. La caption de 14px
+     * dibujada en y=4 pone su caja de dígitos en y=7..15 (centro 11);
+     * la batería (9px) va en y=7 para ocupar exactamente esas filas, y
+     * el glifo de transporte (16px de celda, ~12px de tinta a partir de
+     * la fila 2 en los Fluent) en y=3 para que su tinta (5..16) quede
+     * centrada ahí mismo. Antes la batería iba en y=4 y flotaba ~2.5px
+     * por encima del texto. */
+    int clock_x = LCD_WIDTH - 40;
+    int status = audio_status();
+
+    metro_draw_text(MFONT_CAPTION, METRO_DRAW_LEFT_X, METRO_HEADER_TEXT_Y, page_title,
                      metro_color_secondary());
 
     if (now != NULL)
@@ -141,11 +159,23 @@ void metro_draw_header(const char *page_title)
         lcd_setfont(metro_font_id(MFONT_CAPTION));
         snprintf(timebuf, sizeof(timebuf), "%02d:%02d", now->tm_hour, now->tm_min);
         lcd_getstringsize((const unsigned char *)timebuf, &w, &h);
-        metro_draw_text(MFONT_CAPTION, LCD_WIDTH - 40 - w, 4, timebuf,
+        clock_x = LCD_WIDTH - 40 - w;
+        metro_draw_text(MFONT_CAPTION, clock_x, METRO_HEADER_TEXT_Y, timebuf,
                          metro_color_secondary());
     }
 
-    metro_draw_battery(LCD_WIDTH - 4, 4);
+    /* R5-F4 (M-084): hay música (sonando o en pausa) -> glifo a la
+     * izquierda del reloj, misma asimetría de color de M-073: play en
+     * secundario (lo normal no grita), pausa en acento (es lo que uno
+     * busca con la mirada cuando no se oye nada). Sin audio, nada. */
+    if (status & AUDIO_STATUS_PAUSE)
+        metro_widgets_draw_icon(METRO_ICON_PAUSE, clock_x - 6 - METRO_ICON_SIZE,
+                                METRO_HEADER_ICON_Y, metro_color_accent());
+    else if (status & AUDIO_STATUS_PLAY)
+        metro_widgets_draw_icon(METRO_ICON_PLAY, clock_x - 6 - METRO_ICON_SIZE,
+                                METRO_HEADER_ICON_Y, metro_color_secondary());
+
+    metro_draw_battery(LCD_WIDTH - 4, METRO_HEADER_BATTERY_Y);
 }
 
 #define METRO_PIVOT_Y      28
