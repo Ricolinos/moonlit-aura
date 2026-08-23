@@ -331,6 +331,17 @@ que el resto del proyecto.
 | H24 | **Residuales**: conectar por USB, dejar que macOS escriba sus `._*`, y confirmar que no aparecen en Fotos/Videos/listas | _(sin responder)_ |
 | H25 | **Rótulo del tile**: ¿se lee sobre carátulas claras y oscuras? | _(sin responder)_ |
 
+### Nuevo en la ronda 5
+
+| # | Qué probar | Resultado |
+|---|---|---|
+| H26 | **"Acerca de" ya no se traba** (M-081): desde Ajustes › Pantalla, pasar al pivot "acerca de" con el disco detenido. Debe entrar y mostrar los contadores del último sync | _(sin responder)_ |
+| H27 | **Menús de Ajustes** (pendiente de M-081): ¿la fila "temporizador de sueño" dice eso y cicla minutos, y "ecualizador" dice eso y cicla presets? Si sigue desacomodado: foto + `shasum -a 256 /Volumes/IPOD/.rockbox/rockbox.ipod` | _(sin responder)_ |
+| H28 | **"ll"** (M-082): "pantalla" en el pivot, "brillo" en la fila. ¿Se distinguen las dos eles en el panel real? | _(sin responder)_ |
+| H29 | **Reproductor** (M-083): anillos nítidos sin halo; nivel de volumen aparece al girar, 3 s quieto, 1 s de fundido; cada muesca = un nivel; límite de volumen recorta de inmediato | _(sin responder)_ |
+| H30 | **Barra de estado** (M-084): play/pausa junto al reloj, los tres sobre el mismo eje a simple vista | _(sin responder)_ |
+| H31 | **Hub** (M-085): marquesina fluida a 25 px/s (¿se nota el tick de 20 Hz?); respiración en pausa; CPU/batería tras 10 min en el hub con música sonando | _(sin responder)_ |
+
 ### Lo que solo el hardware puede decir
 
 Tres cosas de la ronda 3 están verificadas **por vía indirecta** en el
