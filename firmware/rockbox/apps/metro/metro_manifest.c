@@ -93,3 +93,16 @@ bool metro_manifest_load(metro_manifest_t *out)
     close(fd);
     return true;
 }
+
+static metro_manifest_t s_cached;
+static bool s_cached_valid = false;
+
+void metro_manifest_reload(void)
+{
+    s_cached_valid = metro_manifest_load(&s_cached);
+}
+
+const metro_manifest_t *metro_manifest_cached(void)
+{
+    return s_cached_valid ? &s_cached : NULL;
+}

@@ -2781,3 +2781,55 @@ por igual: Álbumes, Artistas, Quickplay y Fotos.
 subtítulo de artista) y `R4-orden-acentos.png` (artista sin subtítulo —
 y de paso muestra la "Á" en primer lugar, la comprobación visual de
 M-079).
+
+## M-081 — R5-F1: "Acerca de" dejaba de responder en el iPod — leía disco en cada fila, en cada cuadro
+
+**Síntoma reportado por el dueño (hardware real, v0.4.0):** al pasar al
+pivot "acerca de" desde "pantalla", el iPod se queda en "pantalla". En el
+simulador jamás ocurrió.
+
+**Causa.** `metro_screen_about.c` llamaba `metro_manifest_load()` —un
+`open()` + parseo línea a línea + `close()` de `sync_summary.cfg`— dentro
+de `about_count()` **y dentro de `about_get_row()`**, es decir una vez por
+fila. Y ambos proveedores corren **por cuadro**: la transición de pivot
+(SLIDE) redibuja todas las filas en cada tick. Con ~12 filas, eso son ~13
+aperturas de archivo por cuadro durante toda la animación. "Pantalla", el
+pivot de al lado, no toca disco en ninguna fila: ésa era la única
+diferencia entre el que funcionaba y el que no.
+
+En el simulador el `open()` va al sistema de archivos del host y cuesta
+microsegundos; en el iPod pasa por la capa FAT de Rockbox hacia un disco
+de 1.8" que además puede estar detenido. Es una violación literal de la
+regla del `CLAUDE.md` ("ninguna lectura de disco dentro de un bucle de
+animación por cuadro") que el simulador no tenía forma de revelar.
+
+**Decisión.** `metro_manifest` gana una copia en RAM:
+`metro_manifest_reload()` + `metro_manifest_cached()`. Se recarga en
+`metro_disk_handoff()` (`metro_main.c`), junto a `metro_device_reload()`,
+que ya seguía exactamente este patrón por la misma razón: son los **dos
+únicos** momentos en que el firmware recupera el disco (arranque y regreso
+de la pantalla USB), y `sync_summary.cfg` lo escribe exclusivamente Aura
+Studio por USB — no puede cambiar en ningún otro momento. Los proveedores
+de About leen la copia; `metro_manifest_load()` queda documentado como
+"toca disco, no llamar por cuadro".
+
+**Auditoría de paso.** Se revisaron todos los `count()`/`get_row()` de
+`apps/metro/` buscando I/O: About era el único. Los tiles pasan por el
+caché de miniaturas de R3-F1, diseñado para eso. También se separó el
+`static char buf[16]` que compartían las filas de brillo y
+retroiluminación en `display_get_row()` — hoy inocuo porque cada fila se
+dibuja justo después de pedirla, pero es una trampa para cualquier
+llamador que guarde dos `struct metro_row`.
+
+**Verificado** en simulador con un `sync_summary.cfg` de 13 claves: el
+pivot muestra los contadores reales desde el caché. La comprobación
+definitiva (que el iPod ya no se trabe) requiere hardware: pendiente del
+dueño con el Release siguiente.
+
+**Pendiente de evidencia (mismo encargo):** los menús de Ajustes
+"desacomodados" (fila rotulada "ecualizador" cuyos valores son minutos).
+No se encontró una causa en el código: HEAD es el tag `v0.4.0`, el
+catálogo de `metro_lang.c` usa inicializadores designados, y título y
+subtítulo de una fila salen de la misma llamada a `get_row`. Falta
+comparar el hash del `rockbox.ipod` instalado contra el del Release y ver
+una foto de la pantalla antes de tocar nada.

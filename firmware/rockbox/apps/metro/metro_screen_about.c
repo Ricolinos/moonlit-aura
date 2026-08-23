@@ -43,18 +43,26 @@ static int synced_row_count(const metro_manifest_t *m)
     return n;
 }
 
+/* R5-F1 (M-081): both providers run per FRAME (the pivot slide redraws
+ * every row each tick), so they read the RAM copy that
+ * metro_disk_handoff() refreshes -- never the disk. The previous
+ * metro_manifest_load() here (open + parse + close of sync_summary.cfg,
+ * once per row per frame) is what wedged the real iPod on entering
+ * About while the simulator, backed by the host filesystem, showed
+ * nothing wrong. */
 static int about_count(void *ctx)
 {
-    metro_manifest_t m;
+    const metro_manifest_t *m = metro_manifest_cached();
     (void)ctx;
-    return 2 + (metro_manifest_load(&m) ? synced_row_count(&m) : 1);
+    return 2 + (m ? synced_row_count(m) : 1);
 }
 
 static void about_get_row(void *ctx, int index, struct metro_row *out)
 {
     static char buf[64];
+    const metro_manifest_t *mp = metro_manifest_cached();
     metro_manifest_t m;
-    bool synced;
+    bool synced = (mp != NULL);
     const char *name;
 
     (void)ctx;
@@ -68,7 +76,8 @@ static void about_get_row(void *ctx, int index, struct metro_row *out)
         return;
     }
 
-    synced = metro_manifest_load(&m);
+    if (synced)
+        m = *mp;
 
     if (!synced)
     {

@@ -322,7 +322,12 @@ static int display_count(void *ctx)
 
 static void display_get_row(void *ctx, int index, struct metro_row *out)
 {
-    static char buf[16];
+    /* One buffer per row that formats a value -- rows are drawn
+     * straight after get_row today, but a shared buffer would silently
+     * show the last-formatted value on both rows the moment a caller
+     * keeps two struct metro_row around (R5-F1 audit). */
+    static char brightness_buf[16];
+    static char backlight_buf[16];
 
     (void)ctx;
     out->kind = METRO_ROW_SETTING;
@@ -340,9 +345,9 @@ static void display_get_row(void *ctx, int index, struct metro_row *out)
             break;
         case 2:
             out->title = metro_lang_str(LANG_SETTING_BRIGHTNESS);
-            snprintf(buf, sizeof(buf), "%d%%",
+            snprintf(brightness_buf, sizeof(brightness_buf), "%d%%",
                      global_settings.brightness * 100 / MAX_BRIGHTNESS_SETTING);
-            out->subtitle = buf;
+            out->subtitle = brightness_buf;
             break;
         default:
             out->title = metro_lang_str(LANG_SETTING_BACKLIGHT);
@@ -350,8 +355,9 @@ static void display_get_row(void *ctx, int index, struct metro_row *out)
                 out->subtitle = metro_lang_str(LANG_VALUE_NEVER);
             else
             {
-                snprintf(buf, sizeof(buf), "%ds", global_settings.backlight_timeout);
-                out->subtitle = buf;
+                snprintf(backlight_buf, sizeof(backlight_buf), "%ds",
+                         global_settings.backlight_timeout);
+                out->subtitle = backlight_buf;
             }
             break;
     }

@@ -46,6 +46,7 @@
 #include "metro_settings.h"
 #include "metro_sync.h"
 #include "metro_device.h"
+#include "metro_manifest.h"
 #include "metro_transitions.h"
 #include "metro_thumbs.h"
 #include "metro_screen_photo_viewer.h"
@@ -192,6 +193,7 @@ static void metro_disk_handoff(void)
      * them. */
     metro_ensure_media_dirs();
     metro_device_reload();
+    metro_manifest_reload(); /* R5-F1 (M-081): About reads the RAM copy */
     metro_sync_check_pending();
     metro_run_sync_screen_if_needed();
 }

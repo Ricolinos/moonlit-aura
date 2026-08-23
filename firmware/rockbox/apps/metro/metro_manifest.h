@@ -57,7 +57,23 @@ typedef struct {
 } metro_manifest_t;
 
 /* False if sync_summary.cfg doesn't exist yet (device never synced
- * from Studio) -- *out is zeroed either way, never left uninitialized. */
+ * from Studio) -- *out is zeroed either way, never left uninitialized.
+ *
+ * Touches the disk (open/read/close). Screens must NOT call this from
+ * count()/get_row() providers or anything else that runs per frame --
+ * use metro_manifest_cached() below. R5-F1 (M-081): About did exactly
+ * that and froze the real iPod (the simulator's host filesystem hid
+ * it). */
 bool metro_manifest_load(metro_manifest_t *out);
+
+/* R5-F1 (M-081): in-RAM copy of the manifest, refreshed only at the two
+ * moments the firmware recovers the disk (boot and every return from
+ * the USB screen -- metro_disk_handoff(), same as metro_device_reload())
+ * because sync_summary.cfg is written exclusively by Aura Studio over
+ * USB. Returns NULL when the device has never been synced; otherwise a
+ * pointer that stays valid until the next reload. Free to call per
+ * frame. */
+void metro_manifest_reload(void);
+const metro_manifest_t *metro_manifest_cached(void);
 
 #endif /* METRO_MANIFEST_H */
