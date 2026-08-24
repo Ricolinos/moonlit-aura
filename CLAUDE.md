@@ -71,6 +71,22 @@ y `docs/COMPAT_STUDIO.md` (checklist vivo de este repo). El contrato es
 inmutable desde este lado: Metro-Aura consume el formato tal como está
 documentado, nunca lo redefine unilateralmente.
 
+**Releases y actualizaciones selectivas (contrato v11).** Publicar un
+release = commit limpio + tag `vX.Y.Z` + `firmware/tools/package_dist.sh
+--release-tag vX.Y.Z` + GitHub Release con los mismos assets que define
+la tabla §A del contrato (repo `Ricolinos/Metro-Aura`, canal v9). No hay
+nada que "configurar" para que la actualización sea selectiva: Aura
+Studio calcula el delta solo, comparando los CRC32 del directorio
+central del `rockbox.zip` nuevo contra el manifiesto de lo instalado
+(`.rockbox/aura/install_manifest.cfg` — este firmware lo IGNORA y no
+adopta ese nombre de archivo para otra cosa). Lo único que este repo
+debe cuidar es **no romper la reproducibilidad del build**: nada de
+`__DATE__`/`__TIME__`, timestamps ni aleatoriedad en archivos generados
+que viajen dentro de `rockbox.zip` — entre releases consecutivos hoy
+cambian ~5 archivos de 405 (solo los de versión). El release llega al
+iPod cuando **Aura-Studio** actualiza su pin (`FIRMWARE_VERSION`:
+`metro.tag=` + hashes `metro.*`) — trabajo del repo hermano, no de este.
+
 ## Documentos de trabajo
 
 - `docs/plans/PLAN_INVESTIGACION.md`, `docs/plans/INVESTIGACION.md`,
