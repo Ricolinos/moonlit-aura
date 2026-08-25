@@ -128,7 +128,8 @@ void metro_settings_save(void)
     if (fd < 0)
         return;
 
-    fdprintf(fd, "firmware_family: metro\n");
+    /* moonlit (D-001): family string, read by Aura Studio off the disk. */
+    fdprintf(fd, "firmware_family: moonlit\n");
     fdprintf(fd, "sync_marker_supported: 1\n");
     fdprintf(fd, "theme: %d\n", (int)metro_settings.theme);
     fdprintf(fd, "accent: %d\n", (int)metro_settings.accent);
@@ -213,13 +214,15 @@ void metro_ensure_media_dirs(void)
 
 void metro_settings_metro_cache_dir(const char *subdir, char *out, size_t outsz)
 {
-    snprintf(out, outsz, "%s/metrocache/%s", METRO_DIR, subdir);
+    /* moonlit (D-001/D-023): own cache tree, never the Metro one --
+     * both families may coexist on one device (COMPAT C23). */
+    snprintf(out, outsz, "%s/moonlitcache/%s", METRO_DIR, subdir);
 }
 
 /* R3-F3/DD-6 (M-064): Studio's own index + photo cache -- distinct
  * from metro_settings_metro_cache_dir("artists", ...) above, which is
  * Metro's OWN derived 80x80 tile cache
- * (.../aura/metrocache/artists/). These two point at
+ * (.../aura/moonlitcache/artists/). These two point at
  * .../aura/artist_images.cfg and .../aura/artists/ respectively --
  * Studio writes both, Metro only ever reads them. */
 void metro_settings_artist_images_cfg_path(char *out, size_t outsz)
@@ -243,7 +246,8 @@ void metro_settings_ratings_cfg_path(char *out, size_t outsz)
 
 #define METRO_FW_ACTIVE_DIR    ROCKBOX_DIR        /* "/.rockbox" */
 #define METRO_FW_DORMANT_AURA  "/.firmware-aura"
-#define METRO_FW_DORMANT_METRO "/.firmware-metro"
+/* moonlit (D-001, contract v10): our own dormant tree name. */
+#define METRO_FW_DORMANT_METRO "/.firmware-moonlit"
 #define METRO_FW_ROOT_BINARY   "/rockbox.ipod"
 #define METRO_FW_TREE_BINARY   ROCKBOX_DIR "/rockbox.ipod"
 

@@ -139,3 +139,24 @@ export/font.h:51` define `MAXUSERFONTS 12`. Metro usa 5 roles
 moonlit (plan §C.3) tiene 8 roles (7 si PA-6 elimina `MFONT_ACCENT`)
 ≤ 12. **Decisión**: se conserva el define; H2 no requiere auditoría de
 buflib.
+
+---
+
+# Hito H1 — identidad en runtime y contrato (D-023…)
+
+**D-023 — Ruta exacta de la caché propia: `/.rockbox/aura/moonlitcache/`
+(precisa D-001).** D-001 abrevia la ruta como `/.rockbox/moonlitcache/`;
+el plan (§F.1 §A.4, `CLAUDE.md`) y el código heredado la sitúan bajo
+`.rockbox/aura/`: `metro_settings_metro_cache_dir()` compone
+`METRO_DIR "/…"` con `METRO_DIR = ROCKBOX_DIR "/aura"`
+(`apps/metro/metro_settings.c:39,216`). **Decisión**: se conserva el
+padre `.rockbox/aura/` (COMPAT C23: árbol interno que Studio ignora y
+que la limpieza entre familias borra junto con `photocache/`/
+`cfcache/`) y solo cambia el nombre de la hoja: `metrocache/` →
+`moonlitcache/`. Misma pasada: `firmware_family: moonlit`
+(`metro_settings.c:131`) y árbol dormido `/.firmware-moonlit`
+(`metro_settings.c:246`, contrato v10) — el cambio a Aura por renombre
+(M-090) queda intacto salvo por el nombre del árbol saliente. La única
+función que compone la ruta de caché sigue siendo
+`metro_settings_metro_cache_dir()` (regla de rutas de `CLAUDE.md`);
+`metro_thumbs.c` no cambia de código, solo de comentario.

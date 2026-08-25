@@ -41,7 +41,7 @@ accent_name() { case "$1" in 0) echo blue ;; 4) echo magenta ;; 3) echo lime ;; 
 write_cfg() {
   local theme="$1" accent="$2"
   cat > "$AURA_CFG" <<EOF
-firmware_family: metro
+firmware_family: moonlit
 sync_marker_supported: 1
 theme: $theme
 accent: $accent

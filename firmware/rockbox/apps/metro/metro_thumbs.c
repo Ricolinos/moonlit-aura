@@ -131,8 +131,8 @@ static void ensure_cache_dir(const struct metro_thumb_source *source)
         *slash = '\0';
 
     /* .../aura already exists (metro_settings_save() creates it on
-     * first boot) -- only "metrocache" (parent) and
-     * "metrocache/<subdir>" (dir) are ever missing here. */
+     * first boot) -- only "moonlitcache" (parent) and
+     * "moonlitcache/<subdir>" (dir) are ever missing here. */
     if (!dir_exists(parent))
         mkdir(parent);
     if (!dir_exists(dir))

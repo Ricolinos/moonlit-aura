@@ -106,7 +106,8 @@ void metro_settings_apply_pending_clock(void);
  * disk mounted. */
 void metro_ensure_media_dirs(void);
 
-/* R2-F2/DD-9 (M-057), generalized R3-F1/DD-1: .../aura/metrocache/<subdir>/
+/* R2-F2/DD-9 (M-057), generalized R3-F1/DD-1: .../aura/moonlitcache/<subdir>/
+ * (moonlit, D-001: renamed from the Metro cache name so both families coexist)
  * -- Metro's own on-disk thumbnail cache, one subdirectory per source
  * (NOT Aura's photocache/: format and thumbnail size differ, and
  * family-switch cleanup wipes that one anyway). The only function
@@ -144,7 +145,7 @@ bool metro_firmware_aura_installed(void);
  *   1. guarda todo lo de Metro (aura.cfg, config.cfg, cola de tagcache)
  *      y fuerza el vaciado a disco -- despues del renombre /.rockbox es
  *      el arbol de AURA y cualquier escritura tardia caeria alli;
- *   2. /.rockbox -> /.firmware-metro (saliente primero: el peor corte
+ *   2. /.rockbox -> /.firmware-moonlit (saliente primero: el peor corte
  *      deja un dormido entero; Studio repara al conectar);
  *   3. /.firmware-aura -> /.rockbox;
  *   4. copia /.rockbox/rockbox.ipod (ya el de Aura) sobre /rockbox.ipod,
@@ -154,7 +155,7 @@ bool metro_firmware_aura_installed(void);
  *      que volveria a guardar los ajustes de Metro... en el arbol de Aura.
  * Solo vuelve si fallo antes de tocar nada, o si el paso 3 fallo y el
  * 2 se pudo deshacer (devuelve false; el firmware sigue siendo Metro).
- * Si ya existe /.firmware-metro (no deberia: Studio garantiza "nunca
+ * Si ya existe /.firmware-moonlit (no deberia: Studio garantiza "nunca
  * dos de la misma familia") aborta sin tocar nada en vez de borrarlo. */
 bool metro_firmware_switch_to_aura(void);
 
