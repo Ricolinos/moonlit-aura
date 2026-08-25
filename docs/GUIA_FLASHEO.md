@@ -43,19 +43,27 @@ sección "Dual-Boot") — Metro-Aura lo hereda sin modificarlo.
 > `--bl-inst --single` es que el segundo lo dice de frente. Aura Studio
 > ya instala siempre en modo single por esto.
 
-## Advertencia: riesgo con Aura Studio (`DECISIONS.md` M-004)
+## Advertencia: riesgo con Aura Studio (`DECISIONS.md` D-021, heredado de Metro M-004)
 
 Si tienes **Aura Studio** instalado (la app hermana de este proyecto)
-con el firmware de Aura embebido, y conectas un iPod con Metro-Aura,
-`AuraUpdateChecker` de esa app compara hashes — no van a coincidir, y
-puede ofrecerte "actualizar", lo que **sobrescribiría Metro-Aura con
-Aura** si aceptas. Metro-Aura escribe una clave propia
-(`firmware_family: metro` en `aura.cfg`) para que un futuro Aura
-Studio pueda reconocerlo y no ofrecer esa acción, pero esa lectura del
-lado de Aura Studio no existe todavía (trabajo en ese otro
-repositorio, fuera de alcance aquí) — **no aceptes una actualización
-de Aura Studio sobre un iPod con Metro-Aura instalado** hasta que ese
-soporte exista.
+con el firmware de Aura embebido, y conectas un iPod con moonlit.aura:
+
+- Un Studio **anterior a ST-045** compara hashes de `rockbox.ipod`
+  (`AuraUpdateChecker`) — no van a coincidir, y puede ofrecerte
+  "actualizar", lo que **sobrescribiría moonlit.aura con Aura** si
+  aceptas.
+- Un Studio **con ST-045 o posterior** distingue familias por la clave
+  `firmware_family` de `aura.cfg`, pero **no conoce la familia
+  `moonlit`** hasta que se ejecute el cambio descrito en
+  `docs/plans/PROMPT-aura-studio.md` (D-017). Mientras tanto puede
+  ofrecerte volver a Aura **o a Metro**, y no ofrece actualizaciones de
+  moonlit.
+
+moonlit.aura escribe `firmware_family: moonlit` en `aura.cfg`
+(`CONTRATO-moonlit-studio.md` §A.1) precisamente para que ese Studio
+futuro lo reconozca. Hasta que exista: **no aceptes una actualización
+ni un cambio de familia desde Aura Studio sobre un iPod con moonlit.aura
+instalado**. No hay mitigación posible desde este repositorio.
 
 ## Requisitos previos
 

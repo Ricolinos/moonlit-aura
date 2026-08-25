@@ -160,3 +160,19 @@ que la limpieza entre familias borra junto con `photocache/`/
 función que compone la ruta de caché sigue siendo
 `metro_settings_metro_cache_dir()` (regla de rutas de `CLAUDE.md`);
 `metro_thumbs.c` no cambia de código, solo de comentario.
+
+**D-024 — `CONTRATO-moonlit-studio.md` v1: cierra PA-4 y PA-7.** El
+contrato propio referencia (no copia) `CONTRATO-firmware-studio.md`
+v13, `CONTRATO-dispositivo.md` v2 y `library-layout-v1.md` v1.3 de
+`Aura-Firmware`. Decisiones que fija: (a) **PA-4 → opción (a)**: la
+frontera GPL se versiona con la etiqueta `BOOT-1` además del SHA-256,
+porque el hash cambia en cada recompilación (RBVERSION embebido) y no
+sirve como versión de fuente; sube a `BOOT-2` solo si cambia
+`bootloader/ipod-s5l87xx.c` o `utils/mks5lboot/`. (b) **PA-7 → opción
+(a)**: centinela de árbol instalado `/.rockbox/fonts/moonlit-body-18.fnt`
+(patrón "familia por fuente" que Studio ya usa); H2 materializa el
+archivo. (c) Los cambios en Studio siguen siendo prompt aparte
+(`docs/plans/PROMPT-aura-studio.md`, D-017); la corrección del rango
+de `convttf` en los hermanos, `docs/plans/PROMPT-hermanos-gen-fonts.md`
+(D-007). Numeración: este registro desplaza en uno los D-0xx que el
+plan §G cita como orientativos para H6/H7 (D-024 → D-025, etc.).

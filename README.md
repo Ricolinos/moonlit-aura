@@ -52,6 +52,10 @@ y árbol dormido `/.firmware-moonlit/` (D-001). Los cambios necesarios
 en Studio para reconocer esta familia son trabajo del repo hermano
 (D-017), no de este.
 
+Lo que moonlit.aura garantiza y requiere de Studio está cerrado en
+`CONTRATO-moonlit-studio.md` (v1), que referencia —no copia— los
+contratos canónicos de `Aura-Firmware` (v13, v2, v1.3).
+
 **Advertencia**: una versión de Aura Studio que no conozca la familia
 `moonlit` puede ofrecer "actualizar" el iPod de vuelta a Aura o Metro
 — ver `DECISIONS.md` D-021 y `docs/GUIA_FLASHEO.md`.
