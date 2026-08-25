@@ -21,3 +21,7 @@ firmware/tools/.venv/
 
 # Binarios de los tests host-side (make -C firmware/rockbox/apps/metro/test)
 firmware/rockbox/apps/metro/test/build/
+
+# venv del sistema de diseño (design-system/generate.py) y su salida no versionada
+design-system/.venv/
+design-system/out/
