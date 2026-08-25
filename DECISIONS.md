@@ -202,3 +202,50 @@ usa el mismo bitmap por máscara (`metro_screen_usb.c`). D-016 sigue
 vigente: el wordmark definitivo en Libre Baskerville y el logotipo
 llegan en H5. Además, el prompt `[Aura Studio]` incorpora
 `moonlitcache/` a la limpieza de convivencia entre familias (C23).
+
+# Hito M1 — tokens MD3 y generador JSON→C (D-027…D-031)
+
+Cierran `docs/plan/04-auditoria-brecha.md` (H2 nunca ejecutado) y abren
+`docs/plan/05-plan-correctivo.md`. Fijadas en la sesión que redactó ese
+plan (§II.0), registradas aquí al ejecutar M1.
+
+**D-027 — Dos esquemas MD3 desde el primer hito.** `night` (oscuro,
+predeterminado) y `dawn` (claro). Mapean al ajuste `theme` existente
+(`metro_theme.h:30-33`, resolvers `metro_theme.c:67-87`; persistencia en
+`metro_settings.c` queda para M4). Sustituye a PA-5 del plan 03.
+Implementada en M1: `design-system/tokens.json` (`color.night`,
+`color.dawn`).
+
+**D-028 — Vocabulario MD3 obligatorio en tokens.** 16 roles por esquema:
+`primary`, `on_primary`, `primary_container`, `on_primary_container`,
+`surface`, `surface_dim`, `surface_bright`, `surface_container_lowest`,
+`surface_container_low`, `surface_container`, `surface_container_high`,
+`surface_container_highest`, `on_surface`, `on_surface_variant`,
+`outline`, `outline_variant`. El acento dinámico de Metro **es**
+`primary` (los 4 presets de `color.primary_presets` —moonstone, tide,
+ember, moss— sustituyen a los 10 acentos WP7 de `enum metro_accent`,
+`metro_theme.h:35-47`; el remplazo del enum en C queda para M4). La
+escala `bg/surface_0..2` del plan 03 §B.1 se descarta. Elevación tonal =
+niveles `surface_container_*` (MD3) más el par luz/sombra de D-012,
+precalculado por `generate.py` (`MOONLIT_<esquema>_<nivel>_EDGE_LIGHT` /
+`_EDGE_SHADOW`, delta de `tokens.json:elevation`). Implementada en M1:
+`design-system/tokens.json`, `design-system/generate.py`
+(`generate_header`, `rgb_defines`, `edge_rgb`), verificado en
+`firmware/rockbox/apps/metro/test/test_tokens.c`.
+
+**D-029 — Marea convive con Álbumes.** Pivote nuevo en `music_page`
+(`metro_screen_hub.c:606-623`); la rejilla se conserva. Se registra en
+M1 (decisión de alcance); se implementa en M8.
+
+**D-030 — Layout de Marea.** Columna de portadas a la izquierda
+(x ∈ [0,152)), información del álbum a la derecha (x ∈ [160,320)):
+título en `MFONT_HEADLINE`, artista en `MFONT_BODY`, "N canciones" en
+`MFONT_LABEL`. Sustituye la geometría centrada de plan 03 §D.1. Se
+registra en M1 (decisión de alcance); se implementa en M8.
+
+**D-031 — Nombres de archivo de fuente por rol.** `moonlit-<rol>-<px>.fnt`
+(el centinela `moonlit-body-18.fnt` ya está en `CONTRATO-moonlit-studio.md`
+§A.8 y en `docs/plans/PROMPT-aura-studio.md`; cambiarlo rompería el
+contrato). El nombre de familia va en la cabecera del `.fnt` y en
+`tokens.json`, no en el nombre de archivo. Se registra en M1 (decisión
+de alcance); se implementa en M2.
