@@ -31,24 +31,17 @@
 
 static void draw_wordmark(void)
 {
-    /* R5 (M-092): wordmark y, debajo, "aura" -- la familia, en el
-     * cuerpo de título y color secundario. moonlit H1 (D-001): el
-     * wordmark sale de la tabla de strings ("moonlit"); el bitmap
-     * embebido "metro / aura" de la pantalla USB (gen_logo.py) se
-     * reemplaza en H5 junto con el logotipo. */
+    /* moonlit (D-026): one-line provisional wordmark "moonlit.aura" from
+     * the string table (the "metro"/"aura" pair of M-092 is retired);
+     * H5 replaces it with the Waning Crescent logo (D-016). */
     const char *text = metro_lang_str(LANG_WORDMARK);
-    const char *sub = "aura";
-    int w, h, sw, sh, top;
+    int w, h, top;
 
     metro_draw_clear();
     lcd_setfont(metro_font_id(MFONT_DISPLAY));
     lcd_getstringsize((const unsigned char *)text, &w, &h);
-    lcd_setfont(metro_font_id(MFONT_TITLE));
-    lcd_getstringsize((const unsigned char *)sub, &sw, &sh);
-    top = (LCD_HEIGHT - (h + 4 + sh)) / 2;
+    top = (LCD_HEIGHT - h) / 2;
     metro_draw_text(MFONT_DISPLAY, (LCD_WIDTH - w) / 2, top, text, metro_color_fg());
-    metro_draw_text(MFONT_TITLE, (LCD_WIDTH - sw) / 2, top + h + 4, sub,
-                     metro_color_secondary());
 }
 
 void metro_screen_splash_show(void)
@@ -65,15 +58,10 @@ void metro_screen_splash_progress(int pct)
 
     draw_wordmark();
 
-    /* Debajo del bloque metro+aura (M-092). */
-    {
-        int sw, sh;
-        lcd_setfont(metro_font_id(MFONT_DISPLAY));
-        lcd_getstringsize((const unsigned char *)metro_lang_str(LANG_WORDMARK), &w, &h);
-        lcd_setfont(metro_font_id(MFONT_TITLE));
-        lcd_getstringsize((const unsigned char *)"aura", &sw, &sh);
-        bar_y = (LCD_HEIGHT - (h + 4 + sh)) / 2 + h + 4 + sh + METRO_SPLASH_BAR_GAP;
-    }
+    /* Below the one-line wordmark (D-026). */
+    lcd_setfont(metro_font_id(MFONT_DISPLAY));
+    lcd_getstringsize((const unsigned char *)metro_lang_str(LANG_WORDMARK), &w, &h);
+    bar_y = (LCD_HEIGHT - h) / 2 + h + METRO_SPLASH_BAR_GAP;
 
     metro_draw_progress(bar_x, bar_y, METRO_SPLASH_BAR_WIDTH, METRO_SPLASH_BAR_HEIGHT, pct);
     lcd_update();

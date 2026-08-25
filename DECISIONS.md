@@ -190,3 +190,15 @@ listado en `MODIFICATIONS.md`), no un `-I` global. H3 vuelve a tocar
 esta línea al sustituir `metro_palette.h` por `moonlit_palette.h`; el
 prompt `[Metro-Aura]` de `docs/plans/PROMPT-hermanos-gen-fonts.md`
 debería recibir este hallazgo como ítem aparte (no se ejecuta aquí).
+
+**D-026 — Wordmark provisional "moonlit.aura" hasta H5 (decisión del
+dueño, cierre de H1).** El par "metro"/"aura" de M-092 se retira ya, no
+en H5: `gen_logo.py` genera `rockboxlogo.320x98x16.bmp` con la única
+línea "moonlit.aura" (todavía en Selawik Light, que H2 elimina junto con
+`fonts-src/`; en ese hito el generador pasa a Libre Baskerville o se
+retira si H5 ya está cerca), `metro_screen_splash.c` dibuja
+`LANG_WORDMARK` = "moonlit.aura" en una sola línea, y la pantalla USB
+usa el mismo bitmap por máscara (`metro_screen_usb.c`). D-016 sigue
+vigente: el wordmark definitivo en Libre Baskerville y el logotipo
+llegan en H5. Además, el prompt `[Aura Studio]` incorpora
+`moonlitcache/` a la limpieza de convivencia entre familias (C23).

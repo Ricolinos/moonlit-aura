@@ -13,6 +13,8 @@ Solo lectura de moonlit-aura/CONTRATO-moonlit-studio.md v1. Cambios, todos en Au
 - Views/ExtrasView.swift:75-97 entrada de UI (patrón Metro).
 - scripts/fetch-firmware.sh:49-57,157 bloque moonlit. project.yml:72,119-121 recurso de bundle moonlit.
 - FIRMWARE_VERSION.example: bloque moonlit.* (mismo formato que metro.*, líneas 13-20).
+- Limpieza de convivencia entre familias (la que hoy borra metrocache/, photocache/ y cfcache/ al cambiar
+  de familia en un mismo iPod): añadir /.rockbox/aura/moonlitcache/ a esa lista (CONTRATO-moonlit-studio.md §A.4).
 No requieren cambio: GitHubReleaseChecker, AuraUpdateChecker, BundledArtifacts (genéricos por familia).
 Registrar como ST-NNN. Verificar con un iPod que tenga moonlit instalado (C20).
 ```

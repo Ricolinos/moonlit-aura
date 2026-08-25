@@ -26,7 +26,7 @@
  * would risk real corruption. So no Metro font, no album art, no
  * icons from disk. What IS safe: metro_theme's colours (an enum in
  * RAM), the icon table (metro_icons_table.c, compiled in), and the
- * "metro" wordmark -- bm_rockboxlogo, the 320x98 bitmap gen_logo.py
+ * "moonlit.aura" wordmark (D-026) -- bm_rockboxlogo, the 320x98 bitmap gen_logo.py
  * generates into apps/bitmaps/native/ and bmp2rb compiles into the
  * binary. It is white-on-black with anti-aliasing baked in, so it is
  * drawn here as a MASK: each pixel's luminance becomes the blend

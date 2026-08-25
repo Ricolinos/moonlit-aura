@@ -290,3 +290,8 @@ Ver `DECISIONS.md` M-061.
   (`build_sim.sh --reconfigure`) abortaba con "No rule to make target".
   En Metro-Aura no se notó porque su `make.dep` es anterior a M-059.
   Comentario inline `moonlit (D-025)`.
+- `apps/bitmaps/native/rockboxlogo.320x98x16.bmp` (moonlit H1, D-026):
+  regenerado con `firmware/tools/gen_logo.py` como wordmark provisional
+  de una sola línea "moonlit.aura" (misma tipografía Selawik Light hasta
+  H2, mismas dimensiones 320×98; `bitmaps.make` sin cambios). H5 lo
+  sustituye por el logotipo Waning Crescent.
