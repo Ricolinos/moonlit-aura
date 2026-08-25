@@ -6,6 +6,12 @@ modificación.
 
 ## Origen
 
+moonlit.aura es a su vez un fork de Metro-Aura a partir del tag
+`moonlit-fork-base` (commit `2f1bd28a693b52a3554ecd8b4524ae1afa8e975d`,
+2026-08-25). Todo lo que sigue en este archivo aplica tal cual a
+moonlit.aura; las modificaciones nuevas fuera de `apps/metro/` se
+anotan más abajo marcadas `moonlit (D-NNN)`.
+
 Este repositorio es un fork de [Rockbox](https://www.rockbox.org/)
 (espejo [github.com/Rockbox/rockbox](https://github.com/Rockbox/rockbox)),
 software libre bajo GPL v2. Rockbox se importó a `firmware/rockbox/`

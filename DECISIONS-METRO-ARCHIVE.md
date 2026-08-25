@@ -1,3 +1,5 @@
+> **ARCHIVO DE SOLO LECTURA (moonlit.aura).** Bitácora heredada de Metro-Aura tal como estaba en `moonlit-fork-base` (2f1bd28a). Las referencias M-NNN de código y documentos heredados apuntan aquí. No se añaden entradas: las decisiones de moonlit.aura viven en `DECISIONS.md` (D-001+).
+
 # DECISIONS.md — Registro de decisiones técnicas (Metro-Aura)
 
 Bitácora de decisiones tomadas en este repositorio, numeración

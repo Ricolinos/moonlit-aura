@@ -1,3 +1,5 @@
+ESTADO: HISTÓRICO — plan de Metro-Aura, ejecutado íntegramente antes del fork (`moonlit-fork-base`, 2f1bd28a). No es trabajo pendiente de moonlit.aura; se conserva como registro. Decisiones vigentes: `DECISIONS.md`.
+
 # PLAN DE INVESTIGACIÓN — Metro-Aura
 
 **Fase 1 del proyecto Metro-Aura.** Este documento es un plan: no contiene

@@ -1,3 +1,5 @@
+ESTADO: HISTÓRICO — plan de Metro-Aura, ejecutado íntegramente antes del fork (`moonlit-fork-base`, 2f1bd28a). No es trabajo pendiente de moonlit.aura; se conserva como registro. Decisiones vigentes: `DECISIONS.md`.
+
 # PLAN MAESTRO — Metro-Aura
 
 **Fase 3 del proyecto Metro-Aura.** Este documento convierte `INVESTIGACION.md` en un plan de ejecución: qué se construye, en qué archivos, en qué orden y con qué criterio de "hecho". La Fase 4 lo ejecuta fase por fase sin re-explorar el código; si un dato del plan resulta falso (archivo inexistente, API distinta), la Fase 4 corrige y anota la desviación en `docs/DESVIACIONES.md` — nunca cambia una decisión de diseño por preferencia propia.
