@@ -1,100 +1,33 @@
-# Metro-Aura
+# moonlit.aura
 
-Firmware "Metro" para iPod Classic 6G, fork de Rockbox. Ver `README.md`
-para qué es el proyecto y `docs/plans/PLAN_MAESTRO.md` para el plan
-completo de ejecución.
+Firmware para iPod Classic 6G (S5L8702, 320×240, 64 MB, sin GPU, sin FPU), fork de
+Metro-Aura (tag `moonlit-fork-base`) sobre Rockbox (M-001). Nombre visible: "moonlit.aura".
 
-## Idiomas
+## Comandos
+- Target:      `firmware/tools/build_target.sh [--firmware|--bootloader]`  → `firmware/build-ipod6g/rockbox.ipod`
+- Simulador:   `firmware/tools/build_sim.sh [--reconfigure] [--run]` (hace `make install` + copia .fnt; brew sdl2 gcc)
+- Captura:     `firmware/tools/sim_shot.sh <out.png> [ticks] "SELECT,RIGHT,…"` (320×240, headless)
+- Tokens/fuentes/iconos: `design-system/.venv/bin/python3 design-system/generate.py` (falla si un ícono tiene <4 tonos) — desde H2
+- Tests host:  `make -C firmware/rockbox/apps/metro/test test`
+- Release:     `firmware/tools/package_dist.sh --release-tag vX.Y.Z` (árbol limpio, sin __DATE__/__TIME__)
 
-- Documentos `.md`: español (México, neutro, sin voseo).
-- Código, comentarios de código nuevo, y mensajes de commit: inglés.
-- Cadenas de cara al usuario en la UI: ver `apps/metro/metro_lang.c`
-  (bilingüe ES/EN, español por defecto — `DECISIONS.md` M-009).
+## Reglas que no se deducen del código
+- Idiomas: `.md` en español de México sin voseo; código, comentarios y commits en inglés; UI en español (metro_lang.c).
+- Toda decisión de diseño se cierra por escrito en `DECISIONS.md` (D-NNN) antes de ejecutarse. D-001…D-017 son vinculantes.
+  Bitácora heredada de Metro (M-NNN): `DECISIONS-METRO-ARCHIVE.md`, solo lectura.
+- Plan vigente: `docs/plan/03-plan-implementacion.md` (hitos H0–H7). `docs/plans/archivo/` es histórico de Metro, nunca trabajo pendiente.
+- Ningún literal RGB fuera de `design-system/tokens.json`. En C solo se leen por `moonlit_palette.h` (hasta H3: `metro_palette.h`).
+- Ninguna lectura de disco dentro de un bucle de animación; toda animación bajo `lcd_active()` y el nivel FX de `aura.cfg`.
+- Prohibido desde `apps/metro/`: `root_menu()`, `do_menu()`, `gui_synclist`, `rockbox_browse()`, `kbd_input()`, skin engine.
+- Todo `struct viewport` local se inicializa con `viewport_set_defaults()` (M-027). Texto siempre vía `metro_draw_text*()` (M-051).
+- Rutas bajo `.rockbox/aura/` y `/.aura/` solo en `metro_settings.c`/`metro_sync.c`/`metro_device.c`/`metro_media_categories.c`.
+  Contrato canónico: `Aura-Firmware/CONTRATO-firmware-studio.md` (v13) + `CONTRATO-moonlit-studio.md` de este repo. Inmutable desde aquí.
+- `firmware_family: moonlit`, caché `/.rockbox/aura/moonlitcache/`, árbol dormido `/.firmware-moonlit/`. Nunca `metrocache/`.
+- Cambios fuera de `apps/metro/` → `MODIFICATIONS.md` en la misma pasada + comentario `moonlit (D-NNN)`.
+- Iconos y logo: compilados en tabla C (nunca disco); verificación mecánica de tonos ≥4 en `generate.py`, no visual.
+- Fuentes: builds estáticas TTF, rango decimal 32–383 en convttf (nunca `0x…`), ningún rol < 18 px.
+- Sin material de Apple ni Microsoft en el árbol ni en `firmware/dist/`.
 
-## Reglas de código (`apps/metro/`)
-
-- Todo `.c`/`.h` nuevo lleva cabecera de copyright GPL v2.
-- Cero color RGB hardcodeado fuera de `metro_palette.h`.
-- Ninguna ruta del contrato de compatibilidad con Aura Studio
-  (`.rockbox/aura/…`, `/.aura/…`) se construye con un `snprintf` propio
-  fuera de `metro_settings.c`/`metro_sync.c`/`metro_device.c`/
-  `metro_media_categories.c` — un sitio nuevo que necesite una de esas
-  rutas pasa por esos módulos, nunca por una ruta armada a mano.
-- Prohibido desde `apps/metro/`: `root_menu()`, `do_menu()`,
-  `gui_synclist`, `rockbox_browse()`, `kbd_input()`, `gui_syncyesno()`,
-  `apps/tree.c`, `apps/tagtree.c`, el skin engine (`.wps`/`.sbs`) para
-  cualquier pantalla propia.
-- Ninguna lectura de disco (bitmap, ícono, fuente) dentro de un bucle
-  de animación por cuadro — decodificar y cachear en RAM antes de
-  empezar la animación.
-- Toda animación respeta la puerta `lcd_active()` y el nivel de FX
-  activo (`aura.cfg` → `animations`/`graphics`, ver `DECISIONS.md`
-  M-015).
-- Todo `struct viewport` local se inicializa con
-  `viewport_set_defaults(&vp, SCREEN_MAIN)` (o `memset` a 0 +
-  `viewport_set_fullscreen()`), **nunca** con `viewport_set_fullscreen()`
-  a secas sobre una variable sin inicializar — `lcd_init_viewport()`
-  lee y desreferencia `vp->buffer` antes de asignarlo (ver
-  `DECISIONS.md` M-027: costó dos rondas de investigación y un
-  diagnóstico equivocado).
-- Todo `lcd_putsxy`/`lcd_puts` de `apps/metro/` corre bajo
-  `DRMODE_FG` (transparente contra lo que ya haya en pantalla) —
-  `DRMODE_SOLID`, el default de Rockbox, pinta una caja de fondo
-  opaca por glifo y tapaba el cover art detrás del texto en Now
-  Playing. En la práctica esto significa: dibujar texto siempre a
-  través de `metro_draw_text()`/`metro_draw_text_cut_right()`
-  (`metro_draw.c`), nunca con un `lcd_putsxy()` suelto; si un sitio
-  nuevo necesita de verdad un rectángulo de fondo sólido detrás de
-  texto, lo pinta explícito con `lcd_fillrect()` antes de dibujar
-  (nunca vía `DRMODE_SOLID`). Cualquier código que llame
-  `plugin_load()` (imageviewer, mpegplayer) restaura
-  `lcd_set_drawmode(DRMODE_FG)` justo después, ya que el plugin es
-  libre de dejar el LCD en `DRMODE_SOLID` al salir. Ver `DECISIONS.md`
-  M-051.
-
-## Cambios a archivos de Rockbox fuera de `apps/metro/`
-
-Todo cambio a un archivo de Rockbox fuera de `apps/metro/` se registra
-en `MODIFICATIONS.md` **en la misma pasada** (GPL v2 §2a) y se marca
-inline en el código con un comentario `Metro (M-NNN)`. Excepción: los
-10 archivos heredados de Aura-Firmware listados en `MODIFICATIONS.md`
-se portan byte-idénticos, sin reescribir su atribución original — ver
-`docs/DESVIACIONES.md` F0-2.
-
-## Compatibilidad con Aura Studio (restricción dura)
-
-Antes de tocar cualquier ruta bajo `.rockbox/aura/` o `/.aura/`, lee
-`Aura-Firmware/CONTRATO-firmware-studio.md` y
-`Aura-Firmware/docs/contracts/library-layout-v1.md` (fuente canónica
-del contrato — no se copian a este repo, se leen desde el repo hermano)
-y `docs/COMPAT_STUDIO.md` (checklist vivo de este repo). El contrato es
-inmutable desde este lado: Metro-Aura consume el formato tal como está
-documentado, nunca lo redefine unilateralmente.
-
-**Releases y actualizaciones selectivas (contrato v11).** Publicar un
-release = commit limpio + tag `vX.Y.Z` + `firmware/tools/package_dist.sh
---release-tag vX.Y.Z` + GitHub Release con los mismos assets que define
-la tabla §A del contrato (repo `Ricolinos/Metro-Aura`, canal v9). No hay
-nada que "configurar" para que la actualización sea selectiva: Aura
-Studio calcula el delta solo, comparando los CRC32 del directorio
-central del `rockbox.zip` nuevo contra el manifiesto de lo instalado
-(`.rockbox/aura/install_manifest.cfg` — este firmware lo IGNORA y no
-adopta ese nombre de archivo para otra cosa). Lo único que este repo
-debe cuidar es **no romper la reproducibilidad del build**: nada de
-`__DATE__`/`__TIME__`, timestamps ni aleatoriedad en archivos generados
-que viajen dentro de `rockbox.zip` — entre releases consecutivos hoy
-cambian ~5 archivos de 405 (solo los de versión). El release llega al
-iPod cuando **Aura-Studio** actualiza su pin (`FIRMWARE_VERSION`:
-`metro.tag=` + hashes `metro.*`) — trabajo del repo hermano, no de este.
-
-## Documentos de trabajo
-
-- `docs/plans/PLAN_INVESTIGACION.md`, `docs/plans/INVESTIGACION.md`,
-  `docs/plans/PLAN_MAESTRO.md`: histórico de las Fases 1–3. No
-  re-explorar lo que ya está documentado ahí.
-- `docs/DESVIACIONES.md`: correcciones factuales al plan encontradas
-  durante la ejecución.
-- `docs/screenshots/`: capturas de criterio de "hecho" por fase,
-  versionadas.
-- La fuente de verdad de las decisiones es `DECISIONS.md` de este
-  repositorio, no los planes.
+## Diseño
+Antes de tocar cualquier pantalla, animación, ícono o componente: skill `moonlit-design-system`.
+Fuente viva: `docs/moonlit-design-system/00-INDICE.md` (se crea en H2–H3; hasta entonces, plan §B–§E).
