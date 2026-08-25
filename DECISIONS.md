@@ -176,3 +176,17 @@ archivo. (c) Los cambios en Studio siguen siendo prompt aparte
 de `convttf` en los hermanos, `docs/plans/PROMPT-hermanos-gen-fonts.md`
 (D-007). Numeración: este registro desplaza en uno los D-0xx que el
 plan §G cita como orientativos para H6/H7 (D-024 → D-025, etc.).
+
+**D-025 — Ruptura latente de `make.dep` en `mpegplayer` (heredada, corregida
+en H1).** `firmware/rockbox/tools/make.inc:42` genera dependencias con
+`$(CC) -MG -MM … $(CFLAGS)`; `apps/plugins/mpegplayer/mpegplayer.make:31`
+añade `-I$(APPSDIR)/metro` solo a `MPEGCFLAGS`, no a `CFLAGS`. Resultado:
+`#include "metro_palette.h"` (`mpegplayer.c:108`, M-059) se anota como
+`$(BUILDDIR)/metro_palette.h` y un build desde cero falla ("No rule to
+make target"). Metro-Aura no lo vio porque su `make.dep` (19 ago 04:02)
+es anterior a M-059 (19 ago 16:47) y `make` no lo regenera. **Decisión**:
+include relativo `"../../metro/metro_palette.h"` (un solo archivo, ya
+listado en `MODIFICATIONS.md`), no un `-I` global. H3 vuelve a tocar
+esta línea al sustituir `metro_palette.h` por `moonlit_palette.h`; el
+prompt `[Metro-Aura]` de `docs/plans/PROMPT-hermanos-gen-fonts.md`
+debería recibir este hallazgo como ítem aparte (no se ejecuta aquí).

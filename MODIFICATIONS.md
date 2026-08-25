@@ -278,3 +278,15 @@ llegado al simdisk -- `make` no instala plugins, ver
   "-NdB"; `osd_text_init()` reserva ancho fijo para esa barra.
 
 Ver `DECISIONS.md` M-061.
+
+### moonlit H1 (2026-08-25, D-025)
+
+- `apps/plugins/mpegplayer/mpegplayer.c`: el `#include "metro_palette.h"`
+  de M-059 pasa a `#include "../../metro/metro_palette.h"`. Motivo:
+  `tools/make.inc` genera `make.dep` con `-MG -MM` y solo los `CFLAGS`
+  globales (sin el `-I$(APPSDIR)/metro` que añade `mpegplayer.make`),
+  así que el header no encontrado se registraba como objetivo fantasma
+  `$(BUILDDIR)/metro_palette.h` y un `configure` desde cero
+  (`build_sim.sh --reconfigure`) abortaba con "No rule to make target".
+  En Metro-Aura no se notó porque su `make.dep` es anterior a M-059.
+  Comentario inline `moonlit (D-025)`.

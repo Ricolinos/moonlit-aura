@@ -105,7 +105,12 @@
 #include "video_out.h"
 #include "stream_thread.h"
 #include "stream_mgr.h"
-#include "metro_palette.h"
+/* moonlit (D-025): relative path instead of relying on the -I that
+ * mpegplayer.make adds -- tools/make.inc generates make.dep with the
+ * global CFLAGS only (-MG -MM), so a bare "metro_palette.h" became a
+ * phantom $(BUILDDIR)/metro_palette.h target and a fresh configure
+ * could not build. Header is still the palette single source. */
+#include "../../metro/metro_palette.h"
 
 
 /* button definitions */

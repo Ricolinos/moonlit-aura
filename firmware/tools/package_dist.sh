@@ -11,7 +11,7 @@
 # --release-tag <tag>: marca este empaquetado como un Release real --
 # escribe el tag exacto en .rockbox/aura/version.txt (dentro de
 # rockbox.zip), la única forma en que Aura Studio puede saber qué
-# versión de Metro tiene instalada un dispositivo (mismo contrato que
+# versión de moonlit tiene instalada un dispositivo (mismo contrato que
 # Aura-Firmware's package_dist.sh, D-297/M-004). Sin este flag (build
 # de desarrollo) el archivo no se escribe -- su ausencia es una señal
 # válida en sí misma. Requiere el árbol git limpio (aborta si no).
@@ -21,11 +21,12 @@
 # uno externo, igual que build_target.sh (DECISIONS.md M-002).
 #
 # A diferencia de Aura-Firmware's package_dist.sh (que sirve de
-# referencia para este script -- ver DECISIONS.md), Metro-Aura no
-# tiene sistema de temas/iconos instalables ni pipeline design-system/:
-# M-018 fija toda la iconografía compilada en el binario, nunca leída
-# de disco. Nada de AuraPalette.swift/theme-format-v1.json/
-# aura-theme-default.zip aquí -- no hay a qué apuntarían.
+# referencia para este script -- ver DECISIONS.md), moonlit.aura no
+# tiene sistema de temas/iconos instalables (D-008/D-009): toda la
+# iconografía va compilada en el binario, nunca leída de disco. Nada
+# de AuraPalette.swift/theme-format-v1.json/aura-theme-default.zip
+# aquí -- no hay a qué apuntarían. Assets exactos del Release:
+# CONTRATO-moonlit-studio.md §A.7 (repo ricolinos/moonlit-aura).
 #
 # Produce:
 #   firmware/dist/rockbox.ipod             -- binario del firmware
@@ -34,7 +35,7 @@
 #                                              plugins/rocks,
 #                                              viewers.config, codepages,
 #                                              langs -- con las fuentes
-#                                              de Metro encima)
+#                                              de moonlit encima)
 #   firmware/dist/bootloader-ipod6g.ipod   -- bootloader dual-boot (si
 #                                              ya está compilado --
 #                                              build_target.sh lo hace
@@ -43,7 +44,8 @@
 #                                              necesita un paso manual)
 #   firmware/dist/mks5lboot                -- herramienta de flasheo DFU
 #   firmware/dist/MODIFICATIONS.md         -- listado GPL §2a, para el Release
-#   firmware/dist/THIRD-PARTY-NOTICES.txt  -- Selawik (SIL OFL 1.1) + Fluent Icons (MIT)
+#   firmware/dist/THIRD-PARTY-NOTICES.txt  -- Libre Baskerville + Montserrat (SIL OFL 1.1)
+#                                              + Material Symbols (Apache 2.0), plan §C.2
 #   firmware/dist/checksums.txt            -- SHA-256 de todo lo de arriba
 
 set -euo pipefail
@@ -128,7 +130,7 @@ mkdir -p "$STAGE/.rockbox"
 # Base real -- todo lo que "make zip" acaba de producir (codecs/,
 # rocks/, viewers.config, codepages/, langs/, themes/, wps/, eqs/,
 # recpresets/, debug/, backdrops/, rockbox-info.txt, rockbox.ipod) --
-# y ENCIMA las fuentes de Metro (metro_fonts.c las carga por nombre
+# y ENCIMA las fuentes de moonlit (se cargan por nombre
 # fijo, así que tienen que existir en el disco exactamente con esos
 # nombres, igual que hace build_sim.sh con el simdisk).
 unzip -q "$BUILD_DIR/rockbox.zip" -d "$STAGE"
@@ -176,32 +178,50 @@ fi
 echo "==> Copiando MODIFICATIONS.md (asset del Release, cumplimiento GPL §2a)"
 cp "$ROOT_DIR/MODIFICATIONS.md" "$DIST_DIR/MODIFICATIONS.md"
 
-echo "==> Generando THIRD-PARTY-NOTICES.txt (Selawik + Fluent Icons, asset del Release)"
+# moonlit (D-002, plan §C.2): tres bloques, uno por asset vendoreado en
+# design-system/vendor/ (H2 los trae; hasta entonces este paso aborta
+# a propósito -- un Release sin avisos de terceros no es publicable).
+VENDOR_DIR="$ROOT_DIR/design-system/vendor"
+for lic in libre-baskerville/OFL.txt montserrat/OFL.txt material-symbols/LICENSE; do
+  if [[ ! -f "$VENDOR_DIR/$lic" ]]; then
+    echo "ERROR: falta $VENDOR_DIR/$lic -- THIRD-PARTY-NOTICES.txt saldría incompleto (plan §C.2, D-002)." >&2
+    exit 1
+  fi
+done
+echo "==> Generando THIRD-PARTY-NOTICES.txt (Libre Baskerville + Montserrat + Material Symbols, asset del Release)"
 {
-  echo "Metro-Aura -- avisos de terceros"
-  echo "================================="
+  echo "moonlit.aura -- avisos de terceros"
+  echo "=================================="
   echo
-  echo "El wordmark \"metro\" y la tipografía de la interfaz usan Selawik"
-  echo "(Microsoft, SIL Open Font License 1.1) -- ver DECISIONS.md M-020:"
-  echo "fuente de sistema publicada libremente, no un logotipo ni una"
-  echo "marca de Zune/Windows Phone. El texto completo de la licencia"
-  echo "sigue abajo."
+  echo "Los títulos de la interfaz usan Libre Baskerville y el texto usa"
+  echo "Montserrat (build estática de github.com/JulietaUla/Montserrat),"
+  echo "ambas bajo la SIL Open Font License 1.1 -- ver DECISIONS.md D-004."
+  echo "Se redistribuyen convertidas a mapas de bits .fnt de Rockbox dentro"
+  echo "de rockbox.zip (.rockbox/fonts/moonlit-*.fnt). Los textos completos"
+  echo "de ambas licencias siguen abajo."
   echo
-  echo "Los iconos de la interfaz provienen de Fluent System Icons"
-  echo "(Microsoft, MIT) -- ver DECISIONS.md M-077. Se redistribuyen"
-  echo "rasterizados a mapas de bits monocromos de 16x16 dentro del"
-  echo "binario (apps/metro/metro_icons_table.c, generado por"
-  echo "firmware/tools/gen_icons.py); los SVG originales estan en"
-  echo "firmware/assets/icons/. La licencia MIT exige conservar este"
-  echo "aviso, y sigue abajo completo."
+  echo "Los iconos de la interfaz provienen de Material Symbols Rounded"
+  echo "(Google, Apache License 2.0) -- ver DECISIONS.md D-008. Se"
+  echo "redistribuyen rasterizados a máscaras de cobertura de 8 bits dentro"
+  echo "del binario (apps/metro/moonlit_icons_table.c, generado por"
+  echo "design-system/generate.py); los SVG originales están en"
+  echo "design-system/vendor/material-symbols/. La licencia sigue abajo."
   echo
-  echo "-- Selawik (tipografía) ---------------------------------------------"
+  echo "Código fuente de este firmware (GPL v2): github.com/ricolinos/moonlit-aura"
+  echo "iPod e iPod Classic son marcas de Apple Inc.; moonlit.aura no está"
+  echo "afiliado, patrocinado ni respaldado por Apple."
   echo
-  cat "$ROOT_DIR/firmware/assets/fonts-src/LICENSE.txt"
+  echo "-- Libre Baskerville (tipografía de títulos) ------------------------"
   echo
-  echo "-- Fluent System Icons (iconografía) --------------------------------"
+  cat "$VENDOR_DIR/libre-baskerville/OFL.txt"
   echo
-  cat "$ROOT_DIR/firmware/assets/icons/LICENSE-fluent-system-icons.txt"
+  echo "-- Montserrat (tipografía de texto e interfaz) ----------------------"
+  echo
+  cat "$VENDOR_DIR/montserrat/OFL.txt"
+  echo
+  echo "-- Material Symbols Rounded (iconografía) ---------------------------"
+  echo
+  cat "$VENDOR_DIR/material-symbols/LICENSE"
 } > "$DIST_DIR/THIRD-PARTY-NOTICES.txt"
 
 echo "==> Generando checksums.txt"

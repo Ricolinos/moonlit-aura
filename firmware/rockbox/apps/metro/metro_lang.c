@@ -89,7 +89,7 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_REPEAT_ALL]       = "todo",
     [LANG_REPEAT_ONE]       = "uno",
 
-    [LANG_SYNC_ERROR_VERSION]  = "esta versión de metro es más vieja que aura studio",
+    [LANG_SYNC_ERROR_VERSION]  = "esta versión de moonlit es más vieja que aura studio",
     [LANG_SYNC_ERROR_ATTEMPTS] = "no se pudo actualizar la biblioteca",
     [LANG_SYNC_DISMISS_HINT]   = "menú para continuar",
 
@@ -160,6 +160,24 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_SETTING_SWITCH_TO_AURA]      = "cambiar a Aura",
     [LANG_VALUE_NOT_INSTALLED]         = "no instalado",
     [LANG_DIALOG_SWITCH_TO_AURA_TITLE] = "¿cambiar a Aura y reiniciar?",
+
+    /* moonlit H1 (D-001, D-002) */
+    [LANG_WORDMARK]           = "moonlit",
+    [LANG_ABOUT_CREDITS_BODY] =
+        "moonlit.aura\n"
+        "creado por ricardo gómez\n"
+        "basado en rockbox, gpl v2\n"
+        "moonlit hereda esa licencia\n"
+        "código fuente:\n"
+        "github.com/ricolinos/moonlit-aura\n"
+        "tipografía e íconos:\n"
+        "libre baskerville (sil ofl)\n"
+        "montserrat (sil ofl)\n"
+        "material symbols (apache 2.0)\n"
+        "ipod es marca de apple inc.\n"
+        "moonlit no está afiliado a apple",
+    [LANG_MAREA_TITLE]        = "marea",
+    [LANG_MAREA_EMPTY]        = "no hay álbumes en la biblioteca",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -228,7 +246,7 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_REPEAT_ALL]       = "all",
     [LANG_REPEAT_ONE]       = "one",
 
-    [LANG_SYNC_ERROR_VERSION]  = "this metro version is older than aura studio",
+    [LANG_SYNC_ERROR_VERSION]  = "this moonlit version is older than aura studio",
     [LANG_SYNC_ERROR_ATTEMPTS] = "could not update the library",
     [LANG_SYNC_DISMISS_HINT]   = "menu to continue",
 
@@ -299,6 +317,24 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_SETTING_SWITCH_TO_AURA]      = "switch to Aura",
     [LANG_VALUE_NOT_INSTALLED]         = "not installed",
     [LANG_DIALOG_SWITCH_TO_AURA_TITLE] = "switch to Aura and restart?",
+
+    /* moonlit H1 (D-001, D-002) */
+    [LANG_WORDMARK]           = "moonlit",
+    [LANG_ABOUT_CREDITS_BODY] =
+        "moonlit.aura\n"
+        "created by ricardo gómez\n"
+        "based on rockbox, gpl v2\n"
+        "moonlit inherits that license\n"
+        "source code:\n"
+        "github.com/ricolinos/moonlit-aura\n"
+        "typography and icons:\n"
+        "libre baskerville (sil ofl)\n"
+        "montserrat (sil ofl)\n"
+        "material symbols (apache 2.0)\n"
+        "ipod is a trademark of apple inc.\n"
+        "moonlit is not affiliated with apple",
+    [LANG_MAREA_TITLE]        = "tide",
+    [LANG_MAREA_EMPTY]        = "no albums in the library",
 };
 
 void metro_lang_set(enum metro_language lang)

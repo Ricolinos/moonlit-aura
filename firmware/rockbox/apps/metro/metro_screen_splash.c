@@ -23,6 +23,7 @@
 #include "metro_fonts.h"
 #include "metro_theme.h"
 #include "metro_draw.h"
+#include "metro_lang.h"
 
 #define METRO_SPLASH_BAR_WIDTH  120
 #define METRO_SPLASH_BAR_HEIGHT 2
@@ -30,11 +31,12 @@
 
 static void draw_wordmark(void)
 {
-    /* R5 (M-092, encargo del dueño): "metro" y, debajo, "aura" -- la
-     * familia, en el cuerpo de título y color secundario. El bloque
-     * completo queda centrado; el mismo par vive en el bitmap embebido
-     * (gen_logo.py) que usan el arranque y la pantalla USB. */
-    const char *text = "metro";
+    /* R5 (M-092): wordmark y, debajo, "aura" -- la familia, en el
+     * cuerpo de título y color secundario. moonlit H1 (D-001): el
+     * wordmark sale de la tabla de strings ("moonlit"); el bitmap
+     * embebido "metro / aura" de la pantalla USB (gen_logo.py) se
+     * reemplaza en H5 junto con el logotipo. */
+    const char *text = metro_lang_str(LANG_WORDMARK);
     const char *sub = "aura";
     int w, h, sw, sh, top;
 
@@ -67,7 +69,7 @@ void metro_screen_splash_progress(int pct)
     {
         int sw, sh;
         lcd_setfont(metro_font_id(MFONT_DISPLAY));
-        lcd_getstringsize((const unsigned char *)"metro", &w, &h);
+        lcd_getstringsize((const unsigned char *)metro_lang_str(LANG_WORDMARK), &w, &h);
         lcd_setfont(metro_font_id(MFONT_TITLE));
         lcd_getstringsize((const unsigned char *)"aura", &sw, &sh);
         bar_y = (LCD_HEIGHT - (h + 4 + sh)) / 2 + h + 4 + sh + METRO_SPLASH_BAR_GAP;

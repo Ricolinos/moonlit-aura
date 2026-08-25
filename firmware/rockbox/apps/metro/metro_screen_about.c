@@ -19,11 +19,49 @@
  ****************************************************************************/
 #include <stdio.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "metro_screen_about.h"
 #include "metro_device.h"
 #include "metro_manifest.h"
 #include "metro_lang.h"
+
+/* moonlit H1 (D-002): credits block after "based on rockbox" -- one
+ * About row per '\n'-separated line of LANG_ABOUT_CREDITS_BODY (the
+ * AURA_STR_ABOUT_CREDITS_BODY pattern, cut into rows because Metro's
+ * About is a pivot list, not a text body). GPL v2 section 3: source
+ * URL; font/icon licenses; Apple non-affiliation. */
+static int credits_line_count(void)
+{
+    const char *s = metro_lang_str(LANG_ABOUT_CREDITS_BODY);
+    int n = 1;
+    for (; *s; s++)
+        if (*s == '\n')
+            n++;
+    return n;
+}
+
+/* Copies line `line` (0-based) of the credits body into buf. */
+static const char *credits_line(int line, char *buf, size_t bufsz)
+{
+    const char *s = metro_lang_str(LANG_ABOUT_CREDITS_BODY);
+    const char *end;
+    size_t len;
+
+    while (line > 0 && *s)
+    {
+        if (*s == '\n')
+            line--;
+        s++;
+    }
+    end = strchr(s, '\n');
+    len = end ? (size_t)(end - s) : strlen(s);
+    if (len >= bufsz)
+        len = bufsz - 1;
+    memcpy(buf, s, len);
+    buf[len] = '\0';
+    return buf;
+}
 
 /* Row layout: device name, then either "based on rockbox" straight
  * after 1 "not synced yet" row, or (if sync_summary.cfg exists, R2-F1/
@@ -31,7 +69,7 @@
  * category breakdown rows the manifest actually carries (0, 3, or 6
  * extra rows depending on has_video_categories/has_photo_categories --
  * a manifest written before Studio added category breakdown has
- * neither), then "based on rockbox". */
+ * neither), then "based on rockbox", then the credits rows (H1). */
 
 static int synced_row_count(const metro_manifest_t *m)
 {
@@ -54,7 +92,7 @@ static int about_count(void *ctx)
 {
     const metro_manifest_t *m = metro_manifest_cached();
     (void)ctx;
-    return 2 + (m ? synced_row_count(m) : 1);
+    return 2 + (m ? synced_row_count(m) : 1) + credits_line_count();
 }
 
 static void about_get_row(void *ctx, int index, struct metro_row *out)
@@ -164,7 +202,15 @@ static void about_get_row(void *ctx, int index, struct metro_row *out)
         }
     }
 
-    out->title = metro_lang_str(LANG_ABOUT_BASED_ON_ROCKBOX);
+    {
+        int base = 1 + (synced ? synced_row_count(&m) : 1);
+        if (index == base)
+        {
+            out->title = metro_lang_str(LANG_ABOUT_BASED_ON_ROCKBOX);
+            return;
+        }
+        out->title = credits_line(index - base - 1, buf, sizeof(buf));
+    }
 }
 
 static void about_on_select(void *ctx, int index)

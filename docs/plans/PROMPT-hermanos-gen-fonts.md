@@ -21,3 +21,14 @@ convierte el charset completo (1309 glifos en vez de ~317). Regenerar los .fnt, 
 diferencia de tamaño por archivo, registrar la decisión D-NNN en DECISIONS.md y anotar
 MODIFICATIONS.md si aplica. Verificar con el simulador + captura del especímen tipográfico.
 ```
+
+## Hallazgo adicional para `[Metro-Aura]` (moonlit D-025)
+
+```
+[Metro-Aura] Un configure desde cero (build_sim.sh --reconfigure) falla con "No rule to
+make target build-sim/metro_palette.h, needed by mpegplayer.o": tools/make.inc genera
+make.dep con -MG -MM y solo CFLAGS globales, sin el -I$(APPSDIR)/metro de mpegplayer.make
+(M-059). El make.dep existente es anterior a M-059 y por eso no se notó. Corregir con
+#include "../../metro/metro_palette.h" en mpegplayer.c:108 (o equivalente), anotar
+MODIFICATIONS.md y registrar M-NNN.
+```
