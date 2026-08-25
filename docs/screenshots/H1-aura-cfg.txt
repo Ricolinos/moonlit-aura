@@ -1,0 +1,9 @@
+firmware_family: moonlit
+sync_marker_supported: 1
+theme: 0
+accent: 4
+language: 0
+animations: 2
+graphics: 1
+tz_local_quarters: 0
+first_boot_done: 1

@@ -88,7 +88,8 @@ mks5lboot
 `BOOT-1` sube a `BOOT-2` **solo** si cambia cualquiera de los dos
 fuentes. El SHA-256 cambia con cada recompilación (RBVERSION embebido),
 por eso no sirve como versión de fuente (PA-4). Los SHA-256 reales de
-cada release se anotan aquí en H7 (D-026).
+cada release se anotan aquí en H7 (D-NNN del primer release; el plan
+lo cita como D-026, desplazado en uno por D-024).
 
 Los cuatro binarios (`mks5lboot`, `bootloader-ipod6g.ipod`,
 `rockbox.ipod`, `rockbox.zip`) son derivados de Rockbox, GPL v2 (§B del
