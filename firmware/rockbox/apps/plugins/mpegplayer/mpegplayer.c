@@ -1397,7 +1397,11 @@ static int s_metro_language; /* 0=ES, 1=EN -- METRO_LANG_ES/EN */
  * blank. Same load-once-at-init, read-via-accessor shape as
  * metro_load_personalization() itself (see the block comment above
  * metro_osd_colors()). */
-#define METRO_OSD_FONT_PATH FONT_DIR "/metro-caption-14.fnt"
+/* moonlit (D-032): metro-caption-14.fnt no existe mas (M2 retira los
+ * 5 roles Selawik) -- MFONT_CAPTION es ahora #define MFONT_BODY en
+ * apps/metro/moonlit_fonts.h, asi que el equivalente real es
+ * moonlit-body-18.fnt, no un nombre "caption" nuevo. */
+#define METRO_OSD_FONT_PATH FONT_DIR "/moonlit-body-18.fnt"
 static int s_metro_font_id = -1;
 
 /* R2-F4 Zune redesign (M-060 cont.): the settings menu (mpeg_settings.c)
@@ -1406,10 +1410,14 @@ static int s_metro_font_id = -1;
  * two load the same list/listsel faces apps/metro/metro_fonts.c loads
  * for real Metro screens, exposed to mpeg_settings.c (same plugin
  * binary, different translation unit) via the accessors below. */
-#define METRO_LIST_FONT_PATH FONT_DIR "/metro-list-20.fnt"
-#define METRO_LISTSEL_FONT_PATH FONT_DIR "/metro-listsel-20.fnt"
-#define METRO_DISPLAY_FONT_PATH FONT_DIR "/metro-display-48.fnt"
-#define METRO_TITLE_FONT_PATH FONT_DIR "/metro-title-28.fnt"
+/* moonlit (D-032): metro-{list,listsel,display,title}-*.fnt no
+ * existen mas (M2). list-20/listsel-20/title-28 tienen equivalente
+ * directo por rol; display pasa de 48px a 40px (moonlit-display-40.fnt,
+ * el tamano MD3 real de MFONT_DISPLAY, apps/metro/moonlit_fonts.h). */
+#define METRO_LIST_FONT_PATH FONT_DIR "/moonlit-list-20.fnt"
+#define METRO_LISTSEL_FONT_PATH FONT_DIR "/moonlit-listsel-20.fnt"
+#define METRO_DISPLAY_FONT_PATH FONT_DIR "/moonlit-display-40.fnt"
+#define METRO_TITLE_FONT_PATH FONT_DIR "/moonlit-title-28.fnt"
 static int s_metro_list_font_id = -1;
 static int s_metro_listsel_font_id = -1;
 static int s_metro_display_font_id = -1;

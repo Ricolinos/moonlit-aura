@@ -301,6 +301,18 @@ Ver `DECISIONS.md` M-061.
 - `apps/SOURCES`: la entrada `metro/metro_fonts.c` pasa a
   `metro/moonlit_fonts.c` (7 roles MD3, Libre Baskerville + Montserrat,
   reemplaza los 5 roles Selawik). Comentario inline `moonlit (D-032)`.
+- `apps/plugins/mpegplayer/mpegplayer.c:1400,1409-1412` (M-060, R2-F4):
+  los 5 `#define METRO_*_FONT_PATH` apuntaban a los `.fnt` de Selawik
+  que este hito elimina (regresión hallada en revisión adversarial, no
+  prevista por el plan). Pasan a los equivalentes por rol en
+  `moonlit-{body-18,list-20,listsel-20,display-40,title-28}.fnt`
+  (`caption`→`body` porque `MFONT_CAPTION` es ahora `#define MFONT_BODY`
+  en `apps/metro/moonlit_fonts.h`; `display` 48px→40px, tamaño MD3
+  real). Sin `rb->font_load()` devolviendo un id válido, el OSD y
+  `mpeg_settings.c` caían silenciosamente a `FONT_UI` (`mpegplayer.c:1428-1453`
+  ya tenían ese *fallback*, así que nunca crasheaba -- solo se veía
+  distinto). Comentario inline `moonlit (D-032)`. Ver `DECISIONS.md`
+  D-032 punto 3.
 
 Nota (fuera de `apps/metro/`, sin comentario inline por no ser Rockbox
 sino una herramienta propia del repo): `firmware/tools/gen_logo.py`

@@ -292,6 +292,28 @@ con datos reales, y documenta una discrepancia resuelta con el dueño.**
    todavía). HIPÓTESIS C.1 de `04-auditoria-brecha.md` queda cerrada
    con estos números reales, no con la estimación original.
 
+3. **Consumidor fuera de `apps/metro/` con rutas de `.fnt` hardcodeadas
+   (hallado en revisión adversarial, no por el plan).** `apps/plugins/mpegplayer/mpegplayer.c:1400,1409-1412`
+   (M-060, R2-F4) carga `metro-{caption-14,list-20,listsel-20,display-48,title-28}.fnt`
+   por `#define` de ruta fija, para imitar la tipografía de Metro en su
+   OSD y en `mpeg_settings.c`. El borrado de esos 5 archivos (M2, punto
+   2 de arriba) los dejaba señalando a rutas inexistentes —
+   `rb->font_load()` cae a -1 y los accessors devuelven `FONT_UI`
+   (`mpegplayer.c:1428-1453`), así que no crashea, pero es una
+   regresión visual silenciosa que ninguna definición de hecho de M2
+   detecta. **Corrección:** los 5 `#define` pasan a
+   `moonlit-{body-18,list-20,listsel-20,display-40,title-28}.fnt`
+   (mapeo por rol: `MFONT_CAPTION` ahora es `MFONT_BODY` en
+   `apps/metro/moonlit_fonts.h`, así que `metro-caption-14.fnt` mapea a
+   `moonlit-body-18.fnt`, no a un archivo "caption" nuevo; `display`
+   pasa de 48px a 40px, el tamaño MD3 real). Comentario inline
+   `moonlit (D-032)` en el archivo. Sin cambios de geometría: el título
+   en `metro_font_display()` (`mpeg_settings.c:272`) se posiciona por
+   coordenadas fijas, no por altura de fuente, así que el cambio
+   48px→40px es cosmético (coherente con el resto de la UI de Metro,
+   que ya usa 40px en todos lados).
+
 Implementada en M2: `design-system/generate.py` (`--fonts`,
 `FONT_SIZE_EXCEPTIONS`), `firmware/tools/check_fonts.py`,
-`firmware/assets/fonts/moonlit-*.fnt`.
+`firmware/assets/fonts/moonlit-*.fnt`,
+`apps/plugins/mpegplayer/mpegplayer.c` (punto 3).
