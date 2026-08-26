@@ -190,6 +190,15 @@ bool metro_music_db_ready(void)
      * the background "is there already a database" check lands. */
     if (tagcache_is_usable() && tagcache_is_fully_initialized() && !s_update_triggered)
     {
+        /* moonlit (D-054): the bootstrap rebuild above never sealed the
+         * database (only metro_sync.c's finish_ok() did), so a library
+         * copied by hand kept forcing a rebuild on every firmware
+         * switch. First time the database is usable after OUR rebuild
+         * -> record the stamp: the shared DB describes the current
+         * library. A database that already existed is left alone (its
+         * own stamp, or none, decides). */
+        if (s_scan_triggered)
+            metro_sync_record_db_stamp();
         tagcache_start_scan();
         s_update_triggered = true;
         /* D-049: the cover pre-pass that used to run here (synchronous,

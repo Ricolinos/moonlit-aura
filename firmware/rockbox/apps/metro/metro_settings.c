@@ -201,6 +201,82 @@ void metro_settings_apply_pending_clock(void)
     }
 }
 
+/* --- moonlit (D-054): base tagcache compartida en /.aura/tagcache ---- */
+
+/* Mueve (rename) todo "database_*" del arbol activo al directorio
+ * compartido: database_idx.tcd, database_<n>.tcd, database_tmp.tcd,
+ * database_state.tcd, database_changelog.txt (nombres de
+ * apps/tagcache.c TAGCACHE_FILE_*). "database.ignore"/"database_commit.ignore"
+ * (marcadores del arbol, no de la base) se quedan. Si `move` es false
+ * los borra: el compartido ya existe y esos son restos muertos que
+ * solo ocupan disco -- ningun hermano los va a leer (contrato v15). */
+static void migrate_tree_db_files(bool move)
+{
+    DIR *d = opendir(ROCKBOX_DIR);
+    struct DIRENT *entry;
+    char from[MAX_PATH], to[MAX_PATH];
+
+    if (!d)
+        return;
+    while ((entry = readdir(d)) != NULL)
+    {
+        const char *name = entry->d_name;
+        size_t len = strlen(name);
+
+        if (strncmp(name, "database_", 9) != 0)
+            continue;
+        if (len < 5 || (strcmp(name + len - 4, ".tcd") != 0 &&
+                        strcmp(name + len - 4, ".txt") != 0))
+            continue;
+        snprintf(from, sizeof(from), "%s/%s", ROCKBOX_DIR, name);
+        if (move)
+        {
+            snprintf(to, sizeof(to), "%s/%s", AURA_SHARED_DB_DIR, name);
+            rename(from, to);
+        }
+        else
+            remove(from);
+    }
+    closedir(d);
+}
+
+void metro_force_shared_db_path(void)
+{
+    bool shared_exists = file_exists(AURA_SHARED_DB_DIR "/database_idx.tcd");
+    bool tree_exists = file_exists(ROCKBOX_DIR "/database_idx.tcd");
+
+    strmemccpy(global_settings.tagcache_db_path, AURA_SHARED_DB_DIR,
+               sizeof(global_settings.tagcache_db_path));
+
+    if (!dir_exists("/.aura"))
+        mkdir("/.aura");
+    if (!dir_exists(AURA_SHARED_DB_DIR))
+        mkdir(AURA_SHARED_DB_DIR);
+
+    /* Migracion sin rebuild: la base que este mismo arbol construyo
+     * antes de D-054 pasa a ser la compartida, tal cual. */
+    if (!shared_exists && tree_exists)
+        migrate_tree_db_files(true);
+    else if (shared_exists && tree_exists)
+        migrate_tree_db_files(false);
+
+    /* Sello v12 (.rockbox/aura/db_stamp.txt) -> compartido, solo si el
+     * compartido no existe: describe la base que acabamos de mover. */
+    if (!file_exists(AURA_SHARED_DB_STAMP_PATH) &&
+        file_exists(METRO_DIR "/db_stamp.txt"))
+        rename(METRO_DIR "/db_stamp.txt", AURA_SHARED_DB_STAMP_PATH);
+    else if (file_exists(METRO_DIR "/db_stamp.txt"))
+        remove(METRO_DIR "/db_stamp.txt");
+
+    /* Una base que este arbol construyo antes de v12 nunca tuvo sello.
+     * Misma regla que el arranque en frio de metro_sync_switch_needs_rebuild():
+     * la base que el firmware activo venia usando SI esta al dia -- se
+     * sella al migrarla, para que el primer cambio de firmware tras la
+     * actualizacion no reconstruya. */
+    if (!shared_exists && tree_exists && !file_exists(AURA_SHARED_DB_STAMP_PATH))
+        metro_sync_record_db_stamp();
+}
+
 void metro_ensure_media_dirs(void)
 {
     static const char *const dirs[] = { "/Music", "/Videos", "/Photos", "/Playlists" };
@@ -315,7 +391,10 @@ bool metro_firmware_switch_to(int i)
      * hermana construyo su base (M-091, contrato v12): sin sync de por
      * medio el cambio es instantaneo, sin "optimizando" de 5 minutos. */
     refresh_root_binary();
-    if (metro_sync_switch_needs_rebuild(METRO_FW_OWN_DORMANT))
+    /* moonlit (D-054): la base es compartida -- se compara el sello
+     * compartido contra /.aura/library-stamp, el arbol saliente ya no
+     * cuenta. */
+    if (metro_sync_switch_needs_rebuild())
         metro_sync_write_music_pending_marker();
 
     /* 6: en seco. Nada de lo de arriba queda pendiente de escribir. */

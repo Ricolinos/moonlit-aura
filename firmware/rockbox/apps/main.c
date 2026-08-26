@@ -479,6 +479,11 @@ static void init(void)
      * inside metro_main(), which runs after init() returns) is too
      * late. See MODIFICATIONS.md, DECISIONS.md M-019. */
     metro_apply_hygiene();
+    /* moonlit (D-054): shared tagcache at /.aura/tagcache -- must be
+     * set after settings_load() (config.cfg would overwrite the path)
+     * and before init_tagcache() (which opens the DB wherever
+     * global_settings.tagcache_db_path points). See MODIFICATIONS.md. */
+    metro_force_shared_db_path();
     settings_apply(true);
     init_battery_tables();
 #ifdef HAVE_DIRCACHE
@@ -753,6 +758,11 @@ static void init(void)
      * check below -- forcing that setting to false here is exactly
      * what M-019 wants. See MODIFICATIONS.md, DECISIONS.md M-019. */
     metro_apply_hygiene();
+    /* moonlit (D-054): shared tagcache at /.aura/tagcache -- after
+     * settings_load(), before init_dircache()/init_tagcache(): the
+     * rename migration must land before dircache scans the volume and
+     * before tagcache opens the DB. See MODIFICATIONS.md. */
+    metro_force_shared_db_path();
 
 #if defined(BUTTON_REC) || \
     (CONFIG_KEYPAD == GIGABEAT_PAD) || \

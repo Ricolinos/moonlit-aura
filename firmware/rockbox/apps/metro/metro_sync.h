@@ -92,20 +92,26 @@ bool metro_sync_request_manual(void);
  * de sync; el marcador se interpreta al siguiente arranque. */
 bool metro_sync_write_music_pending_marker(void);
 
-/* R5 (M-091, contrato v12): sello de biblioteca. /.aura/library-stamp
- * solo cambia cuando un sync de Studio toca la musica; cada arbol anota
- * en .rockbox/aura/db_stamp.txt contra que sello construyo su base.
+/* R5 (M-091, contrato v12) + moonlit (D-054, v15): sello de biblioteca.
+ * /.aura/library-stamp solo cambia cuando un sync de Studio toca la
+ * musica; la base tagcache es COMPARTIDA (/.aura/tagcache, metro_settings.h)
+ * y su sello /.aura/tagcache/db_stamp.txt anota contra que sello de
+ * biblioteca se construyo -- ya no hay un sello por arbol.
  *
- * metro_sync_record_db_stamp(): al terminar BIEN una (re)construccion --
- * la base activa ahora describe la biblioteca vigente. Crea el sello
- * compartido si no existe.
+ * metro_sync_record_db_stamp(): al terminar BIEN una (re)construccion
+ * (sync de Studio, o el rebuild de bootstrap de metro_music_db_ready())
+ * -- la base compartida ahora describe la biblioteca vigente. Crea el
+ * sello de biblioteca si no existe.
  *
- * metro_sync_switch_needs_rebuild(outgoing_tree_root): para el cambio de
- * firmware, DESPUES de los renombres. Crea el sello si falta (y lo anota
- * como del saliente, cuya base esta al dia) y devuelve true si el arbol
- * ACTIVO (el entrante, ya en /.rockbox) tiene sello distinto o no tiene
- * -- es decir, si hay que dejar el marcador. */
+ * metro_sync_db_stamp_is_current(): ambos sellos existen y coinciden.
+ *
+ * metro_sync_switch_needs_rebuild(): para el cambio de firmware, DESPUES
+ * de los renombres. Sin sello de biblioteca (arranque en frio) lo crea y
+ * anota la base como al dia (false); si no, true solo si el sello de la
+ * base difiere o falta -- es decir, si hay que dejar el marcador. El
+ * arbol saliente ya no importa: el entrante usa la misma base. */
 void metro_sync_record_db_stamp(void);
-bool metro_sync_switch_needs_rebuild(const char *outgoing_tree_root);
+bool metro_sync_db_stamp_is_current(void);
+bool metro_sync_switch_needs_rebuild(void);
 
 #endif /* METRO_SYNC_H */

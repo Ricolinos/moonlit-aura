@@ -42,6 +42,12 @@ void metro_main(void) NORETURN_ATTR;
  * already shows through every lcd_clear_display() call. */
 void metro_apply_hygiene(void);
 
+/* moonlit (D-054): defined in metro_settings.c (owner of the contract
+ * paths); declared here too because apps/main.c only includes this
+ * header. Same call site rules as metro_apply_hygiene() -- see
+ * metro_settings.h and MODIFICATIONS.md. */
+void metro_force_shared_db_path(void);
+
 /* Blocks showing the one full-screen sync wait state (S4.3) for as
  * long as metro_sync_needs_screen() is true, same loop
  * metro_disk_handoff() uses at boot/USB-return -- exposed so Settings'

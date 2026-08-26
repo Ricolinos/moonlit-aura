@@ -38,8 +38,9 @@
 #define METRO_SYNC_DIR         "/.aura"
 #define METRO_SYNC_MARKER_PATH METRO_SYNC_DIR "/sync-pending.json"
 #define METRO_LIBRARY_STAMP_PATH METRO_SYNC_DIR "/library-stamp" /* M-091, v12 */
-#define METRO_DB_STAMP_SUBPATH   "/aura/db_stamp.txt"
-#define METRO_DB_STAMP_PATH      ROCKBOX_DIR METRO_DB_STAMP_SUBPATH
+/* moonlit (D-054, v15): el sello de la base vive junto a la base
+ * compartida, no dentro de cada arbol (metro_settings.h). */
+#define METRO_DB_STAMP_PATH      AURA_SHARED_DB_STAMP_PATH
 
 /* A real marker is ~150 bytes; 1KB leaves room for future keys. */
 #define MARKER_BUF_SIZE 1024
@@ -159,27 +160,37 @@ void metro_sync_record_db_stamp(void)
     char stamp[STAMP_BUF];
 
     ensure_library_stamp(stamp, sizeof(stamp));
+    if (!dir_exists(AURA_SHARED_DB_DIR))
+        mkdir(AURA_SHARED_DB_DIR);
     write_small_file(METRO_DB_STAMP_PATH, stamp);
 }
 
-bool metro_sync_switch_needs_rebuild(const char *outgoing_tree_root)
+bool metro_sync_db_stamp_is_current(void)
 {
-    char stamp[STAMP_BUF], recorded[STAMP_BUF], path[MAX_PATH];
-    bool had_stamp = read_small_file(METRO_LIBRARY_STAMP_PATH, stamp, sizeof(stamp)) > 0;
+    char stamp[STAMP_BUF], recorded[STAMP_BUF];
 
-    if (!had_stamp)
-    {
-        /* Arranque en frio del mecanismo: el saliente acaba de estar
-         * corriendo, su base SI esta al dia -- se sella y se anota, para
-         * que el proximo cambio de vuelta ya no reconstruya. */
-        ensure_library_stamp(stamp, sizeof(stamp));
-        snprintf(path, sizeof(path), "%s%s", outgoing_tree_root, METRO_DB_STAMP_SUBPATH);
-        write_small_file(path, stamp);
-    }
-
+    if (read_small_file(METRO_LIBRARY_STAMP_PATH, stamp, sizeof(stamp)) <= 0)
+        return false;
     if (read_small_file(METRO_DB_STAMP_PATH, recorded, sizeof(recorded)) <= 0)
-        return true; /* el entrante nunca anoto: como antes de v12 */
-    return strcmp(recorded, stamp) != 0;
+        return false;
+    return strcmp(recorded, stamp) == 0;
+}
+
+bool metro_sync_switch_needs_rebuild(void)
+{
+    char stamp[STAMP_BUF];
+
+    if (read_small_file(METRO_LIBRARY_STAMP_PATH, stamp, sizeof(stamp)) <= 0)
+    {
+        /* Arranque en frio del mecanismo: el saliente (nosotros) acaba
+         * de estar corriendo sobre la base compartida, que SI esta al
+         * dia -- se crea el sello y se anota, para que ni este cambio
+         * ni el de vuelta reconstruyan (D-054: la base es la misma para
+         * el entrante). */
+        metro_sync_record_db_stamp();
+        return false;
+    }
+    return !metro_sync_db_stamp_is_current();
 }
 
 bool metro_sync_write_music_pending_marker(void)

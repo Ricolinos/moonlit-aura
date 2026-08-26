@@ -73,6 +73,27 @@ typedef struct {
 
 extern metro_settings_t metro_settings;
 
+/* moonlit (D-054, contrato v15): base de datos tagcache COMPARTIDA
+ * entre las tres familias (Aura, Metro, moonlit) -- apps/tagcache.c es
+ * byte-identico en los tres repos (TAGCACHE_MAGIC 0x54434810) y la
+ * ruta es runtime (global_settings.tagcache_db_path), asi que un solo
+ * juego de database_*.tcd en la raiz del volumen sirve a todos y el
+ * cambio de firmware deja de reconstruir 5 minutos. Unico dueno de
+ * las rutas del contrato: este header + metro_settings.c/metro_sync.c
+ * (regla de rutas del CLAUDE.md). Studio ignora el directorio salvo
+ * para borrarlo al forzar una reconstruccion. */
+#define AURA_SHARED_DB_DIR        "/.aura/tagcache"
+#define AURA_SHARED_DB_STAMP_PATH AURA_SHARED_DB_DIR "/db_stamp.txt"
+
+/* D-054: fija global_settings.tagcache_db_path = AURA_SHARED_DB_DIR y
+ * migra por rename() (misma particion FAT, atomico, nunca copia) los
+ * database_*.tcd y el db_stamp.txt v12 que un arranque anterior dejo
+ * dentro del arbol (.rockbox/). Debe correr en apps/main.c init()
+ * DESPUES de settings_load() (que sobreescribiria la ruta con la de
+ * config.cfg) y ANTES de init_tagcache() (que abre la base en la ruta
+ * que encuentre) -- ver MODIFICATIONS.md. */
+void metro_force_shared_db_path(void);
+
 /* Loads from disk into metro_settings, falling back to defaults for
  * any key that's missing or the file doesn't exist at all -- in which
  * case this also creates it (E.2, first-boot guarantee). Does NOT

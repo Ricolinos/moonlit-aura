@@ -116,6 +116,15 @@ vivo en `DECISIONS.md`.
   pintado sobre el LCD (ver `docs/DESVIACIONES.md` F1-1).
 - `apps/SOURCES`: bloque agregado al final listando
   `metro/metro_main.c` y `metro/metro_screen_splash.c`.
+- `apps/main.c` (moonlit, D-054, contrato v15): `metro_force_shared_db_path()`
+  se llama en los dos cuerpos de `init()` inmediatamente después de
+  `metro_apply_hygiene()` — es decir, después de `settings_load()` (que
+  de otro modo sobreescribiría `global_settings.tagcache_db_path` con el
+  valor de `config.cfg`) y antes de `init_dircache()`/`init_tagcache()`
+  (que abren la base en la ruta que encuentren). Fija la ruta de la base
+  tagcache en `/.aura/tagcache` (compartida entre las tres familias) y
+  migra por `rename()` los `database_*.tcd` del árbol. Comentario
+  `moonlit (D-054)` en ambos sitios.
 - `apps/bitmaps/native/rockboxlogo.320x98x16.bmp`: reemplazado por el
   wordmark "metro" (Selawik Light, blanco sobre negro), mismo nombre
   de archivo y dimensiones exactas (320×98) que el original — la regla
