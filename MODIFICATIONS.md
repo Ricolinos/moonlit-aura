@@ -301,7 +301,7 @@ Ver `DECISIONS.md` M-061.
 - `apps/SOURCES`: la entrada `metro/metro_fonts.c` pasa a
   `metro/moonlit_fonts.c` (7 roles MD3, Libre Baskerville + Montserrat,
   reemplaza los 5 roles Selawik). Comentario inline `moonlit (D-032)`.
-- `apps/plugins/mpegplayer/mpegplayer.c:1400,1409-1412` (M-060, R2-F4):
+- `apps/plugins/mpegplayer/mpegplayer.c:1400,1413-1420` (M-060, R2-F4):
   los 5 `#define METRO_*_FONT_PATH` apuntaban a los `.fnt` de Selawik
   que este hito elimina (regresión hallada en revisión adversarial, no
   prevista por el plan). Pasan a los equivalentes por rol en
