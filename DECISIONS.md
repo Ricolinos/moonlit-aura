@@ -1573,3 +1573,84 @@ RAM y el memo/la respuesta cacheada evitan repetirlo, pero la primera
 pasada de precarga de 979 álbumes lo paga entero. La pista representativa
 es el primer resultado de tagcache para el álbum (orden de escaneo): si
 esa pista se borra, el álbum cambia de clave y se decodifica una vez.
+
+# v0.1.3 — Caché negativa de carátulas (D-056)
+
+**D-056 — Caché negativa `<clave>.none`: los álbumes sin carátula
+resoluble dejan de reabrir la pantalla "preparando biblioteca".**
+Diagnóstico (iPod del dueño, 1 083 álbumes, 979 `.pfraw` en
+`moonlitcache/art/`): cada entrada a Música —sin reiniciar ni cambiar de
+familia— mostraba "preparando biblioteca / preparando carátulas" con
+**57** pendientes. Esos 57 álbumes no tienen carátula que
+`metro_albumart_decode_track_cover_sized()` acepte (sin `cover.jpg`/APIC,
+o JPEG que el decodificador rechaza). `moonlit_art_load_for_album()`
+(`moonlit_art_cache.c:78-100` en v0.1.2) devolvía `false` sin escribir
+nada; D-042 dejó fuera la caché negativa a propósito (criterio heredado de
+`AF/aura_music.c:221-300`); y `moonlit_art_pending_count()`
+(`moonlit_art_cache.c:151-170` en v0.1.2) solo memorizaba el resultado
+cuando era **0** (D-055). Cadena por entrada: pre-pase recorre tagcache y
+cuenta 57 → pantalla → 57 decodes fallidos → nada cambia en disco → la
+próxima entrada repite. **Decisión** (este commit):
+
+1. **Marcador negativo.** Cuando `moonlit_art_load_for_album()` no
+   consigue arte (sin pista, sin ruta o decode fallido —
+   `moonlit_art_cache.c:126-131`, `give_up()` `:91`) escribe
+   `moonlitcache/art/<clave>.none` (0 bytes) con la **misma clave
+   estable D-055** `a-<crc32 ruta>.<mtime>` del `.pfraw`
+   (`moonlit_art_none_path()`, `moonlit_art.c`: `"<dir>/<clave>-120.pfraw"`
+   → `"<dir>/<clave>.none"`; sin tamaño ni tema, "no hay carátula" no
+   depende de ninguno). En la siguiente llamada, tras el miss del
+   `.pfraw`, ve el `.none` y devuelve `false` sin abrir la pista ni
+   decodificar (`:123`); Marea (`moonlit_screen_marea_tick()`) marca el
+   slot `MAREA_ART_MISSING` → monograma, igual que antes pero sin el
+   decode. Un decode posterior que sí produce `.pfraw` borra el `.none`
+   por si acaso (`:141`).
+2. **El pre-pase trata `.none` como resuelto.**
+   `moonlit_art_is_resolved()` = `.pfraw` válido **o** `.none` presente;
+   la usan `moonlit_art_count_uncached()` (puro, host-testable),
+   `count_uncached_now()` y el salto por álbum de
+   `moonlit_art_precache()`. La precarga deja los `.none` en el mismo
+   pase, así que a la segunda entrada `pending == 0`.
+3. **Memo permanente del pre-pase.** `moonlit_art_pending_count()`
+   memoriza el resultado **siempre** (no solo 0) por (`tagcache
+   total_entries`, tema, generación); `moonlit_art_pending_invalidate()`
+   sube la generación desde `finish_ok()` del sync con música (vía
+   `moonlit_art_request_gc()`), desde el sellado de bootstrap en
+   `metro_music_db_ready()` (`metro_music.c:207`) y tras una precarga
+   abortada; una precarga completa guarda 0 directamente. Entrar a
+   Música con la biblioteca sin cambios ya no recorre tagcache.
+4. **GC.** `gc_sweep()` estática pasa a `moonlit_art_sweep()` en
+   `moonlit_art.c` (con `test/dir.h` como stand-in de host) y
+   `moonlit_art_gc()` barre también `art/*.none`: un álbum que
+   desaparece o cambia de clave se lleva su marcador.
+5. Tests host (`test/test_art.c`, 46 checks): derivación de la ruta
+   `.none`, round-trip del marcador, `count_uncached` con `.none` como
+   cacheado, barrido que borra `.none`/`.pfraw` huérfanos y respeta
+   `.gc-pending`.
+
+**Verificación (simulador, biblioteca de `gen_test_media.sh`, 11 álbumes,
+3 sin carátula: `SinArte/`, `Wheel & Click/Sin Portada`,
+`Aura Test Combo/Night Drive`).** `rm moonlitcache/art/*` +
+`sim_shot.sh docs/screenshots/v0.1.3-prepare-first.png 1 "WAIT,SELECT"`
+→ fase 2 con "11 de 11"; `ls moonlitcache/art/` → 8 `.pfraw` + 3
+`.none`. Segunda corrida (`v0.1.3-prepare-second.png`, 40 ticks) → Música
+directamente; PIL: 240 px de la barra `primary` en la región y 160–185 de
+la primera captura, **0** en la segunda. Marea con un `SCROLL_FWD`
+(`v0.1.3-marea-none-monogram.png`): "Album sin portada" con monograma
+"A". `make -C firmware/rockbox/apps/metro/test test` verde.
+
+**`.bss`:** `arm-elf-eabi-size` antes = 8 571 388 (v0.1.2, D-055),
+después = 8 571 420 (+32 B: memo de pendientes y contexto del GC) — bajo
+el techo D-043 de 8 574 076. `build_target.sh --firmware` en 0, sin
+warnings nuevos en `apps/metro/`.
+
+**Limitación documentada / hipótesis abierta (misma que Aura D-338):** la
+clave incluye el `mtime` de la pista representativa, así que una carátula
+añadida desde Studio **reescribiendo la pista** (APIC) o tocando su mtime
+cambia la clave y se reintenta sola; si Studio solo deja un `cover.jpg`
+junto a una pista intacta, la clave no cambia y el `.none` sigue
+mandando hasta el próximo GC que lo deje huérfano (un sync con música
+que re-clave el álbum) — no hay `stat()` de carpeta en la clave a
+propósito (costo por álbum en el pre-pase). `COMPAT_STUDIO.md` no existe
+en este repo y `CONTRATO-moonlit-studio.md` v3 es inmutable: el
+comportamiento queda anotado aquí, no en el contrato.

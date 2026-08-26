@@ -61,7 +61,7 @@ bool moonlit_art_pfraw_path(int32_t seek, int size, char *out, size_t outsz);
  * biblioteca" la EJECUTA tras la precarga, con la pantalla puesta.
  * moonlit_art_gc(): una pasada -- tabla de crc32 de las claves de
  * todos los álbumes (en el scratch estático de la precarga, cero .bss
- * nuevo) y un barrido de moonlitcache/art/ (.pfraw) y
+ * nuevo) y un barrido de moonlitcache/art/ (.pfraw y, D-056, .none) y
  * /.aura/thumbs/albums/ (.mth) borrando lo que no esté en la tabla. */
 void moonlit_art_request_gc(void);
 bool moonlit_art_gc_pending(void);
@@ -74,7 +74,9 @@ void moonlit_art_gc(void);
  * moonlit_color(MROLE_SURFACE) y escribe el .pfraw para la próxima
  * vez. false si el álbum no tiene ninguna pista resoluble o ninguna
  * carátula real (folder ni embebida) -- el llamador cae al monograma
- * (M8). Nunca decodifica JPEG dentro de un bucle de animación: Marea
+ * (M8); en ese caso deja "<clave>.none" (0 bytes, D-056) junto al
+ * .pfraw que no pudo escribir, y la siguiente llamada devuelve false
+ * sin abrir la pista ni decodificar nada. Nunca decodifica JPEG dentro de un bucle de animación: Marea
  * solo debe llamar esto cuando ya sabe que hubo un cache-miss (o
  * durante moonlit_art_precache(), antes de que la pantalla exista). */
 bool moonlit_art_load_for_album(int32_t album_seek, fb_data *out);
@@ -83,10 +85,16 @@ typedef void (*moonlit_art_progress_fn)(int done, int total);
 typedef bool (*moonlit_art_abort_fn)(void);
 
 /* D-049: albums whose MOONLIT_ART_CACHE_SIZE .pfraw for the active
- * theme is missing or stale -- header reads only (one open() per
- * album, no pixels). 0 means moonlit_art_precache() has nothing to do
- * and the "Preparando biblioteca" screen never draws its phase 2. */
+ * theme is missing or stale AND have no "<clave>.none" marker (D-056)
+ * -- header reads only (one open() per album, no pixels). 0 means
+ * moonlit_art_precache() has nothing to do and the "Preparando
+ * biblioteca" screen never draws its phase 2. D-056: the answer is
+ * memoized per (tagcache total_entries, theme, generation) whatever
+ * its value; moonlit_art_pending_invalidate() bumps the generation
+ * (sync finish_ok() via moonlit_art_request_gc(), the bootstrap seal
+ * in metro_music_db_ready(), an aborted precache). */
 int moonlit_art_pending_count(void);
+void moonlit_art_pending_invalidate(void);
 
 /* D-224/D-049: recorre metro_music_albums() una vez y llama
  * moonlit_art_load_for_album() SOLO por los álbumes sin .pfraw válido

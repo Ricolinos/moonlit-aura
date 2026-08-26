@@ -24,7 +24,10 @@
  * (ver MODIFICATIONS.md, DECISIONS.md D-020, D-042). */
 #include "moonlit_art.h"
 
+#include <string.h>
+#include <stdio.h>  /* snprintf(), remove() */
 #include "file.h"
+#include "dir.h"    /* D-056: moonlit_art_sweep() */
 
 struct moonlit_art_pfraw_header {
     int32_t size;
@@ -87,7 +90,7 @@ int moonlit_art_count_uncached(int count, moonlit_art_path_fn path_fn, void *ctx
     for (i = 0; i < count; i++)
     {
         path_fn(i, path, sizeof(path), ctx);
-        if (!moonlit_art_pfraw_is_cached(path, size, radius, theme))
+        if (!moonlit_art_is_resolved(path, size, radius, theme))
             pending++;
     }
     return pending;
@@ -111,6 +114,90 @@ void moonlit_art_write_pfraw(const char *path, int size, int radius,
     write(fd, &hdr, sizeof(hdr));
     write(fd, data, (size_t)size * size * sizeof(fb_data));
     close(fd);
+}
+
+/* --- D-056: cache negativa ------------------------------------------ */
+
+bool moonlit_art_none_path(const char *pfraw_path, char *out, size_t outsz)
+{
+    const char *slash = strrchr(pfraw_path, '/');
+    const char *stem = slash ? slash + 1 : pfraw_path;
+    const char *dash = strrchr(stem, '-');
+    size_t len = strlen(pfraw_path);
+    static const char ext[] = ".pfraw";
+
+    out[0] = '\0';
+    if (!dash || dash == stem || len < sizeof(ext) - 1
+        || strcmp(pfraw_path + len - (sizeof(ext) - 1), ext) != 0)
+        return false;
+    if ((size_t)(dash - pfraw_path) + sizeof(".none") > outsz)
+        return false;
+    memcpy(out, pfraw_path, (size_t)(dash - pfraw_path));
+    memcpy(out + (dash - pfraw_path), ".none", sizeof(".none"));
+    return true;
+}
+
+void moonlit_art_write_none(const char *none_path)
+{
+    int fd = creat(none_path, 0666);
+
+    if (fd >= 0)
+        close(fd);
+}
+
+bool moonlit_art_none_exists(const char *none_path)
+{
+    int fd = open(none_path, O_RDONLY);
+
+    if (fd < 0)
+        return false;
+    close(fd);
+    return true;
+}
+
+bool moonlit_art_is_resolved(const char *pfraw_path, int size, int radius,
+                             int32_t theme)
+{
+    char none[MOONLIT_ART_PATH_MAX];
+
+    if (moonlit_art_pfraw_is_cached(pfraw_path, size, radius, theme))
+        return true;
+    return moonlit_art_none_path(pfraw_path, none, sizeof(none))
+           && moonlit_art_none_exists(none);
+}
+
+int moonlit_art_sweep(const char *dir, const char *suffix,
+                      moonlit_art_keep_fn keep, void *ctx)
+{
+    DIR *d = opendir(dir);
+    struct DIRENT *entry;
+    size_t suffix_len = strlen(suffix);
+    char stem[MOONLIT_ART_PATH_MAX];
+    char full[MOONLIT_ART_PATH_MAX];
+    int removed = 0;
+
+    if (!d)
+        return 0;
+    while ((entry = readdir(d)) != NULL)
+    {
+        const char *name = entry->d_name;
+        size_t len = strlen(name);
+
+        if (name[0] == '.' || len <= suffix_len ||
+            strcmp(name + len - suffix_len, suffix) != 0)
+            continue;
+        if (len - suffix_len >= sizeof(stem))
+            continue;
+        memcpy(stem, name, len - suffix_len);
+        stem[len - suffix_len] = '\0';
+        if (keep(stem, ctx))
+            continue;
+        snprintf(full, sizeof(full), "%s/%s", dir, name);
+        if (remove(full) == 0)
+            removed++;
+    }
+    closedir(d);
+    return removed;
 }
 
 /* D-042: raiz entera copiada localmente (mismo algoritmo que

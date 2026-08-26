@@ -85,7 +85,7 @@ $(BUILD)/test_flow: test_flow.c ../moonlit_flow.c ../moonlit_flow.h | $(BUILD)
 $(BUILD)/test_wheel: test_wheel.c ../moonlit_wheel.c ../moonlit_wheel.h | $(BUILD)
 	$(CC) $(CFLAGS) test_wheel.c ../moonlit_wheel.c -o $@
 
-$(BUILD)/test_art: test_art.c ../moonlit_art.c ../moonlit_art.h file.h lcd.h | $(BUILD)
+$(BUILD)/test_art: test_art.c ../moonlit_art.c ../moonlit_art.h file.h dir.h lcd.h | $(BUILD)
 	$(CC) $(CFLAGS) test_art.c ../moonlit_art.c -o $@
 
 $(BUILD)/test_firmware_families: test_firmware_families.c ../metro_firmware_families.c ../metro_firmware_families.h | $(BUILD)

@@ -14,7 +14,7 @@ Firmware para iPod Classic 6G (S5L8702, 320×240 @ LCD_DPI 160, 64 MB, sin GPU/F
 
 ## Reglas que no se deducen del código
 - Idiomas: Markdown en español de México sin voseo; código, comentarios y commits en inglés; UI en español (`firmware/rockbox/apps/metro/metro_lang.c`).
-- Toda decisión se cierra en `DECISIONS.md` (D-NNN) antes de codificar. D-001…D-055 vinculantes. Metro histórico: `DECISIONS-METRO-ARCHIVE.md` (solo lectura).
+- Toda decisión se cierra en `DECISIONS.md` (D-NNN) antes de codificar. D-001…D-056 vinculantes. Metro histórico: `DECISIONS-METRO-ARCHIVE.md` (solo lectura).
 - Plan vigente: `docs/plan/05-plan-correctivo.md` (hitos M1–M12). `docs/plans/archivo/` es histórico, nunca trabajo pendiente.
 - Colores: solo `design-system/tokens.json` (roles MD3, esquemas night/dawn). En C solo `firmware/rockbox/apps/metro/moonlit_palette.c`
   incluye `firmware/rockbox/apps/metro/moonlit_tokens.h`; todo el mundo llama `moonlit_color(rol)`/`moonlit_surface(nivel, borde)`. Cero literales RGB en `apps/metro/`.

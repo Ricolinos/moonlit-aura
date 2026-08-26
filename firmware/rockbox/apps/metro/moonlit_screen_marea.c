@@ -134,7 +134,9 @@
  * reclama el slot SIN abrir archivos (monograma/relleno liso) y lo deja
  * en PENDING para moonlit_screen_marea_tick(), que es el unico sitio
  * de este archivo que toca disco (moonlit_art_load_for_album(): lee
- * el .pfraw o, si no existe, decodifica la caratula). */
+ * el .pfraw o, si no existe, decodifica la caratula -- salvo que haya
+ * un "<clave>.none" (D-056): entonces devuelve false sin abrir la
+ * pista y el slot pasa a MISSING de inmediato). */
 enum marea_art_state {
     MAREA_ART_PENDING = 0, /* nadie ha intentado cargarla todavia */
     MAREA_ART_LOADED,      /* cover[] valido */

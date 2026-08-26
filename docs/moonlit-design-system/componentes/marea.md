@@ -35,7 +35,11 @@ ociosa del bucle principal, **solo cuando no anima** — lee el `.pfraw`
 horneado por M7 (clave estable D-055) o decodifica la carátula si falta;
 sin pendientes, precarga el álbum más cercano sin slot dentro de
 `MAREA_PREFETCH_RADIUS` (6). Un álbum sin carátula queda
-`MAREA_ART_MISSING` (monograma definitivo, sin reintentos).
+`MAREA_ART_MISSING` (monograma definitivo, sin reintentos) y deja en
+`moonlitcache/art/` un marcador `<clave>.none` de 0 bytes (D-056): la
+siguiente vez, `tick()` cae al monograma sin abrir la pista ni
+decodificar, y el pre-pase de "preparando biblioteca" lo cuenta como
+resuelto. Captura: `docs/screenshots/v0.1.3-marea-none-monogram.png`.
 
 ## Navegación
 

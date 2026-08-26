@@ -31,9 +31,10 @@
  * (file.h) -- nada de aura_settings/apple2026_shell. `theme` reemplaza
  * al global aura_settings.theme de la version original: aqui lo pasa
  * el llamador (moonlit_art_cache.c, D-042) para no atar este archivo a
- * ningun modulo de Rockbox mas alla de file.h/lcd.h, y para que
+ * ningun modulo de Rockbox mas alla de file.h/dir.h/lcd.h, y para que
  * apps/metro/test/test_art.c pueda compilarlo y enlazarlo con `cc` de
- * host (test/file.h, test/lcd.h son los unicos stands-in). */
+ * host (test/file.h, test/dir.h, test/lcd.h son los unicos stands-in;
+ * dir.h desde D-056, por el barrido de huerfanos). */
 #ifndef MOONLIT_ART_H
 #define MOONLIT_ART_H
 
@@ -84,13 +85,43 @@ bool moonlit_art_pfraw_is_cached(const char *path, int size, int radius,
  * maps index -> album seek -> path, moonlit_art_cache.c does that). */
 typedef void (*moonlit_art_path_fn)(int index, char *out, size_t outsz, void *ctx);
 
-/* D-049: how many of `count` paths are NOT cached (missing file or
- * header mismatch), header reads only -- the number the "Preparando
+/* D-049: how many of `count` paths are NOT resolved (missing file or
+ * header mismatch, and no .none marker -- D-056), header reads only -- the number the "Preparando
  * biblioteca" screen shows as the total, and the reason it can decide
  * to show nothing at all (0 pending == library unchanged, AF pattern
  * aura_music.c:352-358). Pure: host-tested in test/test_art.c. */
 int moonlit_art_count_uncached(int count, moonlit_art_path_fn path_fn, void *ctx,
                                int size, int radius, int32_t theme);
+
+/* --- D-056: cache negativa ------------------------------------------ */
+
+/* Ruta del marcador "<clave>.none" a partir de la ruta del .pfraw
+ * "<dir>/<clave>-<size>.pfraw" (misma clave estable D-055, sin tamano
+ * ni tema: "no hay caratula" no depende de ninguno de los dos). false
+ * si `pfraw_path` no tiene esa forma (out queda vacio). */
+bool moonlit_art_none_path(const char *pfraw_path, char *out, size_t outsz);
+
+/* Marcador de 0 bytes: "ya se intento decodificar este album y no
+ * tiene caratula resoluble" -- el pre-pase lo cuenta como resuelto y
+ * Marea cae al monograma sin abrir la pista. Se borra solo cuando la
+ * clave cambia (GC) o cuando un decode posterior si produce .pfraw. */
+void moonlit_art_write_none(const char *none_path);
+bool moonlit_art_none_exists(const char *none_path);
+
+/* .pfraw valido para (size, radius, theme) O marcador .none presente:
+ * nada que hacer en la precarga. Cabeceras/open() solamente. */
+bool moonlit_art_is_resolved(const char *pfraw_path, int size, int radius,
+                             int32_t theme);
+
+/* D-056: barrido de huerfanos host-testable. Borra de `dir` todo
+ * archivo que termine en `suffix` cuyo tallo (nombre sin el sufijo) no
+ * pase `keep(stem, ctx)`; nombres que empiecen con '.' u otros sufijos
+ * se dejan. Devuelve cuantos borro. Antes era gc_sweep() estatica en
+ * moonlit_art_cache.c (D-055); aqui para que test_art.c cubra que un
+ * .none huerfano cae igual que un .pfraw. */
+typedef bool (*moonlit_art_keep_fn)(const char *stem, void *ctx);
+int moonlit_art_sweep(const char *dir, const char *suffix,
+                      moonlit_art_keep_fn keep, void *ctx);
 
 /* Recorta las 4 esquinas de un bitmap fila-contigua (buf, size x size)
  * al radio pedido, mezclando hacia bg en el borde -- se hornea UNA VEZ

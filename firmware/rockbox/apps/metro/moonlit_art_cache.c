@@ -26,7 +26,7 @@
 #include <string.h>
 
 #include "file.h"
-#include "dir.h"
+#include "dir.h"    /* dir_exists()/mkdir() */
 #include "kernel.h" /* yield() */
 #include "debug.h"  /* DEBUGF() */
 #include "crc32.h"  /* crc_32() -- D-055 gc table */
@@ -40,7 +40,6 @@
 #include "metro_music.h"
 #include "metro_albumart.h"
 #include "metro_settings.h"
-#include "metro_fsutil.h"
 
 bool moonlit_art_pfraw_path(int32_t seek, int size, char *out, size_t outsz)
 {
@@ -77,9 +76,36 @@ static void ensure_cache_dir(void)
         mkdir(dir);
 }
 
+/* D-056: "<dir>/<key>.none" next to "<dir>/<key>-120.pfraw". */
+static bool none_path_for(const char *pfraw_path, char *out, size_t outsz)
+{
+    return moonlit_art_none_path(pfraw_path, out, outsz);
+}
+
+/* D-056: the album was looked at and has no resolvable cover -- leave
+ * the 0-byte marker so neither the pre-pass nor Marea's tick tries the
+ * decode again. Same key as the .pfraw (D-055, includes the track's
+ * mtime): a cover added by rewriting the track re-keys the album and
+ * retries by itself; a cover.jpg dropped next to an untouched track
+ * does NOT (documented limitation, DECISIONS.md D-056). */
+static bool give_up(const char *pfraw_path, int32_t album_seek)
+{
+    char none[MAX_PATH];
+
+    (void)album_seek; /* DEBUGF() only */
+    if (none_path_for(pfraw_path, none, sizeof(none)))
+    {
+        ensure_cache_dir();
+        moonlit_art_write_none(none);
+        DEBUGF("moonlit_art: none %ld\n", (long)album_seek);
+    }
+    return false;
+}
+
 bool moonlit_art_load_for_album(int32_t album_seek, fb_data *out)
 {
     char path[MAX_PATH];
+    char none[MAX_PATH];
     metro_music_item_t track;
     char track_path[MAX_PATH];
     int32_t theme = (int32_t)metro_theme_get();
@@ -94,12 +120,16 @@ bool moonlit_art_load_for_album(int32_t album_seek, fb_data *out)
         return true;
     }
 
+    /* D-056: negative hit -- monogram, no track open, no JPEG decode. */
+    if (none_path_for(path, none, sizeof(none)) && moonlit_art_none_exists(none))
+        return false;
+
     if (metro_music_songs_of_album(album_seek, &track, 1) < 1)
-        return false;
+        return give_up(path, album_seek);
     if (!metro_music_track_path(track.seek, track_path, sizeof(track_path)))
-        return false;
+        return give_up(path, album_seek);
     if (!metro_albumart_decode_track_cover_sized(track_path, out, MOONLIT_ART_CACHE_SIZE))
-        return false;
+        return give_up(path, album_seek);
 
     DEBUGF("moonlit_art: decode %ld\n", (long)album_seek);
 
@@ -108,6 +138,10 @@ bool moonlit_art_load_for_album(int32_t album_seek, fb_data *out)
 
     ensure_cache_dir();
     moonlit_art_write_pfraw(path, MOONLIT_ART_CACHE_SIZE, MOONLIT_ART_CACHE_RADIUS, theme, out);
+    /* a stale marker under the same key cannot normally coexist with a
+     * decode (it would have short-circuited above) -- cheap to be sure */
+    if (none[0])
+        remove(none);
     return true;
 }
 
@@ -136,14 +170,36 @@ static int load_albums(void)
     return metro_music_albums(s_precache_albums, METRO_MUSIC_MAX_GROUPS);
 }
 
-/* D-055: with stable keys the expensive answer ("nothing pending") is
- * also the stable one -- remember it per (tagcache total_entries,
- * theme) so re-entering Música doesn't pay one tagcache lookup + one
- * header read per album every time (D-049 made that pass cheap in
- * disk terms; the key lookup adds a tagcache search per album). A
- * decode pass or a sync (moonlit_art_request_gc()) forgets it. */
-static int s_nothing_pending_entries = -1;
-static int32_t s_nothing_pending_theme = -1;
+/* D-055/D-056: remember the pre-pass answer per (tagcache
+ * total_entries, theme, generation) -- ALWAYS, not only when it is 0.
+ * With stable keys plus the negative cache every album ends up either
+ * .pfraw or .none after one complete pass, so the count only changes
+ * when the library does; before D-056 an album whose cover could not
+ * be decoded stayed pending forever and, since only 0 was memoized,
+ * every entry into Música re-walked tagcache, showed the screen and
+ * re-failed the same 57 decodes on the owner's iPod. The generation
+ * bumps on moonlit_art_pending_invalidate(): sync finish_ok()
+ * (via moonlit_art_request_gc()), the bootstrap seal in
+ * metro_music_db_ready(), and an aborted precache. A completed
+ * precache stores 0 directly. */
+static int s_pending_memo_entries = -1;
+static int32_t s_pending_memo_theme = -1;
+static unsigned s_pending_memo_gen_seen = 0;
+static unsigned s_pending_gen = 1;
+static int s_pending_memo_value = 0;
+
+void moonlit_art_pending_invalidate(void)
+{
+    s_pending_gen++;
+}
+
+static void remember_pending(int entries, int32_t theme, int value)
+{
+    s_pending_memo_entries = entries;
+    s_pending_memo_theme = theme;
+    s_pending_memo_gen_seen = s_pending_gen;
+    s_pending_memo_value = value;
+}
 
 static int count_uncached_now(int count, int32_t theme)
 {
@@ -155,8 +211,8 @@ static int count_uncached_now(int count, int32_t theme)
         precache_path_at(i, path, sizeof(path), NULL);
         if (!path[0])
             continue; /* no track -> nothing to cache, never pending */
-        if (!moonlit_art_pfraw_is_cached(path, MOONLIT_ART_CACHE_SIZE,
-                                         MOONLIT_ART_CACHE_RADIUS, theme))
+        if (!moonlit_art_is_resolved(path, MOONLIT_ART_CACHE_SIZE,
+                                     MOONLIT_ART_CACHE_RADIUS, theme))
             n++;
         if ((i & 31) == 31)
             yield();
@@ -170,18 +226,15 @@ int moonlit_art_pending_count(void)
     int entries = tagcache_get_stat()->total_entries;
     int count, pending;
 
-    if (entries == s_nothing_pending_entries && theme == s_nothing_pending_theme)
-        return 0;
+    if (entries == s_pending_memo_entries && theme == s_pending_memo_theme
+        && s_pending_memo_gen_seen == s_pending_gen)
+        return s_pending_memo_value;
 
     count = load_albums();
     if (count <= 0)
         return 0;
     pending = count_uncached_now(count, theme);
-    if (pending == 0)
-    {
-        s_nothing_pending_entries = entries;
-        s_nothing_pending_theme = theme;
-    }
+    remember_pending(entries, theme, pending);
     return pending;
 }
 
@@ -203,7 +256,7 @@ bool moonlit_art_precache(moonlit_art_progress_fn progress_cb,
     pending = count_uncached_now(count, theme);
     if (pending == 0)
         return true;
-    s_nothing_pending_entries = -1;
+    moonlit_art_pending_invalidate();
 
     for (i = 0; i < count; i++)
     {
@@ -214,15 +267,16 @@ bool moonlit_art_precache(moonlit_art_progress_fn progress_cb,
         if (!moonlit_art_pfraw_path(s_precache_albums[i].seek, MOONLIT_ART_CACHE_SIZE,
                                     path, sizeof(path)))
             continue;
-        if (moonlit_art_pfraw_is_cached(path, MOONLIT_ART_CACHE_SIZE,
-                                        MOONLIT_ART_CACHE_RADIUS, theme))
+        if (moonlit_art_is_resolved(path, MOONLIT_ART_CACHE_SIZE,
+                                    MOONLIT_ART_CACHE_RADIUS, theme))
             continue;
 
-        /* moonlit_art_load_for_album() decide hit vs. decode -- un
-         * álbum sin carátula resoluble nunca escribe .pfraw (devuelve
-         * false) y por lo tanto vuelve a intentar el decode en cada
-         * pasada, sin caché negativa a propósito (mismo criterio
-         * que aura_music_precache_album_art(), AF/aura_music.c:221-300). */
+        /* moonlit_art_load_for_album() decide hit vs. decode. D-056: un
+         * álbum sin carátula resoluble deja su "<clave>.none" en este
+         * mismo pase (antes, sin caché negativa -- criterio heredado de
+         * aura_music_precache_album_art(), AF/aura_music.c:221-300 --
+         * volvía a contar como pendiente y a fallar el decode en cada
+         * entrada a Música). */
         moonlit_art_load_for_album(s_precache_albums[i].seek, s_precache_cover);
         done++;
         if (progress_cb)
@@ -232,8 +286,14 @@ bool moonlit_art_precache(moonlit_art_progress_fn progress_cb,
         /* D-049: between albums only -- never mid-decode, so an abort
          * leaves the cache consistent (every .pfraw on disk complete). */
         if (should_abort && should_abort())
+        {
+            moonlit_art_pending_invalidate();
             return false;
+        }
     }
+    /* D-056: every album is now .pfraw or .none -- the next entry into
+     * Música must not walk tagcache again to learn that. */
+    remember_pending(tagcache_get_stat()->total_entries, theme, 0);
     return true;
 }
 
@@ -257,7 +317,7 @@ void moonlit_art_request_gc(void)
     char path[MAX_PATH];
     int fd;
 
-    s_nothing_pending_entries = -1;
+    moonlit_art_pending_invalidate();
     metro_music_album_art_key_reset();
     ensure_cache_dir();
     gc_flag_path(path, sizeof(path));
@@ -293,40 +353,19 @@ static bool gc_table_has(const uint32_t *table, int n, uint32_t crc)
     return false;
 }
 
-/* Borra de `dir` todo archivo que termine en `suffix` cuyo tallo
- * (nombre sin el sufijo) no esté en la tabla. Un nombre que no
- * termine en `suffix` (la bandera, otros tamaños) se deja. */
-static void gc_sweep(const char *dir, const char *suffix, const uint32_t *table, int n)
+/* D-056: keep = the stem's crc32 is in the live-key table. Lo que
+ * antes era gc_sweep() estática vive ahora en moonlit_art.c
+ * (moonlit_art_sweep(), host-testable). */
+struct gc_ctx {
+    const uint32_t *table;
+    int n;
+};
+
+static bool gc_keep(const char *stem, void *ctx)
 {
-    DIR *d = opendir(dir);
-    struct DIRENT *entry;
-    size_t suffix_len = strlen(suffix);
-    char stem[METRO_FSUTIL_NAME_LEN];
-    char full[MAX_PATH];
+    const struct gc_ctx *c = ctx;
 
-    if (!d)
-        return;
-    while ((entry = readdir(d)) != NULL)
-    {
-        const char *name = entry->d_name;
-        size_t len = strlen(name);
-
-        if (name[0] == '.' || len <= suffix_len ||
-            strcmp(name + len - suffix_len, suffix) != 0)
-            continue;
-        if (len - suffix_len >= sizeof(stem))
-            continue;
-        memcpy(stem, name, len - suffix_len);
-        stem[len - suffix_len] = '\0';
-        if (gc_table_has(table, n, key_crc(stem)))
-            continue;
-        strlcpy(full, dir, sizeof(full));
-        strlcat(full, "/", sizeof(full));
-        strlcat(full, name, sizeof(full));
-        remove(full);
-        DEBUGF("moonlit_art: gc %s\n", name);
-    }
-    closedir(d);
+    return gc_table_has(c->table, c->n, key_crc(stem));
 }
 
 void moonlit_art_gc(void)
@@ -336,6 +375,7 @@ void moonlit_art_gc(void)
     char dir[MAX_PATH], path[MAX_PATH];
     int count = load_albums();
     int i, n = 0;
+    struct gc_ctx ctx;
 
     for (i = 0; i < count && n < GC_TABLE_CAP; i++)
     {
@@ -345,11 +385,16 @@ void moonlit_art_gc(void)
             yield();
     }
 
+    ctx.table = table;
+    ctx.n = n;
+
     metro_settings_metro_cache_dir("art", dir, sizeof(dir));
-    gc_sweep(dir, "-" MOONLIT_ART_STR(MOONLIT_ART_CACHE_SIZE) ".pfraw", table, n);
+    moonlit_art_sweep(dir, "-" MOONLIT_ART_STR(MOONLIT_ART_CACHE_SIZE) ".pfraw", gc_keep, &ctx);
+    /* D-056: an orphan .none (album gone / re-keyed) goes the same way */
+    moonlit_art_sweep(dir, ".none", gc_keep, &ctx);
 
     metro_settings_shared_thumbs_dir("albums", dir, sizeof(dir));
-    gc_sweep(dir, ".mth", table, n);
+    moonlit_art_sweep(dir, ".mth", gc_keep, &ctx);
 
     gc_flag_path(path, sizeof(path));
     remove(path);

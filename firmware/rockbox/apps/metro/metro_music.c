@@ -46,6 +46,7 @@
 #include "metro_artist_images.h"
 #include "metro_fsutil.h"
 #include "metro_volume.h"
+#include "moonlit_art_cache.h" /* moonlit_art_pending_invalidate() -- D-056 */
 
 /* Enough unique values for a few thousand artists/albums/genres --
  * same size Aura-Firmware settled on for the same purpose (D-021).
@@ -199,7 +200,12 @@ bool metro_music_db_ready(void)
          * library. A database that already existed is left alone (its
          * own stamp, or none, decides). */
         if (s_scan_triggered)
+        {
             metro_sync_record_db_stamp();
+            /* moonlit (D-056): a freshly built database may re-key
+             * albums -- forget the memoized pending count. */
+            moonlit_art_pending_invalidate();
+        }
         tagcache_start_scan();
         s_update_triggered = true;
         /* D-049: the cover pre-pass that used to run here (synchronous,
