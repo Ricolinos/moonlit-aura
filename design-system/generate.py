@@ -18,15 +18,25 @@ Lee tokens.json (unica fuente de verdad, D-010) y produce:
                                     tokens.json:icon, via rsvg-convert +
                                     supersampleo 16x (--icons).
 
-Logotipo (--logo) llega en M9 como subcomando nuevo de este mismo
-archivo -- no se porta nada del generador de Aura-Firmware mas alla de
-la forma de tokens.json, el patron dict-plano -> #define de
+  - apps/metro/moonlit_logo_table.c   Mascaras de cobertura de 8 bits del
+                                    logotipo Waning Crescent (D-016,
+                                    D-044): creciente en tokens.json:
+                                    logo.crescent_sizes y wordmark
+                                    "moonlit" en Libre Baskerville a
+                                    contornos (design-system/logo/*.svg),
+                                    mismo pipeline de rasterizacion y
+                                    verificacion de tonos que --icons,
+                                    mas cobertura/cuspides a 16px
+                                    (--logo).
+
+No se porta nada del generador de Aura-Firmware mas alla de la forma de
+tokens.json, el patron dict-plano -> #define de
 generate_header()/generate_aura_ds_defines()
-(AF/design-system/generate.py:124,197-262) y, para --icons, la tecnica
-de supersampleo 16x + filtro de caja + MIN_INK_TONES de
+(AF/design-system/generate.py:124,197-262) y, para --icons/--logo, la
+tecnica de supersampleo 16x + filtro de caja + MIN_INK_TONES de
 AF/design-system/generate.py:372-391,475,575-583,626-632 (sin AppKit:
 la rasterizacion es rsvg-convert sobre SVG vendoreados, como ya hacia
-firmware/tools/gen_icons.py para los iconos Fluent que este comando
+firmware/tools/gen_icons.py para los iconos Fluent que --icons
 sustituye).
 """
 import argparse
@@ -50,6 +60,8 @@ CONVTTF = ROCKBOX_TOOLS / "convttf"
 FONTS_OUT = ROOT.parent / "firmware" / "assets" / "fonts"
 ICONS_VENDOR_DIR = ROOT / "vendor" / "material-symbols"
 ICONS_OUT = ROOT.parent / "firmware" / "rockbox" / "apps" / "metro" / "moonlit_icons_table.c"
+LOGO_VENDOR_DIR = ROOT / "logo"
+LOGO_OUT = ROOT.parent / "firmware" / "rockbox" / "apps" / "metro" / "moonlit_logo_table.c"
 
 SCHEMES = ("night", "dawn")
 
@@ -451,16 +463,177 @@ def generate_icons(tokens):
     print(f"==> {ICONS_OUT.relative_to(ROOT.parent)} ({len(entries)} iconos x {len(sizes)} tamanos)")
 
 
+# D-016/D-044: verificacion mecanica E.3 del logotipo (docs/plan/03-plan-implementacion.md:392-398),
+# solo sobre el creciente a 16px -- el tamano mas chico, donde las
+# cuspides del creciente son ~1px y el cuerpo corre riesgo de
+# adelgazarse hasta desaparecer.
+MIN_CRESCENT_COVERAGE_16 = 3
+CRESCENT_COVERAGE_THRESHOLD = 200
+CUSP_DUST_THRESHOLD = 60
+
+
+def _rasterize_alpha(svg_path, w, h):
+    hi_w, hi_h = w * ICON_SUPERSAMPLE, h * ICON_SUPERSAMPLE
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        result = subprocess.run(
+            ["rsvg-convert", "-w", str(hi_w), "-h", str(hi_h), "-o", str(tmp_path), str(svg_path)],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            die(f"rsvg-convert fallo para {svg_path} @ {w}x{h}:\n{result.stderr}")
+        img = Image.open(tmp_path).convert("RGBA")
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    img = img.resize((w, h), Image.BOX)
+    return list(img.getchannel("A").tobytes())
+
+
+def _check_crescent_16(data, w, h):
+    best_col, best_count = 0, -1
+    for x in range(w):
+        count = sum(1 for y in range(h) if data[y * w + x] > 0)
+        if count > best_count:
+            best_col, best_count = x, count
+
+    strong = sum(1 for y in range(h) if data[y * w + best_col] >= CRESCENT_COVERAGE_THRESHOLD)
+    coverage_ok = strong >= MIN_CRESCENT_COVERAGE_16
+
+    dust = []
+    for y in range(h):
+        for x in range(w):
+            v = data[y * w + x]
+            if 0 < v < CUSP_DUST_THRESHOLD:
+                neighbour_ok = any(
+                    0 <= x + dx < w and 0 <= y + dy < h and data[(y + dy) * w + (x + dx)] >= CUSP_DUST_THRESHOLD
+                    for dy in (-1, 0, 1) for dx in (-1, 0, 1) if not (dx == 0 and dy == 0)
+                )
+                if not neighbour_ok:
+                    dust.append((x, y, v))
+
+    return coverage_ok, strong, dust
+
+
+def generate_logo(tokens):
+    print("==> Generando apps/metro/moonlit_logo_table.c")
+    if Image is None:
+        die(
+            "falta el modulo Pillow -- crea el venv del design system:\n"
+            "  python3 -m venv design-system/.venv && "
+            "design-system/.venv/bin/pip install pillow"
+        )
+
+    logo_cfg = tokens["logo"]
+    sizes = logo_cfg["crescent_sizes"]
+    ww, wh = logo_cfg["wordmark_size"]
+
+    crescent_svg = LOGO_VENDOR_DIR / "moonlit-crescent.svg"
+    wordmark_svg = LOGO_VENDOR_DIR / "moonlit-wordmark.svg"
+    if not crescent_svg.exists():
+        die(f"falta {crescent_svg}")
+    if not wordmark_svg.exists():
+        die(f"falta {wordmark_svg}")
+
+    rows = []
+    fail = []
+    crescent_entries = []
+    for size_px in sizes:
+        data = _rasterize_alpha(crescent_svg, size_px, size_px)
+        tones = {v for v in data if v > 0}
+        ok = len(tones) >= MIN_INK_TONES
+        rows.append(("crescent", str(size_px), len(tones), ok))
+        if not ok:
+            fail.append(("crescent", size_px, len(tones)))
+        crescent_entries.append((size_px, data))
+
+    wordmark_data = _rasterize_alpha(wordmark_svg, ww, wh)
+    wordmark_tones = {v for v in wordmark_data if v > 0}
+    wordmark_ok = len(wordmark_tones) >= MIN_INK_TONES
+    rows.append(("wordmark", f"{ww}x{wh}", len(wordmark_tones), wordmark_ok))
+    if not wordmark_ok:
+        fail.append(("wordmark", f"{ww}x{wh}", len(wordmark_tones)))
+
+    print(f"{'mascara':<12} {'tam':>8} {'tonos':>6}  ")
+    for name, size, n_tones, ok in rows:
+        print(f"{name:<12} {size:>8} {n_tones:>6}  {'tones>=4 OK' if ok else 'FAIL'}")
+
+    if fail:
+        detail = "\n".join(f"  {n}@{s}: {t} tono(s)" for n, s, t in fail)
+        die(f"verificacion de tonos fallo -- menos de {MIN_INK_TONES} tonos de tinta:\n{detail}")
+
+    data16 = dict(crescent_entries)[16]
+    coverage_ok, strong, dust = _check_crescent_16(data16, 16, 16)
+    print(f"cobertura 16px: {strong} px >= {CRESCENT_COVERAGE_THRESHOLD}/255 en la columna mas ancha "
+          f"(minimo {MIN_CRESCENT_COVERAGE_16}) -- {'cobertura 16px OK' if coverage_ok else 'FAIL'}")
+    if not coverage_ok:
+        die(f"cobertura del creciente a 16px insuficiente: {strong} < {MIN_CRESCENT_COVERAGE_16}")
+
+    cusps_ok = len(dust) == 0
+    print(f"cuspides 16px: {len(dust)} pixel(es) aislado(s) < {CUSP_DUST_THRESHOLD}/255 "
+          f"-- {'cuspides OK' if cusps_ok else 'FAIL'}")
+    if not cusps_ok:
+        die(f"cuspides con polvo aislado a 16px (x,y,valor): {dust}")
+
+    lines = [
+        "/* GENERATED by design-system/generate.py --logo -- do not edit by hand.",
+        " *",
+        " * Waning Crescent (D-016, D-044) -- creciente por sustraccion de dos",
+        " * circulos (design-system/logo/moonlit-crescent.svg) y wordmark",
+        " * \"moonlit\" en Libre Baskerville a contornos",
+        " * (design-system/logo/moonlit-wordmark.svg, OFL 1.1, D-004).",
+        " *",
+        " * 8-bit coverage masks (one byte per pixel, row-major), rasterised",
+        " * with anti-aliasing (16x supersample + box filter), verified for ink",
+        " * tone count and (16px) coverage/cusp isolation before being",
+        " * committed. Drawn by blending a colour over whatever is behind",
+        " * (metro_fb_plot_alpha via moonlit_logo_draw_*), so they stay",
+        " * theme-neutral and never hard-code an RGB.",
+        " */",
+        '#include "moonlit_logo.h"',
+        "",
+    ]
+    for size_px, data in crescent_entries:
+        arr_name = f"moonlit_logo_crescent_{size_px}_cov"
+        lines.append(f"static const uint8_t {arr_name}[{size_px * size_px}] = {{")
+        for y in range(size_px):
+            row = data[y * size_px:(y + 1) * size_px]
+            lines.append("    " + ", ".join(f"{v:3d}" for v in row) + ",")
+        lines.append("};")
+        lines.append("")
+
+    lines.append(f"static const uint8_t moonlit_logo_wordmark_cov[{ww * wh}] = {{")
+    for y in range(wh):
+        row = wordmark_data[y * ww:(y + 1) * ww]
+        lines.append("    " + ", ".join(f"{v:3d}" for v in row) + ",")
+    lines.append("};")
+    lines.append("")
+
+    lines.append("const struct moonlit_logo_mask moonlit_logo_crescent[MOONLIT_LOGO_CRESCENT_SIZE_COUNT] = {")
+    for size_px, _data in crescent_entries:
+        arr_name = f"moonlit_logo_crescent_{size_px}_cov"
+        lines.append(f"    {{ {size_px}, {size_px}, {arr_name} }},")
+    lines.append("};")
+    lines.append("")
+    lines.append(f"const struct moonlit_logo_mask moonlit_logo_wordmark = {{ {ww}, {wh}, moonlit_logo_wordmark_cov }};")
+    lines.append("")
+
+    LOGO_OUT.parent.mkdir(parents=True, exist_ok=True)
+    LOGO_OUT.write_text("\n".join(lines))
+    print(f"==> {LOGO_OUT.relative_to(ROOT.parent)} ({len(crescent_entries)} tamanos de creciente + wordmark)")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--header", action="store_true", help="genera apps/metro/moonlit_tokens.h")
     parser.add_argument("--contrast", action="store_true", help="verifica contraste WCAG on_surface/on_surface_variant vs surface")
     parser.add_argument("--fonts", action="store_true", help="genera firmware/assets/fonts/moonlit-*.fnt")
     parser.add_argument("--icons", action="store_true", help="genera apps/metro/moonlit_icons_table.c")
+    parser.add_argument("--logo", action="store_true", help="genera apps/metro/moonlit_logo_table.c")
     args = parser.parse_args()
 
-    if not (args.header or args.contrast or args.fonts or args.icons):
-        parser.error("nada que hacer: pasa --header, --contrast, --fonts y/o --icons")
+    if not (args.header or args.contrast or args.fonts or args.icons or args.logo):
+        parser.error("nada que hacer: pasa --header, --contrast, --fonts, --icons y/o --logo")
 
     tokens = json.loads(TOKENS_PATH.read_text())
 
@@ -472,6 +645,8 @@ def main():
         generate_fonts(tokens)
     if args.icons:
         generate_icons(tokens)
+    if args.logo:
+        generate_logo(tokens)
 
     print("==> listo")
 

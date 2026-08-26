@@ -355,6 +355,8 @@ metro/metro_transitions.c
 metro/metro_turnstile_table.c
 metro/moonlit_icons.c /* moonlit (D-033): reemplaza metro/metro_icons_table.c, mascaras 8-bit Material Symbols */
 metro/moonlit_icons_table.c
+metro/moonlit_logo.c /* moonlit (D-016, D-044, M9): logotipo Waning Crescent, mascaras 8-bit */
+metro/moonlit_logo_table.c
 metro/metro_volume.c
 metro/moonlit_flow.c /* moonlit (D-014, D-041, M6): motor de proyeccion de Marea, de aura_flow.c */
 metro/moonlit_wheel.c /* moonlit (D-019, D-041, M6): dinamica de rueda de Marea, de aura_wheel.c */

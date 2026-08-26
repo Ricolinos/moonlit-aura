@@ -1,0 +1,11 @@
+==> Generando apps/metro/moonlit_logo_table.c
+mascara           tam  tonos  
+crescent           16     28  tones>=4 OK
+crescent           24     39  tones>=4 OK
+crescent           40     60  tones>=4 OK
+crescent           64     93  tones>=4 OK
+wordmark       140x28    220  tones>=4 OK
+cobertura 16px: 6 px >= 200/255 en la columna mas ancha (minimo 3) -- cobertura 16px OK
+cuspides 16px: 0 pixel(es) aislado(s) < 60/255 -- cuspides OK
+==> firmware/rockbox/apps/metro/moonlit_logo_table.c (4 tamanos de creciente + wordmark)
+==> listo
