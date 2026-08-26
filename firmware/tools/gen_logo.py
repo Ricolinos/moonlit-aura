@@ -15,7 +15,11 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-FONT_PATH = ROOT_DIR / "firmware/assets/fonts-src/Selawik-Light.ttf"
+# moonlit M2 (D-032): la fuente vendoreada previa (M-020) se elimino
+# del repo; el provisional usa la cara de titulos que D-004 ya trae
+# vendoreada. gen_logo.py se retira por completo en M9 junto con este
+# wordmark provisional (D-016/D-026).
+FONT_PATH = ROOT_DIR / "design-system/vendor/libre-baskerville/LibreBaskerville-Regular.ttf"
 OUT_PATH = ROOT_DIR / "firmware/rockbox/apps/bitmaps/native/rockboxlogo.320x98x16.bmp"
 
 WIDTH, HEIGHT = 320, 98
