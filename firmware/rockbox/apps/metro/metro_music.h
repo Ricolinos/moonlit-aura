@@ -160,6 +160,11 @@ int metro_music_song_count_of_album(int32_t album_seek);
 bool metro_music_album_art_key(int32_t album_seek, char *out, size_t outsz);
 void metro_music_album_art_key_reset(void);
 
+/* D-057: variante de solo-memo, nunca calcula la clave -- la unica
+ * segura de llamar dentro de un cuadro de animacion de Marea (D-053).
+ * false si el album no esta memoizado todavia. Ver metro_music.c. */
+bool metro_music_album_art_key_peek(int32_t album_seek, char *out, size_t outsz);
+
 /* Same order as the matching list above (alphabetical, or by track
  * number for an album) -- the row index the user selected on screen is
  * always the same track that starts playing. */

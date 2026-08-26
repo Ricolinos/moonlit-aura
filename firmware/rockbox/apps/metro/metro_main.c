@@ -351,10 +351,17 @@ void metro_main(void)
          * "reproduciendo" del hub se anima, para que el tick llegue a
          * ~20 Hz; el resto del tiempo, la de siempre. */
         /* moonlit (D-053): misma cadencia de ~20 Hz mientras Marea
-         * anima su scroll por reloj (moonlit_screen_marea_animating()). */
+         * anima su scroll por reloj (moonlit_screen_marea_animating()).
+         * moonlit (D-057): tambien mientras siga habiendo tapas
+         * pendientes en la ventana visible tras el asentamiento
+         * (moonlit_screen_marea_wants_ticks(), patron
+         * metro_screen_hub_wants_ticks()) -- antes esa espera caia a
+         * HZ/10 en cuanto la animacion terminaba, aunque
+         * moonlit_screen_marea_tick() todavia tuviera trabajo. */
         int action = metro_input_next(ctx,
                                       ((at_root && metro_screen_hub_wants_ticks()) ||
-                                       (at_marea && moonlit_screen_marea_animating()))
+                                       (at_marea && (moonlit_screen_marea_animating() ||
+                                                     moonlit_screen_marea_wants_ticks())))
                                           ? HZ / 20 : HZ / 10,
                                       &steps);
 
@@ -462,17 +469,24 @@ void metro_main(void)
                     redraw_current();
             }
 
-            /* moonlit (D-029, D-030, M8): mismo presupuesto de un
-             * decode por vuelta ociosa que metro_thumbs_tick() arriba
-             * -- moonlit_screen_marea.c nunca decodifica un JPEG
-             * dentro de show()/draw_slide() (regla dura de D-030),
-             * solo aquí, fuera de cualquier bucle de animación. */
+            /* moonlit (D-029, D-030, M8): presupuesto de decode por
+             * vuelta ociosa, mismo patrón que metro_thumbs_tick()
+             * arriba -- moonlit_screen_marea.c nunca decodifica un
+             * JPEG dentro de show()/draw_slide() (regla dura de
+             * D-030), solo aquí, fuera de cualquier bucle de
+             * animación. moonlit (D-057): el presupuesto ahora es
+             * varias tapas por vuelta (~15 ms o 4 lecturas, ver
+             * moonlit_screen_marea_tick()), no una sola. */
             /* moonlit (D-053): mientras el scroll anima, cada vuelta
              * ociosa (HZ/20) es un cuadro -- solo la banda izquierda;
              * el asentamiento repinta la pantalla completa una vez. El
-             * tick de disco NO corre durante la animacion (ninguna
-             * lectura dentro del bucle de animacion, regla del repo);
-             * al asentar, carga una tapa por vuelta y repinta la banda. */
+             * decode de JPEG NO corre durante la animación (regla del
+             * repo); moonlit (D-057) sí permite una lectura PLANA
+             * acotada por cuadro dentro de la propia animación
+             * (moonlit_screen_marea_show_carousel() -> try_frame_bounded_read(),
+             * nunca decode ni tagcache) -- al asentar,
+             * moonlit_screen_marea_tick() sigue siendo quien decodifica,
+             * ahora con su presupuesto más grande, y repinta la banda. */
             if (at_marea)
             {
                 if (moonlit_screen_marea_animating())

@@ -1654,3 +1654,185 @@ que re-clave el álbum) — no hay `stat()` de carpeta en la clave a
 propósito (costo por álbum en el pre-pase). `COMPAT_STUDIO.md` no existe
 en este repo y `CONTRATO-moonlit-studio.md` v3 es inmutable: el
 comportamiento queda anotado aquí, no en el contrato.
+
+**D-057 — Marea carga las carátulas como Music Flow: una lectura
+acotada por cuadro, tick presupuestado a HZ/20, precarga direccional.**
+Reporte del dueño en hardware (iPod 6G, HDD, 1 083 álbumes, 979
+`.pfraw` + 57 `.none` — es decir, la biblioteca **entera ya horneada**):
+tras D-053 Marea "se desliza rápido y fluido, igual que en Aura", pero
+"las carátulas tardan en aparecer (llegan monogramas y después las
+portadas)", mientras que en el Music Flow de Aura aparecen al instante.
+
+**Diagnóstico (verificado contra el código de ambos repos):**
+
+- D-053 dejó **toda** lectura de `.pfraw` en `moonlit_screen_marea_tick()`
+  (`moonlit_screen_marea.c`), que cargaba **1 slot por vuelta** del
+  bucle principal y solo cuando `!moonlit_screen_marea_animating()`
+  (`metro_main.c:476-482` antes de este commit). En reposo (sin
+  animar), el bucle principal despierta cada `HZ/10` = 100 ms
+  (`metro_main.c`, la condición de `timeout` de `metro_input_next()`
+  solo caía a `HZ/20` mientras `at_marea && animating()`) — 5 portadas
+  visibles tardaban **≥ 500 ms** en llenarse tras cada asentamiento, y
+  durante el desplazamiento mismo nunca se cargaba nada (regla dura de
+  D-053, "ninguna lectura de disco dentro de un bucle de animación").
+  La precarga ociosa (`next_slot_to_load()`, segunda mitad) barría un
+  radio **parejo** `MAREA_PREFETCH_RADIUS = MAREA_VISIBLE_RADIUS+1+3 = 6`
+  sin sesgo de dirección.
+- Aura (`../Aura-Firmware/firmware/rockbox/apps/aura/aura_musicflow.c`):
+  `get_slot_for()` (`:448-494`) llama a `aura_albumart_load_for_album()`
+  **dentro del propio `draw`** (`aura_musicflow_draw()`, invocada por
+  slide visible en `:1103`/`:1116`/`:1397`) — un `read()` plano de
+  ~42 KB (`MF_COVER_SIZE²×2 + reflejo`) cuando el `.pfraw` ya existe,
+  ~5-10 ms con el disco despierto; sin acotar a "una por cuadro", así
+  que puede decodificar JPEG y tocar tagcache ahí mismo si hace falta.
+  `MF_CACHE_SLOTS = 2×(MF_VISIBLE_RADIUS+15)+3 = 39` (`:91`) guarda 15
+  álbumes más allá de lo visible **a cada lado**, parejo (sin sesgo de
+  dirección tampoco — la asimetría 10/4 de este commit es una decisión
+  de moonlit, no un calco de Aura). Resultado: al asentar, casi todo ya
+  está en RAM porque el propio `draw` lo fue completando cuadro a
+  cuadro sin la restricción que D-053 impone aquí.
+- La ruta a un `.pfraw` (`moonlit_art_pfraw_path()` →
+  `metro_music_album_art_key()`, `metro_music.c:625-661`) **sí** toca
+  tagcache la primera vez que se resuelve un álbum en la sesión
+  (`compute_album_art_key()`, `:597-623`: `metro_music_songs_of_album()`
+  + `tagcache_retrieve()`/`_get_numeric()`) — memoizada después en un
+  anillo de 48 entradas, pero ese primer cómputo es justo la clase de
+  trabajo que D-030/D-053 prohíben dentro de un cuadro de animación.
+  Aura no tiene esa restricción (su `get_slot_for()` puede tocar
+  tagcache y decodificar JPEG dentro del `draw`); moonlit sí, así que
+  la solución no puede ser "copiar a Aura tal cual" — de ahí que la
+  lectura dentro del cuadro (item 1) esté acotada a claves **ya
+  conocidas** de antemano, nunca a resolver una nueva.
+
+**Decisión** (este commit, D-057):
+
+1. **Lectura acotada dentro del cuadro** (`moonlit_screen_marea_show_carousel()`
+   → `try_frame_bounded_read()`): mientras anima, a lo sumo **una**
+   lectura de `.pfraw` por cuadro — `moonlit_art_read_pfraw()` plano,
+   nunca `metro_albumart_decode_track_cover_sized()` ni tagcache.
+   Requiere que la clave del álbum ya esté memoizada
+   (`metro_music_album_art_key_peek()`, `metro_music.c` — variante de
+   solo-memo de `metro_music_album_art_key()`, sin el `compute_album_art_key()`
+   que toca tagcache; `moonlit_art_pfraw_path_peek()`,
+   `moonlit_art_cache.c`, construye la ruta con esa clave). Prioriza el
+   slot central del destino y luego sus visibles
+   (`moonlit_marea_prefetch_order(target, n, dir=1, MAREA_VISIBLE_RADIUS,
+   MAREA_VISIBLE_RADIUS, …)`). Un `.pfraw` inexistente o un `.none` ya
+   conocido **no** gastan el cupo del cuadro (D-056 ya distinguía
+   `open()` fallido de un miss real); solo un `read()` completo lo
+   gasta. Medido con `current_tick` y trazado con `MAREA_TRACE`
+   (macro local nueva, `DEBUGF`+`logf`, mismo patrón que
+   `metro_transitions.c:METRO_TRACE` — este módulo no tenía una propia
+   antes de D-057).
+2. **Tick con presupuesto** (`moonlit_screen_marea_tick()`): hasta
+   `MAREA_TICK_BUDGET_MAX_LOADS` = 4 cargas o `MAREA_TICK_BUDGET_MS` =
+   15 ms medidos con `current_tick`, lo que ocurra primero (antes: 1
+   carga fija). `moonlit_screen_marea_wants_ticks()` (patrón
+   `metro_screen_hub_wants_ticks()`) devuelve true mientras quede un
+   índice sin slot o `PENDING` en la ventana visible
+   (`±(MAREA_VISIBLE_RADIUS+1)`); `metro_main.c` ahora sondea a `HZ/20`
+   con `at_marea && (animating() || wants_ticks())`, no solo mientras
+   anima.
+3. **Prefetch direccional** (`moonlit_marea_prefetch_order()`, módulo
+   puro nuevo `moonlit_marea_prefetch.c/.h`, host-testado en
+   `test/test_marea_prefetch.c`, 35 checks): tras el asentamiento,
+   `next_slot_to_load()` recorre primero el propio destino, luego
+   alterna `target ± d` acotando cada lado por separado —
+   `MAREA_PREFETCH_FWD_RADIUS` = 10 en `s_last_scroll_dir` (actualizado
+   en cada `scroll_step()` real), `MAREA_PREFETCH_BACK_RADIUS` = 4 en
+   la contraria. Como `MAREA_VISIBLE_RADIUS` (2) ≤ ambos radios, la
+   ventana visible siempre queda cubierta en los primeros pasos del
+   recorrido. Techo de slots: 1 (destino) + 10 + 4 = 15 ≤
+   `MAREA_CACHE_SLOTS` (37) con margen de sobra — **no hizo falta subir
+   el conteo de slots** para esta precarga más ancha; se documenta el
+   cálculo aquí en vez de proponer un valor nuevo.
+4. **Disco despierto — hipótesis abierta, sin implementar.** Se buscó
+   `storage_spin()`/`call_storage_idle_notifys()`/`ata_spin` en
+   `aura_musicflow.c`/`aura_music.c`/`aura_albumart.c`: **ningún**
+   resultado (el único `call_storage_idle_notifys()` del árbol de Aura
+   vive en `aura_firmware_switch.c`, la pantalla de conmutación de
+   familia por USB, sin relación). Aura tampoco hace nada explícito
+   para mantener el HDD despierto durante un barrido de Music Flow, así
+   que moonlit tampoco inventa nada nuevo aquí — queda como hipótesis
+   sin verificar en hardware real (M12): si el HDD se duerme entre una
+   lectura y la siguiente durante un scroll largo, el costo de
+   "despertarlo" podría dominar sobre cualquier mejora de este commit,
+   y ni Aura ni moonlit lo evitan hoy.
+5. **Prioridad de LRU** (`claim_slot()`): al desalojar, el primer barrido
+   ignora cualquier candidato a distancia `≤ MAREA_VISIBLE_RADIUS+1` del
+   destino actual (nunca desaloja lo visible) aunque sea el "más lejano"
+   visto hasta ese punto; solo si los 37 slots caen enteros dentro de esa
+   ventana (biblioteca minúscula) un segundo barrido cae al criterio
+   viejo, sin la exclusión, para no dejar la función sin slot.
+
+**Antes / después:**
+
+| | Antes (D-053) | Después (D-057) |
+|---|---|---|
+| Lecturas por cuadro (animando) | 0 | ≤ 1, plana, solo con clave ya conocida |
+| Cadencia del tick ocioso | 1 carga cuando `!animating()` | hasta 4 cargas / 15 ms por vuelta |
+| Cuándo sondea `HZ/20` | solo `animating()` | `animating() \|\| wants_ticks()` |
+| Radio de precarga ociosa | 6, parejo | 10 adelante / 4 atrás (`s_last_scroll_dir`) |
+| `MAREA_CACHE_SLOTS` | 37 | 37 (sin cambio — 15 caben de sobra) |
+| `.bss` (`arm-elf-eabi-size`) | 8 571 420 | 8 571 420 (+0 B) |
+
+**Verificación:**
+
+- `make -C firmware/rockbox/apps/metro/test test`: verde, 14 suites
+  (incluye `test_marea_prefetch`, nueva, 35/35 checks —
+  `moonlit_marea_prefetch_order()` es lógica pura de índices → lista
+  ordenada por distancia/dirección, sin E/S).
+- `firmware/tools/build_sim.sh`: sin warnings nuevos (los
+  `-Wmissing-field-initializers` de `tile_cols`/`empty_message` son
+  previos, presentes en 8+ archivos ajenos a este cambio).
+- `grep -n 'decode\|song_count\|tagcache' apps/metro/moonlit_screen_marea.c`
+  dentro de los cuerpos de `show_carousel()`/`get_slot_for()`: vacío
+  (confirmado acotando por rango de línea de cada función, no solo por
+  archivo completo — las coincidencias reales caen en `load_pending_slot()`,
+  `try_frame_bounded_read()`, `draw_panel()` y comentarios).
+- Capturas (simulador, biblioteca de `gen_test_media.sh`, 11 álbumes,
+  moonlitcache pre-horneada — 5 `.pfraw` + 6 `.none`, mismo estado
+  "todo ya resuelto en disco" que el reporte del dueño):
+  `docs/screenshots/v0.1.3-marea-settle-3ticks.png`/`-30ticks.png`
+  (`sim_shot.sh … {3,30} "WAIT,SELECT,WAIT,SELECT,WAIT,SCROLL_FWD,SCROLL_FWD,SCROLL_FWD"`).
+  PIL sobre la región del carrusel (`(0,0,152,240)`): **21 654 / 36 480**
+  px distintos. Cifra alta **por geometría, no por carga**: se verificó
+  por separado (variando los ticks de asentamiento de 3 a 30 de uno en
+  uno) que el asentamiento de la 3ª rueda cae entre los ticks 16 y 20
+  (~160-190 ms, consistente con `MAREA_SCROLL_ANIM_MS` = 220 ms) — la
+  captura de 3 ticks es de facto **a medio deslizar**, no en reposo, así
+  que casi todo el carrusel ocupa una posición de perspectiva distinta
+  a la de 30 ticks; el diff de posición domina el conteo. Lo que sí se
+  verificó visualmente en la captura de 3 ticks (y en una prueba
+  adicional con 8 `SCROLL_FWD`): **ningún monograma transitorio** —
+  las tapas visibles a medio deslizar muestran color plano real (las
+  carátulas de prueba son de color sólido, D-030), nunca la tarjeta con
+  inicial; el único monograma observado en cualquier corrida ("M",
+  álbum real `Cultura Profética/M.O.T.A`, sin `cover.jpg` ni APIC) es
+  un `.none` genuino, no un efecto de carga tardía. **Limitación de esta
+  verificación de simulador:** con solo 11 álbumes y ~1-2 s de espera
+  ociosa antes de cada scroll, el radio de precarga **viejo** (6, parejo)
+  ya alcanzaba a cubrir toda la biblioteca antes de que el usuario
+  empezara a scrollear — esta prueba no distingue el comportamiento
+  viejo del nuevo a esta escala; la ganancia real (biblioteca de 1 083
+  álbumes, `HZ/10` en reposo) solo se puede medir en hardware (M12,
+  igual que el resto de Marea).
+- `RBDEV_TOOLCHAIN=… firmware/tools/build_target.sh --firmware`: exit 0,
+  24 warnings (idénticos a los de antes de este commit — `tile_cols`/
+  `empty_message`, ninguno nuevo). `.bss`: antes = 8 571 420 (v0.1.3,
+  D-056, confirmado reconstruyendo con `git stash` antes de este
+  commit), después = 8 571 420 (**+0 B** — `moonlit_marea_prefetch.c`
+  no añade estado estático, el peek de `metro_music.c` reutiliza el
+  memo de 48 entradas ya existente, y los `order[]` de la precarga
+  direccional son locales de pila) — bajo el techo D-043 de 8 574 076,
+  con el mismo margen que D-056 dejó (2 656 B).
+- `git status --short`: limpio al final (ver commit).
+
+**Hipótesis abiertas:** disco despierto durante un barrido largo (item
+4, sin verificar, ni en Aura ni aquí); si el radio 10/4 es el óptimo
+para una biblioteca de 1 083 álbumes o si conviene ensancharlo una vez
+medido en hardware real (mismo estatus "experimental hasta M12" que el
+resto de Marea, D-014/D-043); si `ART_KEY_MEMO_N` = 48
+(`metro_music.c`) alcanza para que la precarga direccional de 15
+álbumes no se pise con otros consumidores de esa clave
+(`metro_screen_hub.c` grid de álbumes) en una sesión larga.

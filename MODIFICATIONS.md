@@ -493,3 +493,16 @@ cambio de fuente. Cada sitio lleva el comentario `moonlit (D-048)`:
   `init()` de `PLATFORM_HOSTED`) pasa por el mismo bloque porque
   `IPOD_6G` está definido en el build `--target=ipod6g --type=s`.
   Nada en `bootloader/` (BOOT-1 intacto).
+
+### moonlit v0.1.3 (2026-08-26, D-057)
+
+- `apps/SOURCES`: se agrega la entrada `metro/moonlit_marea_prefetch.c`
+  — módulo puro de orden de precarga direccional de Marea (host-testable,
+  `apps/metro/test/test_marea_prefetch.c`). Comentario inline
+  `moonlit (D-057): orden de precarga direccional de Marea, modulo puro`.
+
+Ver `DECISIONS.md` D-057 para el resto (`apps/metro/moonlit_screen_marea.{c,h}`,
+`apps/metro/moonlit_marea_prefetch.{c,h}`, `apps/metro/moonlit_art_cache.{c,h}`,
+`apps/metro/metro_music.{c,h}`, `apps/metro/metro_main.c`,
+`apps/metro/test/test_marea_prefetch.c`, `apps/metro/test/Makefile`,
+todo dentro de `apps/metro/`).

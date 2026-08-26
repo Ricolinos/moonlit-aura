@@ -361,4 +361,5 @@ metro/metro_firmware_families.c /* moonlit (D-047): sibling family table for "ca
 metro/moonlit_flow.c /* moonlit (D-014, D-041, M6): motor de proyeccion de Marea, de aura_flow.c */
 metro/moonlit_wheel.c /* moonlit (D-019, D-041, M6): dinamica de rueda de Marea, de aura_wheel.c */
 metro/moonlit_screen_marea.c /* moonlit (D-029, D-030, M8): pantalla Marea, portadas izquierda/info derecha */
+metro/moonlit_marea_prefetch.c /* moonlit (D-057): orden de precarga direccional de Marea, modulo puro */
 metro/moonlit_screen_library.c /* moonlit (D-049): pantalla "preparando biblioteca" (tagcache + caratulas) */

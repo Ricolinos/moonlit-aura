@@ -42,21 +42,40 @@ pueden incluir ese header (D-035) citan el literal documentado:
 `METRO_SELECTION_FRAMES 4` × `METRO_SELECTION_FRAME_TICKS 2` en
 `metro_transitions.h` (patrón D-037).
 
-### Marea no bloqueante (D-053)
+### Marea no bloqueante (D-053, D-057)
 
 El scroll de Marea (`componentes/marea.md`) es la única animación de
 moonlit que **no** corre en un bucle con `sleep()`: la posición del
 carrusel es una función del reloj (`anim_pos_x256()`: `out_expo` sobre
 `transition_ms` = 220 ms desde `s_anim_since`) y el bucle principal
 (`metro_main.c`) pide un cuadro por vuelta ociosa a `HZ/20` mientras
-`moonlit_screen_marea_animating()`. Un paso de rueda a mitad de camino
-redirige desde la posición actual (retarget), nunca salta. Cada cuadro
-repinta solo la banda izquierda (0,20,152,220) con `lcd_update_rect()`
-bajo `cpu_boost()`; el panel derecho y la cabecera se redibujan una
-sola vez, en el cuadro de asentamiento. Ninguna lectura de disco en el
-cuadro: los misses de caché se rellenan por `tick()` cuando ya no anima.
-Captura: `docs/screenshots/v0.1.2-marea-mid.png` (banda cambiada, panel
-y cabecera idénticos a la captura en reposo, verificado con PIL).
+`moonlit_screen_marea_animating()` **o** `moonlit_screen_marea_wants_ticks()`
+(D-057: también fuera de la animación, mientras falten tapas en la
+ventana visible). Un paso de rueda a mitad de camino redirige desde la
+posición actual (retarget), nunca salta. Cada cuadro repinta solo la
+banda izquierda (0,20,152,220) con `lcd_update_rect()` bajo
+`cpu_boost()`; el panel derecho y la cabecera se redibujan una sola
+vez, en el cuadro de asentamiento.
+
+D-057 (reporte del dueño en hardware real: las carátulas tardaban en
+aparecer aunque ya estuvieran todas horneadas a `.pfraw` en disco)
+relaja la regla dura "ninguna lectura de disco en el cuadro" en un solo
+punto, acotado: `moonlit_screen_marea_show_carousel()` se permite, solo
+mientras anima, **a lo sumo una** lectura PLANA de `.pfraw`
+(`try_frame_bounded_read()`, nunca decode JPEG ni tagcache — la clave
+del álbum ya tuvo que resolverse antes, fuera de cualquier cuadro,
+`moonlit_art_pfraw_path_peek()`). El grueso de la mejora es fuera del
+cuadro: `moonlit_screen_marea_tick()` pasa de una carga a un
+presupuesto por vuelta ociosa (~15 ms o 4 lecturas) y la precarga
+ociosa sigue la dirección del último scroll (`moonlit_marea_prefetch_order()`,
+10 tapas adelante / 4 atrás en vez de un radio parejo de 6). Ver
+DECISIONS.md D-057 para las cifras exactas y las capturas
+`v0.1.3-marea-settle-3ticks.png`/`-30ticks.png`.
+
+Captura previa: `docs/screenshots/v0.1.2-marea-mid.png` (banda
+cambiada, panel y cabecera idénticos a la captura en reposo, verificado
+con PIL) sigue vigente como evidencia de que el panel/cabecera no se
+tocan por cuadro — D-057 no cambió eso.
 
 ### Degradación
 

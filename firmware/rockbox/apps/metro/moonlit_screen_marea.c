@@ -41,6 +41,27 @@
  * animada actual (retarget), nunca salta. Cada cuadro repinta SOLO la
  * banda izquierda (152x220); el panel derecho y la cabecera se
  * redibujan una unica vez, en el cuadro de asentamiento.
+ *
+ * D-057 (reporte del dueno en hardware real, iPod 6G/HDD/1083 albumes:
+ * "las caratulas tardan en aparecer" mientras Aura las muestra al
+ * instante): D-053 dejo TODA lectura de .pfraw en
+ * moonlit_screen_marea_tick() -- una por vuelta ociosa, nunca durante
+ * la animacion -- mientras que aura_musicflow.c (get_slot_for() dentro
+ * del propio draw, ~448-494/~1103-1116) ya tiene el vecindario en RAM
+ * al asentar. D-057 cierra la brecha en tres frentes sin abandonar la
+ * regla dura de D-030/D-053 (nunca decodificar JPEG ni tocar tagcache
+ * dentro de un cuadro de animacion): (1) show_carousel() se permite a
+ * lo sumo UNA lectura PLANA por cuadro de una clave YA memoizada
+ * (try_frame_bounded_read()); (2) moonlit_screen_marea_tick() pasa de
+ * una carga a un presupuesto de tiempo/lecturas por vuelta
+ * (MAREA_TICK_BUDGET_MS/MAX_LOADS) y moonlit_screen_marea_wants_ticks()
+ * hace que metro_main.c sondee a HZ/20 tambien fuera de la animacion
+ * mientras falten tapas visibles; (3) la precarga ociosa que antes
+ * barria +-d parejo ahora sigue moonlit_marea_prefetch_order() (modulo
+ * puro, D-057), sesgada hacia la direccion del ultimo scroll. Ver
+ * DECISIONS.md D-057 para las cifras (lecturas por cuadro, cadencia,
+ * .bss antes/despues) y la hipotesis abierta sobre mantener el disco
+ * despierto (Aura tampoco hace nada explicito ahi).
  */
 #include <stdbool.h>
 #include <stdint.h>
@@ -51,10 +72,17 @@
 #include "file.h"    /* MAX_PATH */
 #include "kernel.h"  /* current_tick, HZ */
 #include "system.h"  /* cpu_boost() */
+#include "debug.h"   /* DEBUGF() -- D-057 MAREA_TRACE, patron metro_transitions.c */
+/* D-057: LOGF_ENABLE antes de logf.h -- sin esto logf() compila a un
+ * no-op incluso con ROCKBOX_HAS_LOGF (logf.h tiene su propia compuerta
+ * por archivo, misma razon que metro_transitions.c). */
+#define LOGF_ENABLE
+#include "logf.h"
 
 #include "moonlit_screen_marea.h"
 #include "moonlit_flow.h"
 #include "moonlit_wheel.h"
+#include "moonlit_marea_prefetch.h" /* D-057: orden de precarga direccional, host-testable */
 #include "moonlit_art.h"
 #include "moonlit_art_cache.h"
 #include "moonlit_palette.h"
@@ -72,6 +100,19 @@
 #include "metro_lang.h"
 #include "metro_keymap.h"
 #include "metro_input.h" /* metro_input_last_wheel_velocity() */
+
+/* D-057: este modulo no tenia su propio METRO_TRACE (esa macro es
+ * privada de metro_transitions.c) -- se agrega el mismo patron
+ * (DEBUGF+logf, silencioso fuera de builds de depuracion/el
+ * simulador) solo para las dos mediciones que D-057 pide: ms por
+ * cuadro de scroll con/sin lectura acotada (moonlit_screen_marea_show_carousel())
+ * y cuantas cargas gasto una vuelta del tick presupuestado
+ * (moonlit_screen_marea_tick()). */
+#define MAREA_TRACE(fmt, ...) \
+    do { \
+        DEBUGF("moonlit_screen_marea: " fmt "\n", ##__VA_ARGS__); \
+        logf("moonlit_screen_marea: " fmt, ##__VA_ARGS__); \
+    } while (0)
 
 /* D-030: tapa central 120px, mismo radio que el horneado de M7. */
 #define MAREA_COVER_SIZE    MOONLIT_ART_CACHE_SIZE
@@ -150,11 +191,24 @@ typedef struct {
     fb_data cover[MAREA_COVER_SIZE * MAREA_COVER_SIZE];
 } marea_slot_t;
 
-/* Radio de precarga ociosa alrededor del destino (tick): la ventana
- * visible (+-(MAREA_VISIBLE_RADIUS+1)) mas el paso maximo de rueda
- * (moonlit_wheel_step() <= 3), para que un paso normal no encuentre
- * misses en el centro. Cabe de sobra en los 37 slots. */
-#define MAREA_PREFETCH_RADIUS (MAREA_VISIBLE_RADIUS + 1 + 3)
+/* D-057: precarga direccional tras el asentamiento -- Aura precarga
+ * parejo (MF_VISIBLE_RADIUS+15 = 18 a cada lado); aca se sesga hacia la
+ * direccion en la que el usuario ya venia girando la rueda (un barrido
+ * largo tipicamente sigue igual) y se deja mas corto el lado opuesto.
+ * 1 (destino) + 10 (adelante) + 4 (atras) = 15 <= MAREA_CACHE_SLOTS
+ * (37) de sobra -- no hizo falta subir el conteo de slots para esto,
+ * ver DECISIONS.md D-057. moonlit_marea_prefetch_order() hace el orden
+ * real (modulo puro, host-testable, apps/metro/test/test_marea_prefetch.c). */
+#define MAREA_PREFETCH_FWD_RADIUS  10
+#define MAREA_PREFETCH_BACK_RADIUS 4
+
+/* D-057: presupuesto de moonlit_screen_marea_tick() por vuelta ociosa
+ * -- antes, una sola carga por vuelta (D-053); con 1083 albumes y
+ * HZ/10 en reposo, 5 tapas visibles tardaban >= 500 ms en llenarse tras
+ * cada asentamiento (reporte del dueno en hardware real). Lo que
+ * ocurra primero de los dos limites. */
+#define MAREA_TICK_BUDGET_MS        15
+#define MAREA_TICK_BUDGET_MAX_LOADS 4
 
 static marea_slot_t s_slots[MAREA_CACHE_SLOTS];
 static int s_slots_theme = -1;
@@ -184,6 +238,12 @@ static bool s_settled = true;
  * enfocado, nunca por cuadro. */
 static int s_songs_for_index = -1;
 static int s_songs_count;
+
+/* D-057: direccion (+1/-1) del ultimo scroll_step() real -- alimenta
+ * moonlit_marea_prefetch_order() para sesgar la precarga ociosa hacia
+ * donde el usuario ya venia girando la rueda. Arranca en +1 (sin
+ * historial, un valor tan valido como cualquier otro). */
+static int s_last_scroll_dir = 1;
 
 static int anim_pos_x256(void)
 {
@@ -229,6 +289,7 @@ bool moonlit_screen_marea_push(void)
     s_anim_since = current_tick;
     s_settled = true;
     s_songs_for_index = -1;
+    s_last_scroll_dir = 1;
     return true;
 }
 
@@ -268,10 +329,17 @@ static marea_slot_t *find_slot(int album_index)
 }
 
 /* Reclama un slot para `album_index` (libre, o el mas lejano al
- * destino) -- sin disco. */
+ * destino) -- sin disco. D-057 (5): un slot visible en el destino
+ * ACTUAL nunca se desaloja -- el primer barrido de abajo ignora
+ * cualquier candidato a distancia <= MAREA_VISIBLE_RADIUS+1 (la misma
+ * ventana que draw_carousel() dibuja) aunque sea el "mas lejano" visto
+ * hasta ese punto; solo si los 37 slots caben enteros dentro de esa
+ * ventana (biblioteca minuscula) el segundo barrido cae al criterio
+ * viejo -- nunca dejar la funcion sin slot que devolver gana ahi. */
 static marea_slot_t *claim_slot(int album_index)
 {
     int i, free_slot = -1, farthest = -1, farthest_dist = -1;
+    int visible_span = MAREA_VISIBLE_RADIUS + 1;
 
     for (i = 0; i < MAREA_CACHE_SLOTS; i++)
     {
@@ -283,10 +351,29 @@ static marea_slot_t *claim_slot(int album_index)
             break;
         }
         dist = abs(s_slots[i].album_index - s_target_index);
+        if (dist <= visible_span)
+            continue; /* D-057: nunca desalojar lo visible en el destino */
         if (dist > farthest_dist)
         {
             farthest_dist = dist;
             farthest = i;
+        }
+    }
+
+    if (free_slot < 0 && farthest < 0)
+    {
+        /* D-057: caso extremo -- todos los slots ocupados caen dentro
+         * de la ventana visible. Desalojar el mas lejano de todos
+         * modos, sin la exclusion de arriba. */
+        for (i = 0; i < MAREA_CACHE_SLOTS; i++)
+        {
+            int dist = abs(s_slots[i].album_index - s_target_index);
+
+            if (dist > farthest_dist)
+            {
+                farthest_dist = dist;
+                farthest = i;
+            }
         }
     }
     i = (free_slot >= 0) ? free_slot : farthest;
@@ -307,19 +394,23 @@ static marea_slot_t *get_slot_for(int album_index)
     return slot ? slot : claim_slot(album_index);
 }
 
-/* D-053: el slot PENDING mas cercano al destino, o -- si no hay
- * ninguno -- el album mas cercano dentro de MAREA_PREFETCH_RADIUS que
- * todavia no tiene slot (precarga ociosa, sustituye al preload_range()
- * sincrono de D-045). Devuelve NULL si no hay nada que cargar. */
+/* D-053/D-057: el slot PENDING mas cercano al destino, o -- si no hay
+ * ninguno -- el proximo album sin slot en el orden de precarga
+ * direccional (item 3, D-057): moonlit_marea_prefetch_order() cubre
+ * primero target +- MAREA_VISIBLE_RADIUS y luego se extiende sesgado
+ * hacia s_last_scroll_dir. Devuelve NULL si no hay nada que cargar. */
 static marea_slot_t *next_slot_to_load(void)
 {
     marea_slot_t *best = NULL;
-    int best_dist = 0x7fffffff, i, d;
+    int best_dist = 0x7fffffff, i, n;
+    int order[1 + MAREA_PREFETCH_FWD_RADIUS + MAREA_PREFETCH_BACK_RADIUS];
 
     invalidate_theme_if_needed();
 
     for (i = 0; i < MAREA_CACHE_SLOTS; i++)
     {
+        int d;
+
         if (s_slots[i].album_index < 0 || s_slots[i].art != MAREA_ART_PENDING)
             continue;
         d = abs(s_slots[i].album_index - s_target_index);
@@ -332,38 +423,24 @@ static marea_slot_t *next_slot_to_load(void)
     if (best)
         return best;
 
-    for (d = 0; d <= MAREA_PREFETCH_RADIUS; d++)
-    {
-        int sign;
-
-        for (sign = 1; sign >= -1; sign -= 2)
-        {
-            int idx = s_target_index + sign * d;
-
-            if (idx < 0 || idx >= s_album_n)
-                continue;
-            if (find_slot(idx) == NULL)
-                return claim_slot(idx);
-            if (d == 0)
-                break;
-        }
-    }
+    n = moonlit_marea_prefetch_order(s_target_index, s_album_n, s_last_scroll_dir,
+                                      MAREA_PREFETCH_FWD_RADIUS, MAREA_PREFETCH_BACK_RADIUS,
+                                      order, (int)(sizeof(order) / sizeof(order[0])));
+    for (i = 0; i < n; i++)
+        if (find_slot(order[i]) == NULL)
+            return claim_slot(order[i]);
     return NULL;
 }
 
-bool moonlit_screen_marea_tick(void)
+/* Carga un slot PENDING ya elegido por next_slot_to_load() (lee el
+ * .pfraw o decodifica la caratula si falta, D-055/D-056) -- misma
+ * logica que antes vivia en el cuerpo de moonlit_screen_marea_tick(),
+ * factorizada para que el bucle presupuestado de abajo (D-057, item 2)
+ * la pueda llamar varias veces por vuelta. */
+static void load_pending_slot(marea_slot_t *slot)
 {
-    marea_slot_t *slot;
-    int idx;
+    int idx = slot->album_index;
 
-    if (s_album_n <= 0)
-        return false;
-
-    slot = next_slot_to_load();
-    if (slot == NULL)
-        return false;
-
-    idx = slot->album_index;
     if (moonlit_art_load_for_album(s_albums[idx].seek, s_tick_scratch))
     {
         /* el decode puede haber cedido la CPU: re-verificar que el
@@ -373,11 +450,130 @@ bool moonlit_screen_marea_tick(void)
             memcpy(slot->cover, s_tick_scratch, sizeof(s_tick_scratch));
             slot->art = MAREA_ART_LOADED;
         }
-        return true;
+        return;
     }
     if (slot->album_index == idx)
         slot->art = MAREA_ART_MISSING;
-    return true; /* presupuesto gastado: el llamador repinta igual (nada cambio a la vista, pero es barato) */
+}
+
+/* D-057 (item 2): antes, una sola carga por vuelta ociosa (D-053); con
+ * 1083 albumes y HZ/10 en reposo eso significaba >= 500 ms para
+ * llenar 5 tapas visibles tras un asentamiento. Ahora carga hasta
+ * MAREA_TICK_BUDGET_MAX_LOADS slots, o hasta que el presupuesto de
+ * MAREA_TICK_BUDGET_MS se agote (current_tick), lo que ocurra primero
+ * -- nunca decodifica mas de lo que ese presupuesto permite, sigue
+ * siendo la unica funcion de este archivo que toca disco fuera de un
+ * cuadro de animacion. */
+bool moonlit_screen_marea_tick(void)
+{
+    long t0;
+    int loads = 0;
+
+    if (s_album_n <= 0)
+        return false;
+
+    t0 = current_tick;
+    for (;;)
+    {
+        marea_slot_t *slot = next_slot_to_load();
+
+        if (slot == NULL)
+            break;
+        load_pending_slot(slot);
+        loads++;
+        if (loads >= MAREA_TICK_BUDGET_MAX_LOADS)
+            break;
+        if ((current_tick - t0) * 1000L / HZ >= MAREA_TICK_BUDGET_MS)
+            break;
+    }
+    if (loads > 0)
+        MAREA_TRACE("idle tick: %d load(s) in %ld ms", loads,
+                    (current_tick - t0) * 1000L / HZ);
+    return loads > 0;
+}
+
+/* D-057 (item 2): true mientras quede algo por cargar en la ventana
+ * VISIBLE del destino actual (lo que draw_carousel() dibuja, +-
+ * (MAREA_VISIBLE_RADIUS+1)) -- un indice sin slot todavia cuenta igual
+ * que uno PENDING, ambos necesitan que moonlit_screen_marea_tick()
+ * corra. Patron metro_screen_hub_wants_ticks(): metro_main.c pide
+ * HZ/20 mientras esto sea cierto, ya no solo mientras
+ * moonlit_screen_marea_animating(). */
+bool moonlit_screen_marea_wants_ticks(void)
+{
+    int i;
+
+    if (s_album_n <= 0)
+        return false;
+
+    for (i = -(MAREA_VISIBLE_RADIUS + 1); i <= MAREA_VISIBLE_RADIUS + 1; i++)
+    {
+        int idx = s_target_index + i;
+        marea_slot_t *slot;
+
+        if (idx < 0 || idx >= s_album_n)
+            continue;
+        slot = find_slot(idx);
+        if (slot == NULL || slot->art == MAREA_ART_PENDING)
+            return true;
+    }
+    return false;
+}
+
+/* D-057 (item 1): LA UNICA lectura de disco permitida DENTRO de un
+ * cuadro de animacion -- a lo sumo una, y solo un read() plano
+ * (moonlit_art_read_pfraw(), nunca metro_music_songs_of_album()/
+ * metro_albumart_decode_track_cover_sized()) de un album cuya clave YA
+ * estaba memoizada por una vuelta anterior de moonlit_screen_marea_tick()
+ * (moonlit_art_pfraw_path_peek(), jamas tagcache -- ver
+ * metro_music_album_art_key_peek()). Prioriza el slot que sera CENTRAL
+ * en el destino, luego sus visibles mas cercanos (mismo orden que
+ * moonlit_marea_prefetch_order() con radio MAREA_VISIBLE_RADIUS a cada
+ * lado). Un ".pfraw" inexistente o ya sabido ".none" NO cuenta como
+ * lectura (D-056 ya los distingue de un miss real): se resuelven
+ * gratis y el recorrido sigue probando el siguiente candidato -- solo
+ * un read() completo de un .pfraw valido detiene el recorrido y gasta
+ * el presupuesto del cuadro. Devuelve true si cargo una tapa. */
+static bool try_frame_bounded_read(void)
+{
+    int order[1 + 2 * MAREA_VISIBLE_RADIUS];
+    int n, i;
+    int32_t theme;
+
+    n = moonlit_marea_prefetch_order(s_target_index, s_album_n, 1,
+                                      MAREA_VISIBLE_RADIUS, MAREA_VISIBLE_RADIUS,
+                                      order, (int)(sizeof(order) / sizeof(order[0])));
+    theme = (int32_t)metro_theme_get();
+
+    for (i = 0; i < n; i++)
+    {
+        marea_slot_t *slot = get_slot_for(order[i]);
+        char path[MAX_PATH];
+        char none[MAX_PATH];
+
+        if (slot->art != MAREA_ART_PENDING)
+            continue;
+        if (!moonlit_art_pfraw_path_peek(s_albums[order[i]].seek, MAREA_COVER_SIZE,
+                                          path, sizeof(path)))
+            continue; /* clave todavia desconocida -- nada de tagcache aqui */
+
+        if (moonlit_art_read_pfraw(path, MAREA_COVER_SIZE, MAREA_CORNER_RADIUS,
+                                    theme, s_tick_scratch))
+        {
+            memcpy(slot->cover, s_tick_scratch, sizeof(s_tick_scratch));
+            slot->art = MAREA_ART_LOADED;
+            return true; /* presupuesto del cuadro gastado */
+        }
+
+        /* D-057: no cuenta como lectura -- .pfraw ausente/con cabecera
+         * distinta. Un ".none" ya conocido resuelve el monograma
+         * gratis; si ni siquiera hay ".none", sigue PENDING para
+         * moonlit_screen_marea_tick() (unico que decodifica JPEG). */
+        if (moonlit_art_none_path(path, none, sizeof(none)) &&
+            moonlit_art_none_exists(none))
+            slot->art = MAREA_ART_MISSING;
+    }
+    return false;
 }
 
 /* --- dibujo: proyeccion por filas (D-041/moonlit_flow.h), eje x=76 --- */
@@ -646,16 +842,38 @@ void moonlit_screen_marea_show(void)
  * el trabajo mas caro por cuadro de todo moonlit. En el cuadro de
  * asentamiento (posicion == destino, primera vez) cae a
  * moonlit_screen_marea_show() completa -- ahi y solo ahi se actualiza
- * el panel. */
+ * el panel.
+ *
+ * D-057 (item 1): antes de dibujar, se permite a lo sumo UNA lectura
+ * de disco acotada (try_frame_bounded_read()) mientras se sigue
+ * animando -- el resto de este cuadro sigue siendo identico a D-053
+ * (nunca decodifica JPEG, nunca tagcache). Medido con current_tick y
+ * trazado via MAREA_TRACE (ver su comentario, este modulo no tenia
+ * METRO_TRACE propio antes de D-057): ms por cuadro con/sin esa
+ * lectura, para verificar en el simulador que no reintroduce el
+ * "salto de cuadros" que D-053 ya documenta como aceptable si un
+ * cuadro tarda de mas. */
 void moonlit_screen_marea_show_carousel(void)
 {
     int pos256;
+    long t0;
+    bool did_read;
 
     if (s_album_n <= 0 || !lcd_active())
     {
         s_settled = true;
         return;
     }
+
+    t0 = current_tick;
+    did_read = !s_settled && try_frame_bounded_read();
+    /* D-057: solo se leen dentro de MAREA_TRACE() de mas abajo -- un
+     * no-op en este build de destino (ROCKBOX_HAS_LOGF esta undef aqui,
+     * ver firmware/build-ipod6g/autoconf.h; DEBUGF tambien lo es fuera
+     * de un build DEBUG), asi que sin este cast serian "set but not
+     * used" (mismo idioma que metro_transitions.c:note_transition_cost()). */
+    (void)t0;
+    (void)did_read;
 
     pos256 = anim_pos_x256();
     if (pos256 == s_target_index * 256)
@@ -675,6 +893,9 @@ void moonlit_screen_marea_show_carousel(void)
     draw_carousel(pos256);
     lcd_update_rect(0, MAREA_Y_OFFSET, MAREA_LEFT_BAND_W, MOONLIT_FLOW_AXIS_LEN);
     cpu_boost(false);
+
+    MAREA_TRACE("scroll frame %s bounded read: %ld ms", did_read ? "with" : "without",
+                (current_tick - t0) * 1000L / HZ);
 }
 
 /* --- entrada: scroll (D-030, D-053), select/playpause/back/home ----- */
@@ -705,6 +926,7 @@ static void scroll_step(int dir)
     s_target_index = new_target;
     s_anim_since = current_tick;
     s_settled = false;
+    s_last_scroll_dir = dir; /* D-057: sesga la precarga direccional del proximo asentamiento */
 
     /* 05-plan-correctivo.md M8: animado solo bajo lcd_active() y
      * animations != off (patron metro_screen_hub.c hub_row_animates());

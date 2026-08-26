@@ -56,6 +56,21 @@ bool moonlit_art_pfraw_path(int32_t seek, int size, char *out, size_t outsz)
     return true;
 }
 
+bool moonlit_art_pfraw_path_peek(int32_t seek, int size, char *out, size_t outsz)
+{
+    char dir[MAX_PATH];
+    char key[METRO_MUSIC_ART_KEY_LEN];
+
+    if (!metro_music_album_art_key_peek(seek, key, sizeof(key)))
+    {
+        out[0] = '\0';
+        return false;
+    }
+    metro_settings_metro_cache_dir("art", dir, sizeof(dir));
+    snprintf(out, outsz, "%s/%s-%d.pfraw", dir, key, size);
+    return true;
+}
+
 /* Mismo patrón que ensure_cache_dir() de metro_thumbs.c: solo
  * "moonlitcache" (padre) y "moonlitcache/art" (dir) pueden faltar --
  * ".../aura" ya existe desde el primer metro_settings_save(). */

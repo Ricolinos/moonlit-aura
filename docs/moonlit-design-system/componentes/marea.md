@@ -26,20 +26,39 @@ la escala horizontal por fila; el ancho proyectado de cada fila
 ## Carátulas y monograma
 
 `get_slot_for()` cachea hasta `MAREA_CACHE_SLOTS` (37, LRU por distancia al
-índice comprometido) y **nunca toca disco dentro de `show()`/
-`show_carousel()`** (D-053): un cache-miss reclama el slot en estado
-`MAREA_ART_PENDING` y dibuja un relleno liso proyectado (tapas laterales)
-o, exactamente en el centro, una tarjeta plana con la inicial del álbum
-en `primary` (D.5). `moonlit_screen_marea_tick()` — una carga por vuelta
-ociosa del bucle principal, **solo cuando no anima** — lee el `.pfraw`
-horneado por M7 (clave estable D-055) o decodifica la carátula si falta;
-sin pendientes, precarga el álbum más cercano sin slot dentro de
-`MAREA_PREFETCH_RADIUS` (6). Un álbum sin carátula queda
-`MAREA_ART_MISSING` (monograma definitivo, sin reintentos) y deja en
-`moonlitcache/art/` un marcador `<clave>.none` de 0 bytes (D-056): la
-siguiente vez, `tick()` cae al monograma sin abrir la pista ni
-decodificar, y el pre-pase de "preparando biblioteca" lo cuenta como
-resuelto. Captura: `docs/screenshots/v0.1.3-marea-none-monogram.png`.
+índice comprometido, nunca desaloja un slot visible en el destino actual,
+D-057 item 5) y **nunca decodifica JPEG ni toca tagcache dentro de
+`show()`/`show_carousel()`** (D-053/D-057): un cache-miss reclama el slot
+en estado `MAREA_ART_PENDING` y dibuja un relleno liso proyectado (tapas
+laterales) o, exactamente en el centro, una tarjeta plana con la inicial
+del álbum en `primary` (D.5).
+
+D-057 (reporte del dueño en hardware real, iPod 6G/1083 álbumes: "las
+carátulas tardan en aparecer" pese a estar ya todas horneadas a
+`.pfraw`) relaja D-053 en un solo punto acotado: mientras anima,
+`show_carousel()` se permite **a lo sumo una** lectura PLANA de
+`.pfraw` por cuadro (`try_frame_bounded_read()`), solo si la clave del
+álbum ya se conocía de antes (`moonlit_art_pfraw_path_peek()`, nunca
+tagcache); un `.pfraw` inexistente o un `.none` ya conocido no gastan
+ese cupo. El resto de la mejora vive fuera del cuadro:
+`moonlit_screen_marea_tick()` — antes una carga por vuelta ociosa del
+bucle principal, **solo cuando no anima** — ahora carga varias por
+vuelta con presupuesto (~15 ms o 4 lecturas) y
+`moonlit_screen_marea_wants_ticks()` hace que `metro_main.c` sondee a
+`HZ/20` mientras falten tapas en la ventana visible, no solo mientras
+anima. La precarga ociosa (antes `MAREA_PREFETCH_RADIUS` = 6 parejo)
+ahora sigue `moonlit_marea_prefetch_order()` (módulo puro,
+`apps/metro/test/test_marea_prefetch.c`): 10 álbumes en la dirección
+del último scroll, 4 en la contraria — sigue cabiendo en los 37 slots,
+sin subir `MAREA_CACHE_SLOTS`.
+
+Un álbum sin carátula queda `MAREA_ART_MISSING` (monograma definitivo,
+sin reintentos) y deja en `moonlitcache/art/` un marcador `<clave>.none`
+de 0 bytes (D-056): la siguiente vez, `tick()` cae al monograma sin
+abrir la pista ni decodificar, y el pre-pase de "preparando biblioteca"
+lo cuenta como resuelto. Capturas:
+`docs/screenshots/v0.1.3-marea-none-monogram.png` (D-056),
+`v0.1.3-marea-settle-3ticks.png`/`-30ticks.png` (D-057).
 
 ## Navegación
 

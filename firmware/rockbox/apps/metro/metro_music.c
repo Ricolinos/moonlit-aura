@@ -660,6 +660,38 @@ bool metro_music_album_art_key(int32_t album_seek, char *out, size_t outsz)
     return true;
 }
 
+/* D-057: como metro_music_album_art_key() pero SIN el fallback de
+ * compute_album_art_key() -- ese fallback es lo que "toca tagcache" de
+ * verdad (metro_music_songs_of_album()'s run_search() + tagcache_retrieve()/
+ * _get_numeric()), prohibido dentro de un cuadro de animacion de Marea
+ * (D-053). tagcache_is_usable()/tagcache_get_stat() de abajo son
+ * lecturas de una bandera/struct estatico en RAM (sin busqueda, sin
+ * E/S) -- el mismo costo que moonlit_screen_marea.c ya paga por cuadro
+ * en otras llamadas triviales, no la clase de trabajo que D-053
+ * prohibe. false si la clave de este album no esta memoizada todavia
+ * (nunca se resolvio, o el memo quedo invalidado por un rebuild de
+ * tagcache) -- el llamador se queda con el monograma hasta que
+ * moonlit_screen_marea_tick() (fuera de cualquier cuadro) la resuelva. */
+bool metro_music_album_art_key_peek(int32_t album_seek, char *out, size_t outsz)
+{
+    int i;
+
+    if (!tagcache_is_usable())
+        return false;
+    if (tagcache_get_stat()->total_entries != s_art_key_memo_entries)
+        return false; /* memo invalido para esta generacion de la base */
+
+    for (i = 0; i < s_art_key_memo_n; i++)
+    {
+        if (s_art_key_memo[i].seek == album_seek)
+        {
+            strlcpy(out, s_art_key_memo[i].key, outsz);
+            return true;
+        }
+    }
+    return false;
+}
+
 bool metro_music_track_path(int32_t idx_id, char *out, size_t outsz)
 {
     struct tagcache_search tcs;

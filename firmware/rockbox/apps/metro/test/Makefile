@@ -13,7 +13,7 @@ BUILD := build
 
 .PHONY: test clean
 
-test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/test_motion $(BUILD)/test_lrc $(BUILD)/test_artist_images $(BUILD)/test_fsutil $(BUILD)/test_lang $(BUILD)/test_volume $(BUILD)/test_tokens $(BUILD)/test_flow $(BUILD)/test_wheel $(BUILD)/test_art $(BUILD)/test_firmware_families
+test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/test_motion $(BUILD)/test_lrc $(BUILD)/test_artist_images $(BUILD)/test_fsutil $(BUILD)/test_lang $(BUILD)/test_volume $(BUILD)/test_tokens $(BUILD)/test_flow $(BUILD)/test_wheel $(BUILD)/test_art $(BUILD)/test_firmware_families $(BUILD)/test_marea_prefetch
 	@echo "== test_nav =="
 	@$(BUILD)/test_nav
 	@echo "== test_sync_marker =="
@@ -42,6 +42,8 @@ test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/
 	@$(BUILD)/test_art
 	@echo "== test_firmware_families =="
 	@$(BUILD)/test_firmware_families
+	@echo "== test_marea_prefetch =="
+	@$(BUILD)/test_marea_prefetch
 
 $(BUILD)/test_nav: test_nav.c ../metro_nav.c ../metro_nav.h | $(BUILD)
 	$(CC) $(CFLAGS) test_nav.c ../metro_nav.c -o $@
@@ -90,3 +92,6 @@ $(BUILD)/test_art: test_art.c ../moonlit_art.c ../moonlit_art.h file.h dir.h lcd
 
 $(BUILD)/test_firmware_families: test_firmware_families.c ../metro_firmware_families.c ../metro_firmware_families.h | $(BUILD)
 	$(CC) $(CFLAGS) test_firmware_families.c ../metro_firmware_families.c -o $@
+
+$(BUILD)/test_marea_prefetch: test_marea_prefetch.c ../moonlit_marea_prefetch.c ../moonlit_marea_prefetch.h | $(BUILD)
+	$(CC) $(CFLAGS) test_marea_prefetch.c ../moonlit_marea_prefetch.c -o $@

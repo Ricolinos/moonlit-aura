@@ -52,6 +52,12 @@
  * un cuadro de animación -- Marea ya no la llama (D-053). */
 bool moonlit_art_pfraw_path(int32_t seek, int size, char *out, size_t outsz);
 
+/* D-057: como moonlit_art_pfraw_path() pero nunca calcula la clave si
+ * todavia no esta memoizada (metro_music_album_art_key_peek()) -- la
+ * unica variante segura de llamar DENTRO de un cuadro de animacion de
+ * Marea (D-053): clave desconocida -> false, sin tocar tagcache. */
+bool moonlit_art_pfraw_path_peek(int32_t seek, int size, char *out, size_t outsz);
+
 /* D-055: limpieza de huérfanos. Las claves son estables, así que un
  * huérfano solo aparece cuando un álbum desaparece o cambia de pista
  * representativa -- y cuando cambió el ESQUEMA de clave (los

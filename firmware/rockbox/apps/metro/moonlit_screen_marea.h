@@ -76,17 +76,33 @@ void moonlit_screen_marea_handle(int action, int steps);
 bool moonlit_screen_marea_animating(void);
 void moonlit_screen_marea_show_carousel(void);
 
-/* Presupuesto de UNA carga por llamada (mismo patrón que
- * metro_thumbs_tick(), DD-9): get_slot_for() nunca abre archivos
- * dentro de show()/show_carousel() (regla dura de D-030/M8, D-053) --
- * un cache-miss reclama el slot con el monograma y lo deja pendiente;
- * esto lee el .pfraw (o decodifica la carátula si falta) del slot
- * pendiente más cercano al destino, o precarga el álbum más cercano sin
- * slot dentro del radio de precarga. metro_main.c lo llama desde su
- * rama ociosa (MACT_NONE) mientras Marea es la pantalla actual y NO
- * está animando (ninguna lectura de disco dentro de la animación).
- * Devuelve true si gastó el presupuesto (el llamador repinta la
- * banda), false si no había nada pendiente. */
+/* D-057 (item 1): show_carousel() ahora se permite, mientras anima, a
+ * lo sumo UNA lectura de disco PLANA por cuadro (un .pfraw cuya clave
+ * ya se conocia de antes -- jamás decode JPEG ni tagcache, ver
+ * try_frame_bounded_read() en el .c) -- el resto de la regla dura de
+ * D-053 sigue igual: get_slot_for() nunca decodifica ni consulta
+ * tagcache dentro de un cuadro.
+ *
+ * D-057 (item 2): moonlit_screen_marea_tick() ahora tiene presupuesto
+ * (~15 ms medidos con current_tick, o hasta 4 lecturas) en vez de una
+ * sola carga por vuelta ociosa -- sigue siendo la única función de
+ * este módulo que decodifica JPEG (mismo patrón que
+ * metro_thumbs_tick(), DD-9): un cache-miss reclama el slot con el
+ * monograma y lo deja pendiente; esto lee el .pfraw (o decodifica la
+ * carátula si falta) de los slots pendientes más cercanos al destino,
+ * o precarga los álbumes más cercanos sin slot dentro del radio de
+ * precarga direccional (moonlit_marea_prefetch_order()). metro_main.c
+ * lo llama desde su rama ociosa (MACT_NONE) mientras Marea es la
+ * pantalla actual y NO está animando. Devuelve true si cargó al menos
+ * una tapa (el llamador repinta la banda), false si no había nada
+ * pendiente. */
 bool moonlit_screen_marea_tick(void);
+
+/* D-057 (item 2): true mientras quede algo por cargar en la ventana
+ * VISIBLE del destino actual (patrón metro_screen_hub_wants_ticks()) --
+ * metro_main.c usa esto para pedir cuadros a HZ/20 en vez de HZ/10
+ * también cuando Marea está asentada pero todavía tiene tapas
+ * pendientes, no solo mientras moonlit_screen_marea_animating(). */
+bool moonlit_screen_marea_wants_ticks(void);
 
 #endif /* MOONLIT_SCREEN_MAREA_H */
