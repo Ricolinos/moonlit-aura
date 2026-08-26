@@ -27,12 +27,14 @@
 #include "eq.h" /* R3-F6/DD-10: dsp_eq_enable()/dsp_set_eq_coefs() */
 
 #include "metro_screen_settings.h"
+#include "metro_screen_list.h" /* moonlit (D-047): push del submenu "cambiar sistema" */
 #include "metro_screen_about.h"
 #include "metro_screen_lock.h"
 #include "metro_lang.h"
 #include "metro_theme.h"
 #include "metro_widgets.h"
 #include "metro_settings.h"
+#include "metro_firmware_families.h" /* moonlit (D-047): "cambiar sistema" */
 #include "metro_sync.h"
 #include "metro_main.h"
 #include "metro_music.h"  /* R5-F3: límite de volumen */
@@ -181,6 +183,55 @@ static void cycle_volume_limit(void)
     metro_music_set_volume_limit_level(next);
 }
 
+/* --- "cambiar sistema" (moonlit D-047, contrato v10 con tres familias)
+ * Una fila por familia hermana de metro_firmware_families.h, con las
+ * mismas primitivas que el resto de Ajustes (metro_row de la lista
+ * generica: titulo en fuente de cuerpo, subtitulo en fuente de valor,
+ * colores por rol via moonlit_color() dentro de metro_draw). Sin arbol
+ * dormido la fila lleva "no instalado" y no hace nada; con el, pide
+ * confirmacion y hace el cambio (metro_firmware_switch_to solo vuelve
+ * si no pudo: el aparato sigue siendo moonlit y la lista se redibuja). */
+static int switch_count(void *ctx)
+{
+    (void)ctx;
+    return metro_fw_sibling_count();
+}
+
+static void switch_get_row(void *ctx, int index, struct metro_row *out)
+{
+    const struct metro_fw_family *sibling = metro_fw_sibling(index);
+    (void)ctx;
+
+    out->title = metro_lang_str(sibling->name);
+    out->subtitle = metro_firmware_sibling_installed(index)
+                        ? NULL : metro_lang_str(LANG_VALUE_NOT_INSTALLED);
+    out->kind = METRO_ROW_ACTION;
+}
+
+static void switch_on_select(void *ctx, int index)
+{
+    const struct metro_fw_family *sibling = metro_fw_sibling(index);
+    char question[96];
+    (void)ctx;
+
+    if (sibling == NULL || !metro_firmware_sibling_installed(index))
+        return;
+
+    snprintf(question, sizeof(question),
+             metro_lang_str(LANG_DIALOG_SWITCH_FMT),
+             metro_lang_str(sibling->name));
+    if (metro_widgets_confirm(metro_lang_str(LANG_HUB_SETTINGS), question))
+        metro_firmware_switch_to(index);
+}
+
+static const struct metro_pivot switch_pivots[] = {
+    { .name = LANG_SETTING_SWITCH_SYSTEM, .count = switch_count,
+      .get_row = switch_get_row, .on_select = switch_on_select },
+};
+static const struct metro_page switch_page = {
+    LANG_SETTING_SWITCH_SYSTEM, switch_pivots, 1, NULL
+};
+
 static int general_count(void *ctx)
 {
     (void)ctx;
@@ -242,13 +293,13 @@ static void general_get_row(void *ctx, int index, struct metro_row *out)
             out->kind = METRO_ROW_ACTION;
             break;
         case 8:
-            /* R5 (M-090, contrato v10): despertar el Aura dormido. Sin
-             * arbol dormido la fila queda con "no instalado" -- se ve,
-             * para que se sepa que existe la opcion, pero no hace nada. */
-            out->title = metro_lang_str(LANG_SETTING_SWITCH_TO_AURA);
-            out->subtitle = metro_firmware_aura_installed()
-                                ? NULL : metro_lang_str(LANG_VALUE_NOT_INSTALLED);
-            out->kind = METRO_ROW_ACTION;
+            /* R5 (M-090, contrato v10) / moonlit D-047: submenu con una
+             * fila por familia hermana (Aura, Metro). La fila siempre
+             * se ve, para que se sepa que existe la opcion; las hermanas
+             * sin arbol dormido quedan inertes dentro del submenu. */
+            out->title = metro_lang_str(LANG_SETTING_SWITCH_SYSTEM);
+            out->subtitle = NULL;
+            out->kind = METRO_ROW_NAV;
             break;
         default:
             out->title = metro_lang_str(LANG_SETTING_RESET);
@@ -321,14 +372,7 @@ static void general_on_select(void *ctx, int index)
             break;
 
         case 8:
-            if (metro_firmware_aura_installed() &&
-                metro_widgets_confirm(metro_lang_str(LANG_HUB_SETTINGS),
-                                       metro_lang_str(LANG_DIALOG_SWITCH_TO_AURA_TITLE)))
-            {
-                /* Solo vuelve si no pudo; el aparato sigue siendo Metro y
-                 * la lista simplemente se redibuja. */
-                metro_firmware_switch_to_aura();
-            }
+            metro_screen_list_push(&switch_page);
             break;
 
         default:

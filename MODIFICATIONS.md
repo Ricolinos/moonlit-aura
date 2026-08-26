@@ -429,3 +429,14 @@ Ver `DECISIONS.md` D-044 para el resto de M9 (`apps/metro/moonlit_logo.{c,h}`,
 `apps/metro/metro_screen_hub.c`, `apps/metro/metro_draw.{c,h}`,
 `apps/metro/metro_screen_usb.c`, `apps/metro/metro_lang.{c,h}`, todo
 dentro de `apps/metro/`).
+
+### moonlit release v0.1.0 (2026-08-26, D-047)
+
+- `apps/SOURCES`: se agrega la entrada `metro/metro_firmware_families.c`
+  — tabla pura de familias hermanas para el submenú "cambiar sistema"
+  (D-047). Comentario inline `moonlit (D-047): sibling family table for
+  "cambiar sistema"`.
+
+Ver `DECISIONS.md` D-047 para el resto (`apps/metro/metro_firmware_families.{c,h}`,
+`apps/metro/metro_settings.{c,h}`, `apps/metro/metro_screen_settings.c`,
+`apps/metro/metro_lang.{c,h}`, `apps/metro/test/`, todo dentro de `apps/metro/`).

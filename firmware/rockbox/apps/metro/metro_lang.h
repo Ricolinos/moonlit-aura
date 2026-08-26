@@ -165,9 +165,7 @@ enum metro_lang_id {
     LANG_LIST_TRUNCATED,
 
     /* R5 (M-090): cambio de firmware */
-    LANG_SETTING_SWITCH_TO_AURA,
     LANG_VALUE_NOT_INSTALLED,
-    LANG_DIALOG_SWITCH_TO_AURA_TITLE,
 
     /* moonlit H1 (D-001, D-002): runtime identity strings. Appended at
      * the end of the table (Metro M-009 pattern) so every id above keeps
@@ -178,6 +176,16 @@ enum metro_lang_id {
     LANG_MAREA_TITLE,         /* vertical cover flow (D-014), wired in H6 */
     LANG_MAREA_EMPTY,         /* library without albums (plan D.5) */
     LANG_MAREA_SONGS_FMT,     /* moonlit (D-030, M8): "%d canciones" panel label */
+
+    /* moonlit (D-047): "cambiar sistema", one row per sibling family
+     * (metro_firmware_families.c). LANG_FAMILY_* are the visible names
+     * of the three families; LANG_DIALOG_SWITCH_FMT takes one of them
+     * as its %s. Appended at the end (M-009 pattern). */
+    LANG_SETTING_SWITCH_SYSTEM,
+    LANG_FAMILY_AURA,
+    LANG_FAMILY_METRO,
+    LANG_FAMILY_MOONLIT,
+    LANG_DIALOG_SWITCH_FMT,
 
     LANG_COUNT
 };

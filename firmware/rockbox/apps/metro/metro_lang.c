@@ -155,9 +155,7 @@ static const char *const strings_es[LANG_COUNT] = {
 
     [LANG_LIST_TRUNCATED] = "…y más: la lista está llena",
 
-    [LANG_SETTING_SWITCH_TO_AURA]      = "cambiar a Aura",
-    [LANG_VALUE_NOT_INSTALLED]         = "no instalado",
-    [LANG_DIALOG_SWITCH_TO_AURA_TITLE] = "¿cambiar a Aura y reiniciar?",
+    [LANG_VALUE_NOT_INSTALLED] = "no instalado",
 
     /* moonlit H1 (D-001, D-002) */
     [LANG_ABOUT_CREDITS_BODY] =
@@ -176,6 +174,13 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_MAREA_TITLE]        = "marea",
     [LANG_MAREA_EMPTY]        = "no hay álbumes en la biblioteca",
     [LANG_MAREA_SONGS_FMT]    = "%d canciones",
+
+    /* moonlit (D-047): cambiar sistema */
+    [LANG_SETTING_SWITCH_SYSTEM] = "cambiar sistema",
+    [LANG_FAMILY_AURA]           = "Aura",
+    [LANG_FAMILY_METRO]          = "Metro",
+    [LANG_FAMILY_MOONLIT]        = "moonlit.aura",
+    [LANG_DIALOG_SWITCH_FMT]     = "¿cambiar a %s y reiniciar?",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -306,9 +311,7 @@ static const char *const strings_en[LANG_COUNT] = {
 
     [LANG_LIST_TRUNCATED] = "…and more: the list is full",
 
-    [LANG_SETTING_SWITCH_TO_AURA]      = "switch to Aura",
-    [LANG_VALUE_NOT_INSTALLED]         = "not installed",
-    [LANG_DIALOG_SWITCH_TO_AURA_TITLE] = "switch to Aura and restart?",
+    [LANG_VALUE_NOT_INSTALLED] = "not installed",
 
     /* moonlit H1 (D-001, D-002) */
     [LANG_ABOUT_CREDITS_BODY] =
@@ -327,6 +330,13 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_MAREA_TITLE]        = "tide",
     [LANG_MAREA_EMPTY]        = "no albums in the library",
     [LANG_MAREA_SONGS_FMT]    = "%d songs",
+
+    /* moonlit (D-047): switch system */
+    [LANG_SETTING_SWITCH_SYSTEM] = "switch system",
+    [LANG_FAMILY_AURA]           = "Aura",
+    [LANG_FAMILY_METRO]          = "Metro",
+    [LANG_FAMILY_MOONLIT]        = "moonlit.aura",
+    [LANG_DIALOG_SWITCH_FMT]     = "switch to %s and restart?",
 };
 
 void metro_lang_set(enum metro_language lang)

@@ -994,3 +994,66 @@ independientes, uno por tema, sin ver el código/hallazgos del otro):**
    < 18px, cero uso real de las APIs prohibidas de Rockbox), **salvo**
    el hallazgo real de disco-en-bucle-de-animación de Marea documentado
    arriba en D-045.
+
+---
+
+# Release v0.1.0 — cambio de sistema entre tres familias (D-046…D-048)
+
+**D-047 — "Cambiar sistema": submenú con una fila por familia hermana
+(tabla de familias, tres familias, invariantes del contrato v10
+intactas).** Hasta M11 moonlit solo sabía despertar a Aura ("cambiar a
+Aura", heredado de Metro M-090) y las constantes se llamaban
+`METRO_FW_DORMANT_METRO` aunque apuntaban a `/.firmware-moonlit`. Con
+tres familias (Aura `/.firmware-aura`, Metro `/.firmware-metro`,
+moonlit.aura `/.firmware-moonlit`; contrato canónico v14, §A bis
+"registro de familias") la fila única no alcanza. **Decisión**:
+1. Tabla pura de hermanas, sin I/O, en
+   `firmware/rockbox/apps/metro/metro_firmware_families.h:34-46`
+   (`struct metro_fw_family { dormant_dir; name }`,
+   `metro_fw_sibling_count()`, `metro_fw_sibling(i)` → `NULL` fuera de
+   rango) y `metro_firmware_families.c:27-30`
+   (`{"/.firmware-aura", LANG_FAMILY_AURA}`,
+   `{"/.firmware-metro", LANG_FAMILY_METRO}`). El propio árbol dormido
+   es `METRO_FW_OWN_DORMANT` (`metro_firmware_families.h:40`,
+   `"/.firmware-moonlit"`, D-001) y **nunca** es una fila: no se
+   cambia a uno mismo. Registrada en `firmware/rockbox/apps/SOURCES:361`.
+2. `metro_settings.c` generaliza sin cambiar la secuencia:
+   `metro_firmware_sibling_installed(i)` (`:255`) y
+   `metro_firmware_switch_to(i)` (`:287-324`) ejecutan EXACTAMENTE los
+   seis pasos de M-090/M-091 — guardas (`sibling == NULL`, no
+   instalado, ya existe el propio dormido → `false` sin tocar nada);
+   guardar todo y vaciar a disco; `rename(/.rockbox →
+   METRO_FW_OWN_DORMANT)` (`:303`); `rename(hermana → /.rockbox)` con
+   rollback (`:307-311`); `refresh_root_binary()` (`:317`); marcador
+   condicional `metro_sync_switch_needs_rebuild(METRO_FW_OWN_DORMANT)`
+   (`:318-319`); `system_reboot()` (`:322`). Retiradas
+   `METRO_FW_DORMANT_AURA/_METRO`, `metro_firmware_aura_installed()` y
+   `metro_firmware_switch_to_aura()`; contrato actualizado en
+   `metro_settings.h:133-168`.
+3. UI: la fila 8 de Ajustes › General pasa a `METRO_ROW_NAV`
+   "cambiar sistema" (`metro_screen_settings.c:295-303`) y empuja
+   `switch_page` (`:374-375`), página local de un pivote (patrón
+   `options_page` de `metro_screen_nowplaying.c:385-388`) con una fila
+   `METRO_ROW_ACTION` por hermana (`:194-233`): subtítulo "no instalado"
+   si falta el dormido (inerte), y si existe → `snprintf` con
+   `LANG_DIALOG_SWITCH_FMT` → `metro_widgets_confirm()` →
+   `metro_firmware_switch_to(i)`. Misma lista genérica, mismas
+   primitivas y roles de color/fuente que el resto de Ajustes: cero
+   dibujo propio, cero literal.
+4. Strings al final del catálogo (patrón M-009):
+   `LANG_SETTING_SWITCH_SYSTEM`, `LANG_FAMILY_AURA/_METRO/_MOONLIT`,
+   `LANG_DIALOG_SWITCH_FMT` (`metro_lang.h:184-188`,
+   `metro_lang.c:179-183` / `:335-339`); retirados
+   `LANG_SETTING_SWITCH_TO_AURA` y `LANG_DIALOG_SWITCH_TO_AURA_TITLE`;
+   `LANG_VALUE_NOT_INSTALLED` se conserva.
+5. Test host `metro/test/test_firmware_families.c` (Makefile `:16,43`):
+   count == 2, ningún dir es el propio, prefijo `/.firmware-`, dirs y
+   nombres distintos, `metro_fw_sibling(2) == NULL`.
+Invariantes v10 que NO cambian: el activo es siempre `/.rockbox`; el
+saliente se renombra primero; `/rockbox.ipod` := el del entrante;
+Studio garantiza "nunca dos de la misma familia" y repara un cambio a
+medias al conectar. Añadir una cuarta familia = una línea en la tabla +
+un `LANG_FAMILY_*`. Capturas:
+`docs/screenshots/v0.1.0-cambiar-sistema-{vacio,instalados,confirmar}.png`
+(secuencia: `WAIT,SCROLL_FWD×3,SELECT,WAIT,SCROLL_FWD×8,SELECT,WAIT`
+desde el hub; `…,SCROLL_FWD,SELECT,WAIT` para el diálogo de Metro).
