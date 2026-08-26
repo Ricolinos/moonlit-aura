@@ -170,7 +170,9 @@ bool moonlit_screen_marea_is_current(void)
  * algoritmo que aura_musicflow.c:get_slot_for(). Nunca decodifica un
  * JPEG (regla dura D-030/M8): solo LEE el .pfraw ya horneado por M7
  * -- un cache-miss cae al monograma y encola el album para
- * moonlit_screen_marea_tick(). */
+ * moonlit_screen_marea_tick(). D-045 (cerrada): esa lectura tampoco
+ * ocurre dentro del bucle de run_scroll_animation() -- preload_range()
+ * la adelanta y s_in_scroll_loop la veda. */
 static void invalidate_theme_if_needed(void)
 {
     int theme_now = (int)metro_theme_get();
@@ -189,6 +191,16 @@ static void request_decode(int album_index, int32_t seek)
     s_pending_seek = seek;
 }
 
+/* D-045 (cerrada): true solo dentro del `for` de run_scroll_animation().
+ * Mientras esta puesto, get_slot_for() NUNCA abre un archivo: un miss
+ * (que no deberia ocurrir -- preload_range() ya cargo la ventana que el
+ * scroll va a mostrar) cae a un slot de paso con monograma, sin tocar
+ * la LRU, y deja s_scroll_missed para que el cuadro final se repinte
+ * con disco permitido. */
+static bool s_in_scroll_loop;
+static bool s_scroll_missed;
+static marea_slot_t s_miss_slot;
+
 static marea_slot_t *get_slot_for(int album_index)
 {
     int i, free_slot = -1, farthest = -1, farthest_dist = -1;
@@ -200,6 +212,16 @@ static marea_slot_t *get_slot_for(int album_index)
     for (i = 0; i < MAREA_CACHE_SLOTS; i++)
         if (s_slots[i].album_index == album_index)
             return &s_slots[i];
+
+    if (s_in_scroll_loop)
+    {
+        s_scroll_missed = true;
+        s_miss_slot.album_index = -1;
+        s_miss_slot.has_art = false;
+        metro_lang_initial(s_albums[album_index].label, s_miss_slot.initial,
+                            sizeof(s_miss_slot.initial));
+        return &s_miss_slot;
+    }
 
     for (i = 0; i < MAREA_CACHE_SLOTS; i++)
     {
@@ -509,6 +531,25 @@ void moonlit_screen_marea_show(void)
 
 /* --- entrada: scroll (D-030), select/playpause/back/home ------------ */
 
+/* D-045 (cerrada): carga en s_slots (disco permitido, fuera de todo
+ * bucle de animacion) los albumes que cualquier cuadro entre
+ * `from_x256` y `to_x256` puede dibujar. */
+static void preload_range(int from_x256, int to_x256)
+{
+    int lo256 = from_x256 < to_x256 ? from_x256 : to_x256;
+    int hi256 = from_x256 < to_x256 ? to_x256 : from_x256;
+    int lo = (lo256 + (lo256 >= 0 ? 128 : -128)) / 256 - (MAREA_VISIBLE_RADIUS + 1);
+    int hi = (hi256 + (hi256 >= 0 ? 128 : -128)) / 256 + (MAREA_VISIBLE_RADIUS + 1);
+    int idx;
+
+    if (lo < 0)
+        lo = 0;
+    if (hi >= s_album_n)
+        hi = s_album_n - 1;
+    for (idx = lo; idx <= hi; idx++)
+        get_slot_for(idx);
+}
+
 static void run_scroll_animation(int from_x256, int to_x256)
 {
     int frame;
@@ -525,6 +566,17 @@ static void run_scroll_animation(int from_x256, int to_x256)
         return;
     }
 
+    /* D-045 (cerrada): toda lectura de .pfraw de este scroll ocurre
+     * AQUI, antes del bucle -- la union de las ventanas visibles entre
+     * el origen y el destino (cada cuadro dibuja centro +-
+     * (MAREA_VISIBLE_RADIUS+1), ver moonlit_screen_marea_show()). Con
+     * moonlit_wheel_step() <= 3 son a lo sumo 3+2*(2+1)+1 = 10 slots de
+     * los 37 (D.3), y la LRU desaloja por distancia a s_target_index,
+     * que ya apunta al destino. */
+    preload_range(from_x256, to_x256);
+
+    s_in_scroll_loop = true;
+    s_scroll_missed = false;
     for (frame = 1; frame <= MAREA_SCROLL_FRAMES; frame++)
     {
         int p = metro_ease(METRO_EASE_OUT_EXPO, frame, MAREA_SCROLL_FRAMES);
@@ -536,6 +588,13 @@ static void run_scroll_animation(int from_x256, int to_x256)
         if (frame < MAREA_SCROLL_FRAMES)
             sleep(MAREA_SCROLL_FRAME_DELAY);
     }
+    s_in_scroll_loop = false;
+
+    /* Solo si la precarga no alcanzo (no deberia): un cuadro mas, fuera
+     * del bucle, con disco permitido, para no dejar un monograma donde
+     * hay portada. */
+    if (s_scroll_missed)
+        moonlit_screen_marea_show();
 }
 
 static void scroll_step(int dir)

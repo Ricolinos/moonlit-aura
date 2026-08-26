@@ -967,6 +967,27 @@ M12"), lectura de un archivo de tamaño fijo (28 816 B) ya horneado
 trabajo pendiente para un hito posterior o para M12 junto con el
 retuneo de `MOONLIT_FLOW_CAM_DIST`.
 
+**Cerrada en v0.1.1 (commit "Marea preloads visible covers before the
+scroll loop", junto a D-049).** Se tomó la primera de las dos rutas de
+arriba, con la segunda como red: `preload_range(from_x256, to_x256)`
+(`apps/metro/moonlit_screen_marea.c:537`) carga en `s_slots` — con
+disco permitido, ANTES del `for` de `run_scroll_animation()` (`:576`)
+— la unión de las ventanas visibles entre origen y destino (cada
+cuadro dibuja centro ± `MAREA_VISIBLE_RADIUS+1`; con
+`moonlit_wheel_step()` ≤ 3 son a lo sumo 10 de los 37 slots, y la LRU
+desaloja por distancia a `s_target_index`, que ya apunta al destino).
+Dentro del bucle, `s_in_scroll_loop` (`:200`) veda a `get_slot_for()`
+cualquier `moonlit_art_read_pfraw()`: un miss (que la precarga hace
+imposible salvo tema cambiado a mitad de scroll) cae a un slot de paso
+con monograma sin tocar la LRU, marca `s_scroll_missed` y el cuadro
+final se repinta una vez fuera del bucle con disco permitido. La
+lectura de `.pfraw` sigue existiendo en un solo sitio (`:248`,
+`get_slot_for`), fuera de `run_scroll_animation()`
+(`grep -n 'read_pfraw\|open(' moonlit_screen_marea.c` → solo `:248`).
+`MAREA_CACHE_SLOTS` (37) no cambia. Verificado en el simulador con
+`SELECT,SELECT,SCROLL_FWD×3` (Marea ya primer pivote, D-051): la pila
+scrollea y la tapa central muestra portada, no monograma.
+
 **Refutaciones de M11 que NO prosperaron (confirmadas por subagentes
 independientes, uno por tema, sin ver el código/hallazgos del otro):**
 1. *"moonlit no tiene sistema de diseño propio"* — no prospera. Cero

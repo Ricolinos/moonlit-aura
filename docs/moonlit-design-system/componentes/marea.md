@@ -38,7 +38,10 @@ tick que el motor de miniaturas, DD-9).
 
 Rueda: `MACT_NEXT`/`MACT_PREV` mueven el índice comprometido, animado 220 ms
 `METRO_EASE_OUT_EXPO` solo bajo `lcd_active()` y `animations=all` (si no,
-salto directo). `MACT_SELECT` empuja la subpágina de canciones del álbum
+salto directo). Antes de entrar al bucle de cuadros, `preload_range()`
+lee de disco los `.pfraw` de todos los álbumes que cualquier cuadro del
+scroll puede mostrar; dentro del bucle no se abre ningún archivo (un
+miss cae a monograma y se repinta al salir) — D-045, cerrada en v0.1.1. `MACT_SELECT` empuja la subpágina de canciones del álbum
 enfocado (la misma que Álbumes/Quickplay/un artista, `metro_screen_hub.c`).
 `MACT_PLAYPAUSE` reproduce el álbum enfocado desde la pista 0. `MACT_BACK`
 saca a Marea de la pila. Contexto reusado: `MCTX_LIST` (D-030), sin tocar
