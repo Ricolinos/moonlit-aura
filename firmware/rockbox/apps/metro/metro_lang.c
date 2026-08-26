@@ -160,7 +160,6 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_DIALOG_SWITCH_TO_AURA_TITLE] = "¿cambiar a Aura y reiniciar?",
 
     /* moonlit H1 (D-001, D-002) */
-    [LANG_WORDMARK]           = "moonlit.aura",
     [LANG_ABOUT_CREDITS_BODY] =
         "moonlit.aura\n"
         "creado por ricardo gómez\n"
@@ -312,7 +311,6 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_DIALOG_SWITCH_TO_AURA_TITLE] = "switch to Aura and restart?",
 
     /* moonlit H1 (D-001, D-002) */
-    [LANG_WORDMARK]           = "moonlit.aura",
     [LANG_ABOUT_CREDITS_BODY] =
         "moonlit.aura\n"
         "created by ricardo gómez\n"

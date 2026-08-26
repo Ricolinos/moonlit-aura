@@ -45,10 +45,21 @@
 #include "metro_keymap.h"
 #include "moonlit_elevation.h" /* moonlit (D-011, M4): tarjeta de fila seleccionada */
 #include "moonlit_screen_marea.h" /* moonlit (D-029, M8): pivote Marea */
+#include "moonlit_logo.h" /* moonlit (D-016, D-044, M9): cabecera de marca del hub */
 
-#define METRO_HUB_FIRST_Y 32
-#define METRO_HUB_PITCH   52
-#define METRO_HUB_VISIBLE 4
+/* moonlit (D-044, M9): cabecera de marca propia -- el creciente de 40px
+ * (D-016) ocupa exactamente un METRO_HUB_PITCH extra entre la barra de
+ * estado y la primera fila, asi que METRO_HUB_FIRST_Y crece en un
+ * pitch (32 -> 84) y METRO_HUB_VISIBLE baja de 4 a 3 filas sin
+ * scroll -- misma regla de "asoma cortado" que ya usan filas y pivots
+ * (metro_draw.h), solo que ahora empieza una fila mas tarde. Solo el
+ * hub raiz paga este costo; ningun otro metro_screen_*.c toca este
+ * archivo ni depende de estas constantes. */
+#define METRO_HUB_BRAND_Y    32  /* mismo eje que la fila 0 tenia antes de este hito */
+#define METRO_HUB_BRAND_SIZE 40
+#define METRO_HUB_FIRST_Y    84
+#define METRO_HUB_PITCH      52
+#define METRO_HUB_VISIBLE    3
 
 static void open_album_songs(int32_t album_seek, const char *album_label);
 static void open_genre_songs(int32_t genre_seek, const char *genre_label);
@@ -938,6 +949,11 @@ void metro_screen_hub_show(void)
 
     metro_draw_clear();
     metro_draw_header("");
+    /* moonlit (D-016, D-044, M9): cabecera de marca -- solo aqui, el
+     * hub raiz, nunca en listas/pantallas hijas (esas ya tienen su
+     * propio titulo de pivot). */
+    moonlit_logo_draw_crescent(METRO_HUB_BRAND_SIZE, METRO_HUB_TEXT_X, METRO_HUB_BRAND_Y,
+                               metro_color_accent());
 
     for (i = first; i < count && i < first + METRO_HUB_VISIBLE + 1; i++)
     {

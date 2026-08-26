@@ -25,21 +25,14 @@
  * on purpose -- reading .fnt/.bmp from a volume the Mac is writing to
  * would risk real corruption. So no Metro font, no album art, no
  * icons from disk. What IS safe: metro_theme's colours (an enum in
- * RAM), the icon table (metro_icons_table.c, compiled in), and the
- * "moonlit.aura" wordmark (D-026) -- bm_rockboxlogo, the 320x98 bitmap gen_logo.py
- * generates into apps/bitmaps/native/ and bmp2rb compiles into the
- * binary. It is white-on-black with anti-aliasing baked in, so it is
- * drawn here as a MASK: each pixel's luminance becomes the blend
- * between background and foreground, which makes it right in both
- * themes (a flat lcd_bitmap() would paint a black slab on the light
- * theme). INITDATA_ATTR on that bitmap is a no-op on the S5L8702
- * (verified by Aura-Firmware, D-223), so it stays valid all session.
+ * RAM), the icon table (moonlit_icons_table.c, compiled in), and the
+ * Waning Crescent logo (moonlit_logo_table.c, D-016/D-044, M9 --
+ * replaces D-026's provisional bm_rockboxlogo text bitmap), also a
+ * compiled 8-bit coverage mask.
  *
  * Composition: the "usb" Material Symbol at 40px (moonlit_icons.h,
- * D-033/D-040 -- 8-bit coverage mask compiled into
- * moonlit_icons_table.c, same drawing primitive as the rest of the
- * app's icons; replaces the M-089 Fluent arrow_sync glyph table
- * retired in M5), the wordmark, and WP7's
+ * D-033/D-040 -- replaces the M-089 Fluent arrow_sync glyph table
+ * retired in M5), the 40px crescent below it, and WP7's
  * indeterminate progress: five accent dots that cross the
  * screen, fast at the edges and slow through the middle, staggered,
  * with a pause between sweeps. No text at all -- the only font left
@@ -51,16 +44,15 @@
 #include "lcd.h"
 #include "kernel.h"
 #include "backlight.h"
-#include "bitmaps/rockboxlogo.h"
 
 #include "metro_screen_usb.h"
 #include "metro_theme.h"
-#include "metro_fb.h"
 #include "moonlit_icons.h"
+#include "moonlit_logo.h"
 #include "metro_settings.h"
 
 #define USB_ICON_Y       56   /* icono "usb" Material Symbols a 40px, D-040 */
-#define USB_WORDMARK_Y   84   /* ink rows 28..70 of the bitmap -> 112..154 on screen */
+#define USB_LOGO_Y       120  /* creciente Waning Crescent a 40px, D-016/D-044 */
 #define USB_DOTS_Y       184
 #define USB_DOT          4
 #define USB_DOTS         5
@@ -68,26 +60,6 @@
 #define USB_SWEEP_TICKS  (HZ * 2)     /* one dot, edge to edge */
 #define USB_PAUSE_TICKS  (HZ * 3 / 4) /* nothing on screen between sweeps */
 #define USB_PERIOD_TICKS (USB_SWEEP_TICKS + USB_DOT_STAGGER * (USB_DOTS - 1) + USB_PAUSE_TICKS)
-
-/* The wordmark as a mask: luminance -> alpha of fg over bg. Done once
- * per full draw (31k pixels), never per tick. */
-static void draw_wordmark(int x, int y)
-{
-    const fb_data *px = (const fb_data *)bm_rockboxlogo.data;
-    unsigned fg = metro_color_fg();
-    int w = bm_rockboxlogo.width, h = bm_rockboxlogo.height;
-    int cx, cy;
-
-    for (cy = 0; cy < h; cy++)
-        for (cx = 0; cx < w; cx++)
-        {
-            fb_data p = px[cy * w + cx];
-            /* white-on-black source: any channel is the coverage */
-            int lum = RGB_UNPACK_GREEN(p); /* 0..255 on RGB565 unpack */
-            if (lum > 8)
-                metro_fb_plot_alpha(x + cx, y + cy, fg, lum * 256 / 255);
-        }
-}
 
 /* WP7 indeterminate curve: fast in, slow across the middle, fast out.
  * p in 0..1024 -> x fraction in 0..1024. Piecewise linear through
@@ -133,7 +105,9 @@ void metro_screen_usb_show(void)
     moonlit_icon_draw(MOONLIT_ICON_USB, MOONLIT_ICON_SIZE_40,
                       (LCD_WIDTH - MOONLIT_ICON_SIZE_40) / 2, USB_ICON_Y,
                       metro_color_accent());
-    draw_wordmark((LCD_WIDTH - bm_rockboxlogo.width) / 2, USB_WORDMARK_Y);
+    moonlit_logo_draw_crescent(MOONLIT_LOGO_CRESCENT_SIZE_40,
+                               (LCD_WIDTH - MOONLIT_LOGO_CRESCENT_SIZE_40) / 2,
+                               USB_LOGO_Y, metro_color_fg());
     draw_dots(current_tick);
     lcd_update();
 }

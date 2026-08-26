@@ -171,8 +171,9 @@ enum metro_lang_id {
 
     /* moonlit H1 (D-001, D-002): runtime identity strings. Appended at
      * the end of the table (Metro M-009 pattern) so every id above keeps
-     * its value. */
-    LANG_WORDMARK,            /* "moonlit.aura" -- provisional wordmark (D-026) */
+     * its value. LANG_WORDMARK (provisional text wordmark, D-026) was
+     * here until M9: retired when the splash moved to the compiled
+     * Waning Crescent + wordmark vector logo (D-016, D-044). */
     LANG_ABOUT_CREDITS_BODY,  /* '\n'-separated lines, one About row each */
     LANG_MAREA_TITLE,         /* vertical cover flow (D-014), wired in H6 */
     LANG_MAREA_EMPTY,         /* library without albums (plan D.5) */

@@ -20,12 +20,9 @@
 #ifndef METRO_SCREEN_SPLASH_H
 #define METRO_SCREEN_SPLASH_H
 
-/* F9: the real splash (PLAN_MAESTRO.md S1.4) -- centered "metro"
- * wordmark in MFONT_DISPLAY (needs metro_fonts_init()/metro_theme_init()
- * already run, unlike F1's placeholder which drew before either
- * existed) plus a thin 120x2 accent bar underneath. No bitmap logo --
- * consistent with every other Metro screen so far (F5-1: text/font
- * rendering only, compiled icons land in F10). */
+/* F9/M9: the real splash (PLAN_MAESTRO.md S1.4) -- centered Waning
+ * Crescent + "moonlit" wordmark (compiled masks, D-016/D-044) plus a
+ * thin 120x2 accent bar underneath. */
 void metro_screen_splash_show(void);
 
 /* Redraws the same wordmark with the bar filled to `pct` (0..100) --

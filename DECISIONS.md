@@ -807,3 +807,98 @@ Implementada en M8: `apps/metro/moonlit_screen_marea.{c,h}` (nuevo),
 `apps/metro/metro_main.c` (cuarto centinela `at_marea`, mismos 4
 enganches que Now Playing/el visor de fotos), `apps/SOURCES` (fuera de
 `apps/metro/`, ver `MODIFICATIONS.md`).
+
+# Hito M9 — Logotipo Waning Crescent y wordmark (D-044)
+
+**D-044 — Geometría de consumidores no fijada por D-016 ni por
+`05-plan-correctivo.md` §M9: tres desvíos documentados aquí porque
+tocan geometría compartida con otras pantallas.**
+
+1. **Creciente del hub (40px): cabecera de marca propia, no una fila
+   más.** `05-plan-correctivo.md` §M9 dice "hub = 40 px" sin coordenadas
+   (a diferencia de D-030/M8, que fue exacta). El hub (`metro_screen_hub.c`)
+   es una lista de filas WP7 sin iconos en ningún lado; la barra de
+   estado mide 20px fijos en las cinco pantallas que la usan (D-034) y
+   solo quedaban 12px libres entre ella y la primera fila. Decisión del
+   dueño (pregunta abierta de esta sesión, opción "cabecera de marca
+   propia"): una franja de 40px con el creciente entre la barra de
+   estado y la primera fila. Costo aceptado explícitamente:
+   `METRO_HUB_FIRST_Y` pasa de 32 a 84 (exactamente un
+   `METRO_HUB_PITCH` más) y `METRO_HUB_VISIBLE` baja de 4 a 3 filas sin
+   scroll — con música sonando o sin ella, "ajustes" ahora requiere
+   desplazar. Mismo patrón "asoma cortado" que ya usan filas y pivots
+   (`metro_draw.h`), solo que empieza una fila más tarde. Ningún otro
+   `metro_screen_*.c` toca `METRO_HUB_FIRST_Y`/`METRO_HUB_PITCH`/
+   `METRO_HUB_VISIBLE` — el costo es local al hub raíz.
+
+2. **Creciente + wordmark de "Acerca de" (64px): bucle de filas propio,
+   no `metro_draw_rows()`.** D-016 exige el wordmark en "Acerca de" a
+   ≥ 64px; `metro_draw_rows()`/`metro_draw_rows_ex()` (`metro_draw.c`)
+   dibujan siempre desde el `#define METRO_DRAW_ROWS_FIRST_Y 84` fijo
+   (`metro_draw.h:45`), eje que además usa CONTINUUM para el cálculo
+   `from_y` de la transición de entrada (`metro_screen_list.c:247`) y
+   que comparten *todos* los demás pivotes de Ajustes (general,
+   pantalla). Mover ese eje para un solo pivote habría exigido
+   parametrizar `metro_draw_rows_ex()`/`metro_draw_tiles()` (8+ sitios
+   de llamada) y auditar CONTINUUM — fuera de alcance de "solo el
+   logotipo". En vez de eso, "Acerca de" recibe su propio bucle de
+   dibujo (mismo patrón que ya usa el hub, "su propio bucle de dibujo",
+   comentario junto a `draw_hub_row_card()`): `draw_about_hero()` +
+   `draw_about_rows()` en `metro_screen_list.c`, identificando el
+   pivote por `pivot->name == LANG_PIVOT_ABOUT` (comparar el puntero
+   contra `&metro_screen_about_pivot` NO funciona:
+   `metro_screen_settings.c:503` copia ese struct por valor dentro de
+   `all_pivots[2]`, así que la dirección nunca coincide). Costo
+   aceptado: sin cascada FEATHER ni divisores de fila en "Acerca de";
+   las filas arrancan en y=160 en vez de 84, así que se ven menos filas
+   sin desplazar (créditos y conteos de biblioteca ya asumían scroll
+   con contenido largo, así que el costo es consistente con cómo esa
+   pantalla ya se comporta).
+
+3. **`sim_shot.sh … 30` de la definición de hecho no alcanza el splash
+   de Metro.** Confirmado, no es hipótesis: `apps/main.c:294`
+   (`sleep(HZ); /* sim is too fast to see logo */`, código stock de
+   Rockbox, sin tocar por ningún commit moonlit) mantiene la pantalla
+   de arranque *de Rockbox* — no la de Metro — visible varios cientos
+   de ticks simulados antes de que `metro_main()` arranque. A 30 ticks
+   el dump captura ese splash de Rockbox (con el logo oficial
+   restaurado, ver abajo), no el creciente. Las capturas de evidencia
+   de este hito (`M9-splash.png`) se tomaron a 100 ticks, donde el
+   splash de Metro ya está activo y estable.
+
+**Wordmark provisional D-026 retirado.** `firmware/tools/gen_logo.py`
+eliminado; `LANG_WORDMARK` retirado de `metro_lang.h`/`.c` (sin más
+consumidores). `apps/bitmaps/native/rockboxlogo.320x98x16.bmp` — que
+`gen_logo.py` sobrescribía con el wordmark de texto provisional — se
+restaura al bitmap oficial de Rockbox (`git show
+5c6da72d:firmware/rockbox/apps/bitmaps/native/rockboxlogo.320x98x16.bmp`,
+el import sin modificar de F0): es el splash que dibuja `apps/main.c`
+*antes* de que Metro tenga el control de la pantalla (punto 3 arriba),
+ajeno al sistema de diseño de moonlit — no vale la pena mantenerlo
+"neutro" a mano cuando el árbol ya trae el original correcto en su
+propia historia. Registrado en `MODIFICATIONS.md` (fuera de
+`apps/metro/`).
+
+**Pantalla USB: creciente de 40px reemplaza el wordmark de bitmap.** El
+mismo patrón de máscara de cobertura de 8 bits que ya usaba el ícono
+"usb" de Material Symbols (D-040) — `moonlit_logo_draw_crescent()`
+en vez del `draw_wordmark()` a mano que leía `bm_rockboxlogo` pixel a
+pixel (retirado con el bitmap provisional).
+
+Implementada en M9: `design-system/logo/moonlit-crescent.svg` (dos
+círculos vía `<mask>`, D-016), `design-system/logo/moonlit-wordmark.svg`
+("moonlit" en Libre Baskerville Regular a contornos, generado una vez
+con fontTools y commiteado como asset estático), `design-system/tokens.json`
+(`logo{crescent_sizes, wordmark_size}`), `design-system/generate.py`
+(`--logo`: mismo pipeline de supersampleo 16x + filtro de caja que
+`--icons`, más verificación de cobertura/cúspides a 16px, E.3),
+`apps/metro/moonlit_logo.{c,h}` + `moonlit_logo_table.c` (generado),
+`apps/metro/metro_screen_splash.c` (creciente 64 + wordmark, retira el
+texto de D-026), `apps/metro/metro_screen_list.c` (hero + filas propias
+de "Acerca de"), `apps/metro/metro_screen_hub.c` (cabecera de marca de
+40px), `apps/metro/metro_draw.c` (creciente de 16px en la barra de
+estado vacía), `apps/metro/metro_screen_usb.c` (creciente de 40px),
+`apps/metro/metro_lang.{c,h}` (retira `LANG_WORDMARK`), `apps/SOURCES`
+y `apps/bitmaps/native/rockboxlogo.320x98x16.bmp` (fuera de
+`apps/metro/`, ver `MODIFICATIONS.md`); elimina
+`firmware/tools/gen_logo.py`.

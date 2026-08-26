@@ -32,8 +32,63 @@
 #include "metro_transitions.h"
 #include "metro_music.h" /* R4/FA-8: metro_music_playpause() */
 #include "moonlit_palette.h" /* moonlit (D-011, M4): divisores outline_variant */
+#include "moonlit_elevation.h" /* moonlit (D-044, M9): tarjeta de fila de "Acerca de" */
+#include "moonlit_logo.h" /* moonlit (D-016, D-044, M9): creciente 64px + wordmark de "Acerca de" */
 
 static metro_nav_t s_nav;
+
+/* moonlit (D-016, D-044, M9): "Acerca de" es la unica pantalla ademas
+ * del arranque que muestra el creciente + wordmark de 64px (D-016).
+ * No pasa por metro_draw_rows()/metro_draw_rows_ex() -- esas dibujan
+ * SIEMPRE desde METRO_DRAW_ROWS_FIRST_Y, un eje compartido con
+ * CONTINUUM (metro_transitions.c) y con cada otro pivote de settings;
+ * moverlo para uno solo rompería esa alineacion global. En cambio,
+ * "Acerca de" tiene su propio bucle de filas -- mismo patron que ya
+ * usa el hub (metro_screen_hub.c: "su propio bucle de dibujo") --
+ * que arranca mas abajo, sin cascada FEATHER ni divisores de fila:
+ * perdida aceptada, "Acerca de" ya asume scroll para su contenido
+ * largo (créditos, conteos de biblioteca). */
+#define METRO_ABOUT_HERO_Y         76
+#define METRO_ABOUT_HERO_GAP       8
+#define METRO_ABOUT_ROWS_FIRST_Y   160
+#define METRO_ABOUT_ROW_PITCH      METRO_DRAW_ROW_PITCH
+
+static void draw_about_hero(void)
+{
+    int wordmark_y = METRO_ABOUT_HERO_Y +
+                      (MOONLIT_LOGO_CRESCENT_SIZE_64 - MOONLIT_LOGO_WORDMARK_HEIGHT) / 2;
+
+    moonlit_logo_draw_crescent(MOONLIT_LOGO_CRESCENT_SIZE_64, METRO_DRAW_LEFT_X,
+                               METRO_ABOUT_HERO_Y, metro_color_fg());
+    moonlit_logo_draw_wordmark(METRO_DRAW_LEFT_X + MOONLIT_LOGO_CRESCENT_SIZE_64 +
+                               METRO_ABOUT_HERO_GAP, wordmark_y, metro_color_fg());
+}
+
+static void draw_about_rows(const struct metro_pivot *pivot, int first, int sel)
+{
+    int count = pivot->count(pivot->ctx);
+    int i, y = METRO_ABOUT_ROWS_FIRST_Y;
+
+    for (i = first; i < count && i < first + METRO_DRAW_ROWS_VISIBLE + 1; i++)
+    {
+        struct metro_row row;
+        bool selected = (i == sel);
+
+        pivot->get_row(pivot->ctx, i, &row);
+
+        if (selected)
+        {
+            moonlit_draw_surface(0, y - 4, LCD_WIDTH, METRO_ABOUT_ROW_PITCH, MSURFACE_HIGH, 0);
+            lcd_set_foreground(moonlit_color(MROLE_PRIMARY));
+            lcd_fillrect(1, y - 4, 3, METRO_ABOUT_ROW_PITCH);
+        }
+
+        metro_draw_text_cut_right(selected ? MFONT_LIST_SEL : MFONT_LIST, METRO_DRAW_LEFT_X, y,
+                                  row.title, selected ? metro_color_fg() : metro_color_secondary(),
+                                  LCD_WIDTH - METRO_DRAW_LEFT_X);
+        y += METRO_ABOUT_ROW_PITCH;
+    }
+}
 
 /* moonlit (D-011, M4): un lcd_hline por borde entre filas visibles,
  * en outline_variant (D-028) -- se dibuja ANTES que metro_draw_rows(),
@@ -155,7 +210,18 @@ void metro_screen_list_show(void)
                                            : metro_lang_str(page->title));
     metro_draw_pivots(page, active, 0);
 
-    if (pivot->count(pivot->ctx) == 0)
+    /* metro_screen_settings_page() COPIES metro_screen_about_pivot by
+     * value into its own all_pivots[2] (metro_screen_settings.c), so
+     * comparing pointers here would never match -- name survives the
+     * copy and LANG_PIVOT_ABOUT is unique to this one pivot. */
+    if (pivot->name == LANG_PIVOT_ABOUT)
+    {
+        /* moonlit (D-016, D-044, M9): geometria propia -- ver el
+         * comentario junto a draw_about_hero() mas arriba. */
+        draw_about_hero();
+        draw_about_rows(pivot, metro_nav_first_visible(&s_nav), metro_nav_sel(&s_nav));
+    }
+    else if (pivot->count(pivot->ctx) == 0)
         metro_widgets_draw_empty_state(metro_lang_str(
             pivot->empty_message ? pivot->empty_message : LANG_EMPTY_LIST));
     else if (pivot->tile_cols > 0)

@@ -407,3 +407,25 @@ Ver `DECISIONS.md` D-043 para el resto de M8 (`apps/metro/moonlit_screen_marea.{
 `apps/metro/metro_screen_hub.{c,h}`, `apps/metro/metro_music.{c,h}`,
 `apps/metro/metro_lang.{c,h}`, `apps/metro/metro_main.c`, todo dentro
 de `apps/metro/`).
+
+### moonlit M9 (2026-08-26, D-044)
+
+- `apps/SOURCES`: se agregan las entradas `metro/moonlit_logo.c` y
+  `metro/moonlit_logo_table.c` — logotipo Waning Crescent (creciente +
+  wordmark, D-016/D-044). Comentario inline
+  `moonlit (D-016, D-044, M9): logotipo Waning Crescent, mascaras 8-bit`.
+- `apps/bitmaps/native/rockboxlogo.320x98x16.bmp`: restaurado al
+  bitmap oficial de Rockbox (`git show
+  5c6da72d:firmware/rockbox/apps/bitmaps/native/rockboxlogo.320x98x16.bmp`,
+  el import sin modificar de F0). `firmware/tools/gen_logo.py` (que lo
+  sobrescribía con el wordmark de texto provisional de D-026) se
+  elimina en este mismo hito. Este bitmap solo lo dibuja
+  `apps/main.c:271` (`show_logo_boot()`, código stock de Rockbox) antes
+  de que `metro_main()` tenga el control de la pantalla — ajeno al
+  sistema de diseño de moonlit, ver D-044 punto 3 en `DECISIONS.md`.
+
+Ver `DECISIONS.md` D-044 para el resto de M9 (`apps/metro/moonlit_logo.{c,h}`,
+`apps/metro/metro_screen_splash.c`, `apps/metro/metro_screen_list.c`,
+`apps/metro/metro_screen_hub.c`, `apps/metro/metro_draw.{c,h}`,
+`apps/metro/metro_screen_usb.c`, `apps/metro/metro_lang.{c,h}`, todo
+dentro de `apps/metro/`).
