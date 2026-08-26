@@ -154,7 +154,7 @@ void metro_draw_header(const char *page_title)
      * dibujada en y=4 pone su caja de dígitos en y=7..15 (centro 11);
      * la batería (9px) va en y=7 para ocupar exactamente esas filas, y
      * el glifo de transporte (16px de celda, ~12px de tinta a partir de
-     * la fila 2 en los Fluent) en y=3 para que su tinta (5..16) quede
+     * la fila 2) en y=3 para que su tinta (5..16) quede
      * centrada ahí mismo. Antes la batería iba en y=4 y flotaba ~2.5px
      * por encima del texto. */
     int clock_x = LCD_WIDTH - 40;
@@ -178,10 +178,10 @@ void metro_draw_header(const char *page_title)
      * secundario (lo normal no grita), pausa en acento (es lo que uno
      * busca con la mirada cuando no se oye nada). Sin audio, nada. */
     if (status & AUDIO_STATUS_PAUSE)
-        metro_widgets_draw_icon(METRO_ICON_PAUSE, clock_x - 6 - METRO_ICON_SIZE,
+        metro_widgets_draw_icon(MOONLIT_ICON_PAUSE, clock_x - 6 - METRO_WIDGETS_ICON_SIZE,
                                 METRO_HEADER_ICON_Y, metro_color_accent());
     else if (status & AUDIO_STATUS_PLAY)
-        metro_widgets_draw_icon(METRO_ICON_PLAY, clock_x - 6 - METRO_ICON_SIZE,
+        metro_widgets_draw_icon(MOONLIT_ICON_PLAY_ARROW, clock_x - 6 - METRO_WIDGETS_ICON_SIZE,
                                 METRO_HEADER_ICON_Y, metro_color_secondary());
 
     metro_draw_battery(LCD_WIDTH - 4, METRO_HEADER_BATTERY_Y);

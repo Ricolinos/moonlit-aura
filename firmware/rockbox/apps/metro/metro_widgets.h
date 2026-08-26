@@ -20,7 +20,7 @@
 #ifndef METRO_WIDGETS_H
 #define METRO_WIDGETS_H
 
-#include "metro_icons.h"
+#include "moonlit_icons.h"
 #include "metro_glyphs.h"
 
 #include <stdbool.h>
@@ -48,13 +48,13 @@ bool metro_widgets_confirm(const char *title, const char *question);
  * sqrts per ring -- ~730 for r=13, three rings, once a second. */
 void metro_widgets_draw_circle(int cx, int cy, int r, unsigned color);
 
-/* R5-F3 (M-083): a metro_icons.h glyph centred inside a
- * metro_widgets_draw_circle() ring. (x, y) is the top-left of the
- * ring's bounding box, which is (2r+1) square; the 16px glyph is
+/* R5-F3 (M-083) / moonlit (D-033): a moonlit_icons.h glyph centred
+ * inside a metro_widgets_draw_circle() ring. (x, y) is the top-left of
+ * the ring's bounding box, which is (2r+1) square; the 16px glyph is
  * centred in it. Ring and glyph take separate colours because the
  * player uses them for state (e.g. pause glyph in accent inside an fg
  * ring). */
-void metro_widgets_draw_icon_in_circle(enum metro_icon_id id, int x, int y,
+void metro_widgets_draw_icon_in_circle(enum moonlit_icon_id id, int x, int y,
                                         int r, unsigned ring_color,
                                         unsigned glyph_color);
 
@@ -77,17 +77,17 @@ void metro_widgets_draw_empty_state(const char *message);
  * simple line-art, top-left corner at (x, y), METRO_WIDGETS_ICON_SIZE
  * square. Repeat draws a small "1" centered over the loop when `one`
  * is true (REPEAT_ONE vs REPEAT_ALL). */
-/* Lado de todos los glifos de estado. Coincide con METRO_ICON_SIZE
- * (metro_icons.h): los de Fluent que se usan son las variantes
- * dibujadas para 16px. */
-#define METRO_WIDGETS_ICON_SIZE METRO_ICON_SIZE
+/* Lado de todos los glifos de estado. Coincide con MOONLIT_ICON_SIZE_16
+ * (moonlit_icons.h, D-033): los de Material Symbols que se usan en la
+ * barra de estado y el reproductor son la talla de 16px. */
+#define METRO_WIDGETS_ICON_SIZE MOONLIT_ICON_SIZE_16
 
-/* R4/FA-1 (M-077): dibuja un glifo de metro_icons.h en (x, y) del color
- * dado, METRO_ICON_SIZE de lado. Sustituye a los iconos trazados a mano
- * uno por uno; los que quedan geométricos son los que ningún glifo del
- * set resuelve mejor (la batería, que es un indicador con relleno
- * proporcional, no un símbolo fijo). */
-void metro_widgets_draw_icon(enum metro_icon_id id, int x, int y, unsigned color);
+/* R4/FA-1 (M-077) / moonlit (D-033): dibuja un glifo de moonlit_icons.h
+ * en (x, y) del color dado, METRO_WIDGETS_ICON_SIZE de lado. Sustituye
+ * a los iconos trazados a mano uno por uno; los que quedan geométricos
+ * son los que ningún glifo del set resuelve mejor (la batería, que es
+ * un indicador con relleno proporcional, no un símbolo fijo). */
+void metro_widgets_draw_icon(enum moonlit_icon_id id, int x, int y, unsigned color);
 
 /* R5 (M-089): draws a big anti-aliased glyph (metro_glyphs.h) with its
  * top-left at (x, y), blending `color` over what is already there. */

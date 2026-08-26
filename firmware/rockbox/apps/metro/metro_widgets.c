@@ -23,7 +23,7 @@
 #include "lcd.h"
 
 #include "metro_widgets.h"
-#include "metro_icons.h"
+#include "moonlit_icons.h"
 #include "metro_draw.h"
 #include "metro_theme.h"
 #include "metro_input.h"
@@ -102,45 +102,9 @@ void metro_widgets_draw_empty_state(const char *message)
                      message, metro_color_secondary());
 }
 
-void metro_widgets_draw_icon(enum metro_icon_id id, int x, int y, unsigned color)
+void metro_widgets_draw_icon(enum moonlit_icon_id id, int x, int y, unsigned color)
 {
-    const struct metro_icon *icon;
-    int row;
-
-    if ((unsigned)id >= METRO_ICON_COUNT)
-        return;
-
-    icon = &metro_icons[id];
-    lcd_set_foreground(color);
-
-    for (row = 0; row < METRO_ICON_SIZE; row++)
-    {
-        unsigned mask = icon->rows[row];
-        int col = 0;
-
-        /* Por CORRIDAS horizontales, no pixel por pixel: un icono de
-         * 16x16 son hasta 256 lcd_drawpixel() sueltos, y estos glifos
-         * son siluetas rellenas donde una fila suele ser una o dos
-         * corridas. Mismo criterio que el resto del dibujo de Metro,
-         * que usa lcd_fillrect() para todo lo que sea un bloque. */
-        while (col < METRO_ICON_SIZE)
-        {
-            int run;
-
-            if (!(mask & (1u << (METRO_ICON_SIZE - 1 - col))))
-            {
-                col++;
-                continue;
-            }
-            run = 0;
-            while (col + run < METRO_ICON_SIZE &&
-                   (mask & (1u << (METRO_ICON_SIZE - 1 - (col + run)))))
-                run++;
-
-            lcd_fillrect(x + col, y + row, run, 1);
-            col += run;
-        }
-    }
+    moonlit_icon_draw(id, MOONLIT_ICON_SIZE_16, x, y, color);
 }
 
 /* Integer sqrt, rounded down. Inputs here are < 2^24 (distances in
@@ -197,7 +161,7 @@ void metro_widgets_draw_circle(int cx, int cy, int r, unsigned color)
     }
 }
 
-void metro_widgets_draw_icon_in_circle(enum metro_icon_id id, int x, int y,
+void metro_widgets_draw_icon_in_circle(enum moonlit_icon_id id, int x, int y,
                                         int r, unsigned ring_color,
                                         unsigned glyph_color)
 {
@@ -205,9 +169,8 @@ void metro_widgets_draw_icon_in_circle(enum metro_icon_id id, int x, int y,
 
     metro_widgets_draw_circle(cx, cy, r, ring_color);
     /* The 16px glyph cell centred on the ring's centre; with r=13 that
-     * leaves 5px of air between cell and ring, and Fluent's own ~2px
-     * internal padding makes the visible ink ~12px. */
-    metro_widgets_draw_icon(id, cx - METRO_ICON_SIZE / 2, cy - METRO_ICON_SIZE / 2,
+     * leaves 5px of air between cell and ring. */
+    metro_widgets_draw_icon(id, cx - MOONLIT_ICON_SIZE_16 / 2, cy - MOONLIT_ICON_SIZE_16 / 2,
                             glyph_color);
 }
 

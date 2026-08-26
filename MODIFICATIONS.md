@@ -314,6 +314,15 @@ Ver `DECISIONS.md` M-061.
   distinto). Comentario inline `moonlit (D-032)`. Ver `DECISIONS.md`
   D-032 punto 3.
 
+### moonlit M3 (2026-08-25, D-033)
+
+- `apps/SOURCES`: la entrada `metro/metro_icons_table.c` pasa a
+  `metro/moonlit_icons.c` + `metro/moonlit_icons_table.c` (mascaras de
+  cobertura de 8 bits, Material Symbols Rounded, reemplaza las
+  mascaras monocromas de 1 bit de Fluent System Icons). Comentario
+  inline `moonlit (D-033)`. `metro/metro_glyphs_table.c` no se toca
+  (glifo USB de M-089, se conserva hasta M5).
+
 Nota (fuera de `apps/metro/`, sin comentario inline por no ser Rockbox
 sino una herramienta propia del repo): `firmware/tools/gen_logo.py`
 apuntaba a `firmware/assets/fonts-src/Selawik-Light.ttf`, que este

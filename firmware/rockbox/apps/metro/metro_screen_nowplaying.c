@@ -462,12 +462,12 @@ static void draw_mode_row(struct mp3entry *id3)
                   global_settings.repeat_mode == REPEAT_ONE;
     unsigned on = metro_color_accent(), off = metro_color_tertiary();
 
-    metro_widgets_draw_icon(METRO_ICON_STAR, x, NP_MODE_Y, starred ? on : off);
+    metro_widgets_draw_icon(MOONLIT_ICON_FAVORITE, x, NP_MODE_Y, starred ? on : off);
     x += NP_MODE_PITCH;
-    metro_widgets_draw_icon(METRO_ICON_SHUFFLE, x, NP_MODE_Y,
+    metro_widgets_draw_icon(MOONLIT_ICON_SHUFFLE, x, NP_MODE_Y,
                             global_settings.playlist_shuffle ? on : off);
     x += NP_MODE_PITCH;
-    metro_widgets_draw_icon(METRO_ICON_REPEAT_ALL, x, NP_MODE_Y, repeat ? on : off);
+    metro_widgets_draw_icon(MOONLIT_ICON_REPEAT, x, NP_MODE_Y, repeat ? on : off);
     if (global_settings.repeat_mode == REPEAT_ONE)
         metro_draw_text(MFONT_CAPTION, x + METRO_WIDGETS_ICON_SIZE + 2, NP_MODE_Y,
                         "1", on);
@@ -483,17 +483,17 @@ static void draw_transport_row(void)
     int status = audio_status();
     unsigned ring = metro_color_fg();
 
-    metro_widgets_draw_icon_in_circle(METRO_ICON_PREVIOUS, x, NP_RING_Y, NP_RING_R,
+    metro_widgets_draw_icon_in_circle(MOONLIT_ICON_SKIP_PREVIOUS, x, NP_RING_Y, NP_RING_R,
                                       ring, metro_color_fg());
     x += NP_RING_PITCH;
     if (status & AUDIO_STATUS_PAUSE)
-        metro_widgets_draw_icon_in_circle(METRO_ICON_PAUSE, x, NP_RING_Y, NP_RING_R,
+        metro_widgets_draw_icon_in_circle(MOONLIT_ICON_PAUSE, x, NP_RING_Y, NP_RING_R,
                                           ring, metro_color_accent());
     else
-        metro_widgets_draw_icon_in_circle(METRO_ICON_PLAY, x, NP_RING_Y, NP_RING_R,
+        metro_widgets_draw_icon_in_circle(MOONLIT_ICON_PLAY_ARROW, x, NP_RING_Y, NP_RING_R,
                                           ring, metro_color_fg());
     x += NP_RING_PITCH;
-    metro_widgets_draw_icon_in_circle(METRO_ICON_NEXT, x, NP_RING_Y, NP_RING_R,
+    metro_widgets_draw_icon_in_circle(MOONLIT_ICON_SKIP_NEXT, x, NP_RING_Y, NP_RING_R,
                                       ring, metro_color_fg());
 }
 
