@@ -43,7 +43,7 @@ Todo lo demás de Aura-Firmware queda fuera.
 
 ## Iconos, temas y tokens
 
-**D-008 — Iconos binarios compilados (cierra P4).** Dibujo con el patrón Metro: tabla C commiteada, máscara de cobertura de 8 bits, `metro_fb_plot_alpha()` (`metro_fb.c:116-127`), cero lecturas de disco en runtime. Generación con la metodología Aura: SVG → `rsvg-convert` → supersampleo 16× + filtro de caja → verificación `MIN_INK_TONES ≥ 4` que rompe el build (`generate.py:475`). Fuente de iconos: **Material Symbols** (Apache 2.0). Solo se generan los `icon_key × tamaño` que el plan enumere, no el Cartesiano 89×9 de Aura.
+**D-008 — Iconos binarios compilados (cierra P4).** Dibujo con el patrón Metro: tabla C commiteada, máscara de cobertura de 8 bits, `metro_fb_plot_alpha()` (`metro_fb.c:116-127`), cero lecturas de disco en runtime. Generación con la metodología Aura: SVG → `rsvg-convert` → supersampleo 16× + filtro de caja → verificación `MIN_INK_TONES ≥ 4` que rompe el build (`generate.py:475`). Fuente de iconos: **Material Symbols** (Apache 2.0). Solo se generan los `icon_key × tamaño` que el plan enumere, no el Cartesiano 89×9 de Aura. Implementada en M3 (D-033): `design-system/generate.py` (`--icons`), `apps/metro/moonlit_icons.{c,h}`, `apps/metro/moonlit_icons_table.c`.
 
 **D-009 — Formato de tema v1: omitido (cierra P3).** `aura.cfg` **no** declara `theme_format_supported`, igual que Metro (`COMPAT_STUDIO.md:16`). Consecuencia directa de D-008: cumplir v1 exigiría 801 máscaras en disco (§4, T6). Studio deshabilita instalación de temas limpiamente.
 
@@ -317,3 +317,86 @@ Implementada en M2: `design-system/generate.py` (`--fonts`,
 `FONT_SIZE_EXCEPTIONS`), `firmware/tools/check_fonts.py`,
 `firmware/assets/fonts/moonlit-*.fnt`,
 `apps/plugins/mpegplayer/mpegplayer.c` (punto 3).
+
+# Hito M3 — Iconos Material Symbols compilados con verificación de tonos (D-033)
+
+**D-033 — Fuente exacta de los 20 SVG, tamaños generados y cierre de
+una hipótesis de `05-plan-correctivo.md` §M3 con datos reales (dos
+iconos, no el previsto).**
+
+1. **Fuente de los SVG.** `github.com/google/material-design-icons`,
+   rama `master`, variante `materialsymbolsrounded`, peso 400 / relleno
+   0 / grado 0 por defecto (`symbols/web/<nombre>/materialsymbolsrounded/<nombre>_24px.svg`
+   — el atributo `width`/`height` del SVG es solo una pista de tamaño;
+   la geometría real vive en el `viewBox`, así que un único archivo por
+   icono sirve para las tres tallas). `LICENSE` del mismo repo (Apache
+   2.0) vendoreada junto a los SVG. Los 20 nombres son los de
+   `03-plan-implementacion.md` §B.4, en ese mismo orden en
+   `tokens.json:icon.names` y en `enum moonlit_icon_id`
+   (`apps/metro/moonlit_icons.h`).
+
+2. **`sync` a 16px, el riesgo que el plan preveía (§B.4: "si falla
+   tonos a 16px, se usa variante Rounded weight 500"), pasó limpio: 34
+   tonos.** Los que fallaron con el peso 400 por defecto fueron otros
+   dos, **no anticipados por el plan**: `pause@24px` (3 tonos) y
+   `battery_full@24px` (2 tonos) — ambos con `MIN_INK_TONES = 4`
+   (D-008). Diagnóstico (`design-system/generate.py --icons`, tabla de
+   cobertura impresa a mano): no es un bug del pipeline de
+   supersampleo/filtro de caja (`generate_icons()`,
+   `design-system/generate.py`) — es geometría real. Ambos íconos son
+   casi enteramente bordes rectos (dos barras verticales; un contorno
+   de batería con esquinas redondeadas mínimas) que, a 24px
+   específicamente, caen casi exacto sobre la grilla de píxeles: el
+   filtro de caja de 16× produce entonces una rampa de 2-3 valores en
+   vez de una docena, porque casi no hay borde parcialmente cubierto.
+   A 16px y 40px los mismos SVG pasan sin problema (la grilla no
+   coincide igual de exacto). **Corrección, aplicando la misma
+   mitigación que el plan ya preveía para `sync` (no una nueva
+   política):** `pause.svg` y `battery_full.svg` se vendorean en su
+   variante `wght500` (trazo más grueso) en vez de peso 400 — desplaza
+   los bordes lo suficiente para que el filtro de caja capture rampa
+   real en las tres tallas (verificado: 12/15/23 tonos y 11/10/15
+   tonos respectivamente a 16/24/40px). Los otros 18 iconos quedan en
+   peso 400. Sin cambio de `MIN_INK_TONES` ni de la metodología de
+   generación — la verificación mecánica hizo exactamente lo que tenía
+   que hacer.
+
+3. **Enum y estructura de datos.** `struct moonlit_icon_mask {int
+   width; int height; const uint8_t *cov;}`; tabla
+   `moonlit_icons[MOONLIT_ICON_COUNT][MOONLIT_ICON_SIZE_COUNT]` (20×3 =
+   60 máscaras); `moonlit_icon_draw(id, size_px, x, y, color)` en
+   `apps/metro/moonlit_icons.c`, mismo cuerpo que
+   `metro_widgets_draw_glyph()` (M-089) sobre `metro_fb_plot_alpha()`.
+   Sustituye a `metro_icons.h`/`metro_icons_table.c` (máscaras
+   monocromas de 1 bit, Fluent System Icons): 9 de los 20 iconos tienen
+   consumidor hoy (`metro_screen_nowplaying.c`, `metro_draw.c`, vía
+   `metro_widgets_draw_icon()`/`metro_widgets_draw_icon_in_circle()`,
+   sin cambio de firma salvo el tipo del enum); los 11 restantes
+   quedan compilados sin consumidor, reservados para M4/M5/M8.
+
+4. **Alcance del grep de verificación "sin Fluent".** El propio hito
+   M3 (`05-plan-correctivo.md` §M3) trae dos cláusulas en tensión: su
+   definición de hecho exige
+   `grep -rn 'METRO_ICON_\|metro_icons.h\|Fluent' apps/metro/ firmware/tools/`
+   vacío, pero su "NO tocar" protege `metro_glyphs_table.c` explícitamente
+   "hasta M5" — y ese archivo trae "Fluent System Icons (Microsoft), MIT"
+   en su propia cabecera (`apps/metro/metro_glyphs_table.c:3`), igual que
+   sus dos comentarios de contexto en `metro_screen_usb.c:38,129`
+   (pantalla USB, alcance de M5, no de M3). El grep tal como está
+   escrito no puede dar vacío mientras esa protección siga vigente.
+   **Resolución (consultada con el dueño):** el grep se interpreta
+   acotado al pipeline de iconos que M3 posee — excluye
+   `metro_glyphs_table.c` y `metro_screen_usb.c` (ambos de M5). Las
+   únicas dos menciones sueltas de "Fluent" en archivos que M3 sí
+   posee (comentario de layout en `metro_draw.c:157`, comentario de
+   `moonlit_icons.h:28`) se reescribieron para no nombrar la familia
+   anterior, ya que no estaban protegidas. M5 hereda la obligación de
+   dejar el grep sin acotar en vacío al reemplazar el glifo USB.
+
+Implementada en M3: `design-system/tokens.json` (`icon`),
+`design-system/generate.py` (`--icons`, `generate_icons`,
+`_rasterize_icon_alpha`), `design-system/vendor/material-symbols/`,
+`apps/metro/moonlit_icons.{c,h}`, `apps/metro/moonlit_icons_table.c`,
+`firmware/tools/check_tones.py`. Elimina: `firmware/assets/icons/`,
+`firmware/tools/gen_icons.py`, `apps/metro/metro_icons.h`,
+`apps/metro/metro_icons_table.c`.

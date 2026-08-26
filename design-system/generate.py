@@ -12,18 +12,35 @@ Lee tokens.json (unica fuente de verdad, D-010) y produce:
                                     D-004), via tools/convttf con rango
                                     decimal 32-383 (D-007) (--fonts).
 
-Iconos (--icons) y logotipo (--logo) llegan en M3/M9 como subcomandos
-nuevos de este mismo archivo -- no se porta nada del generador de
-Aura-Firmware mas alla de la forma de tokens.json y el patron
-dict-plano -> #define de generate_header()/generate_aura_ds_defines()
-(AF/design-system/generate.py:124,197-262).
+  - apps/metro/moonlit_icons_table.c  Mascaras de cobertura de 8 bits
+                                    (Material Symbols Rounded, D-008,
+                                    D-033) para los iconos y tamanos de
+                                    tokens.json:icon, via rsvg-convert +
+                                    supersampleo 16x (--icons).
+
+Logotipo (--logo) llega en M9 como subcomando nuevo de este mismo
+archivo -- no se porta nada del generador de Aura-Firmware mas alla de
+la forma de tokens.json, el patron dict-plano -> #define de
+generate_header()/generate_aura_ds_defines()
+(AF/design-system/generate.py:124,197-262) y, para --icons, la tecnica
+de supersampleo 16x + filtro de caja + MIN_INK_TONES de
+AF/design-system/generate.py:372-391,475,575-583,626-632 (sin AppKit:
+la rasterizacion es rsvg-convert sobre SVG vendoreados, como ya hacia
+firmware/tools/gen_icons.py para los iconos Fluent que este comando
+sustituye).
 """
 import argparse
 import json
 import struct
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 
 ROOT = Path(__file__).resolve().parent
 TOKENS_PATH = ROOT / "tokens.json"
@@ -31,6 +48,8 @@ HEADER_OUT = ROOT.parent / "firmware" / "rockbox" / "apps" / "metro" / "moonlit_
 ROCKBOX_TOOLS = ROOT.parent / "firmware" / "rockbox" / "tools"
 CONVTTF = ROCKBOX_TOOLS / "convttf"
 FONTS_OUT = ROOT.parent / "firmware" / "assets" / "fonts"
+ICONS_VENDOR_DIR = ROOT / "vendor" / "material-symbols"
+ICONS_OUT = ROOT.parent / "firmware" / "rockbox" / "apps" / "metro" / "moonlit_icons_table.c"
 
 SCHEMES = ("night", "dawn")
 
@@ -319,15 +338,129 @@ def check_contrast(tokens):
         die(f"contraste insuficiente:\n{detail}")
 
 
+# D-033: supersampleo 16x + filtro de caja (AF/design-system/generate.py:372-391)
+# -- rsvg-convert ya antialiasa, pero pedirle el simbolo a 16x el tamano
+# final y reducirlo con Image.BOX (promedio de cobertura de subpixeles,
+# sin el ringing que LANCZOS puede meter en curvas muy chicas a 16px) da
+# un canal alfa mas fiel a la forma real que rasterizar directo al
+# tamano final.
+ICON_SUPERSAMPLE = 16
+
+# Mismo umbral y motivo que AF/design-system/generate.py:475 (D-008):
+# una rampa antialiasada sana tiene decenas de tonos intermedios; 3 o
+# menos significa que el icono se binarizo en algun paso del pipeline.
+MIN_INK_TONES = 4
+
+
+def _rasterize_icon_alpha(svg_path, size_px):
+    hi = size_px * ICON_SUPERSAMPLE
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        result = subprocess.run(
+            ["rsvg-convert", "-w", str(hi), "-h", str(hi), "-o", str(tmp_path), str(svg_path)],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            die(f"rsvg-convert fallo para {svg_path} @ {size_px}px:\n{result.stderr}")
+        img = Image.open(tmp_path).convert("RGBA")
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    img = img.resize((size_px, size_px), Image.BOX)
+    return img.getchannel("A")
+
+
+def generate_icons(tokens):
+    print("==> Generando apps/metro/moonlit_icons_table.c")
+    if Image is None:
+        die(
+            "falta el modulo Pillow -- crea el venv del design system:\n"
+            "  python3 -m venv design-system/.venv && "
+            "design-system/.venv/bin/pip install pillow"
+        )
+
+    icon_cfg = tokens["icon"]
+    names = icon_cfg["names"]
+    sizes = icon_cfg["sizes"]
+
+    rows = []
+    fail = []
+    entries = []  # (name, [(size, w, h, data), ...])
+    for name in names:
+        svg_path = ICONS_VENDOR_DIR / f"{name}.svg"
+        if not svg_path.exists():
+            die(f"falta {svg_path} (ver design-system/vendor/material-symbols/)")
+        per_size = []
+        for size_px in sizes:
+            alpha = _rasterize_icon_alpha(svg_path, size_px)
+            data = alpha.tobytes()
+            tones = {v for v in data if v > 0}
+            ok = len(tones) >= MIN_INK_TONES
+            rows.append((name, size_px, len(tones), ok))
+            if not ok:
+                fail.append((name, size_px, len(tones)))
+            per_size.append((size_px, size_px, size_px, data))
+        entries.append((name, per_size))
+
+    print(f"{'icono':<24} {'px':>4} {'tonos':>6}  ")
+    for name, size_px, n_tones, ok in rows:
+        print(f"{name:<24} {size_px:>4} {n_tones:>6}  {'OK' if ok else 'FAIL'}")
+
+    if fail:
+        detail = "\n".join(f"  {n}@{s}px: {t} tono(s)" for n, s, t in fail)
+        die(f"verificacion de tonos fallo -- < {MIN_INK_TONES} tonos de tinta:\n{detail}")
+
+    lines = [
+        "/* GENERATED by design-system/generate.py --icons -- do not edit by hand.",
+        " *",
+        " * Material Symbols Rounded (Google), Apache License 2.0 -- ver",
+        " * design-system/vendor/material-symbols/LICENSE y DECISIONS.md D-008.",
+        " *",
+        " * 8-bit coverage masks (one byte per pixel, row-major), rasterised",
+        " * with anti-aliasing (16x supersample + box filter) at each of the",
+        " * three sizes. Drawn by blending a colour over whatever is behind",
+        " * (metro_fb_plot_alpha via moonlit_icon_draw), so they stay",
+        " * theme-neutral and never hard-code an RGB (D-033).",
+        " */",
+        '#include "moonlit_icons.h"',
+        "",
+    ]
+    for name, per_size in entries:
+        for size_px, w, h, data in per_size:
+            arr_name = f"moonlit_icon_{name}_{size_px}_cov"
+            lines.append(f"static const uint8_t {arr_name}[{w * h}] = {{")
+            for y in range(h):
+                row = data[y * w:(y + 1) * w]
+                lines.append("    " + ", ".join(f"{v:3d}" for v in row) + ",")
+            lines.append("};")
+        lines.append("")
+
+    lines.append(f"const struct moonlit_icon_mask moonlit_icons[MOONLIT_ICON_COUNT][MOONLIT_ICON_SIZE_COUNT] = {{")
+    for name, per_size in entries:
+        parts = []
+        for size_px, w, h, _data in per_size:
+            arr_name = f"moonlit_icon_{name}_{size_px}_cov"
+            parts.append(f"{{ {w}, {h}, {arr_name} }}")
+        lines.append(f"    /* {name} */")
+        lines.append(f"    {{ {', '.join(parts)} }},")
+    lines.append("};")
+    lines.append("")
+
+    ICONS_OUT.parent.mkdir(parents=True, exist_ok=True)
+    ICONS_OUT.write_text("\n".join(lines))
+    print(f"==> {ICONS_OUT.relative_to(ROOT.parent)} ({len(entries)} iconos x {len(sizes)} tamanos)")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--header", action="store_true", help="genera apps/metro/moonlit_tokens.h")
     parser.add_argument("--contrast", action="store_true", help="verifica contraste WCAG on_surface/on_surface_variant vs surface")
     parser.add_argument("--fonts", action="store_true", help="genera firmware/assets/fonts/moonlit-*.fnt")
+    parser.add_argument("--icons", action="store_true", help="genera apps/metro/moonlit_icons_table.c")
     args = parser.parse_args()
 
-    if not (args.header or args.contrast or args.fonts):
-        parser.error("nada que hacer: pasa --header, --contrast y/o --fonts")
+    if not (args.header or args.contrast or args.fonts or args.icons):
+        parser.error("nada que hacer: pasa --header, --contrast, --fonts y/o --icons")
 
     tokens = json.loads(TOKENS_PATH.read_text())
 
@@ -337,6 +470,8 @@ def main():
         check_contrast(tokens)
     if args.fonts:
         generate_fonts(tokens)
+    if args.icons:
+        generate_icons(tokens)
 
     print("==> listo")
 
