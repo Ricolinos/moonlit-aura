@@ -45,7 +45,6 @@
 #include "metro_artist_images.h"
 #include "metro_fsutil.h"
 #include "metro_volume.h"
-#include "moonlit_art_cache.h" /* D-042, D-224: precarga de Marea */
 
 /* Enough unique values for a few thousand artists/albums/genres --
  * same size Aura-Firmware settled on for the same purpose (D-021).
@@ -193,13 +192,10 @@ bool metro_music_db_ready(void)
     {
         tagcache_start_scan();
         s_update_triggered = true;
-
-        /* D-042/D-224: misma puerta que arriba, mismo motivo (tagcache
-         * recién confirmado listo) -- ver AF/aura_music.c:471-473. Una
-         * sola vez por arranque; moonlit_art_cache_on_db_ready() se
-         * encarga de su propia bandera además de esta, para no
-         * repetirse si metro_music_db_ready() se vuelve a llamar. */
-        moonlit_art_cache_on_db_ready();
+        /* D-049: the cover pre-pass that used to run here (synchronous,
+         * no screen, 4 min 18 s on the owner's iPod) now lives in
+         * moonlit_screen_library_prepare(), called by the hub before
+         * pushing Música -- this stays a data-layer trigger only. */
     }
 
     return tagcache_is_usable();

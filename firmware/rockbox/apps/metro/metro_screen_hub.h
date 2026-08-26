@@ -58,6 +58,14 @@ bool metro_screen_hub_wants_ticks(void);
  * once, at push time. */
 const metro_music_item_t *metro_screen_hub_albums(int *out_count);
 
+/* moonlit (D-049): the Música lists (artists/albums/songs/genres/
+ * playlists/artist images) are rebuilt on entry only when they are
+ * not valid any more -- this drops them. metro_disk_handoff()
+ * (metro_main.c: boot and every return from USB) calls it; a change
+ * in tagcache_get_stat()->total_entries (first build, per-boot scan,
+ * postponed sync rebuild) invalidates them on its own. */
+void metro_screen_hub_music_lists_invalidate(void);
+
 /* moonlit (D-029, M8): pushes the shared "songs of one album" subpage
  * -- the same one Quickplay/Álbumes/un artista ya usan -- for Marea's
  * SELECT action. Thin wrapper: open_album_songs() stays static, this

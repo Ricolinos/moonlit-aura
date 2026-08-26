@@ -1102,3 +1102,100 @@ sin crear ni tocar tags); queda como paso 0 del checklist de release
 de `CLAUDE.md` §Releases. `docs/COMPAT_STUDIO.md` C22 (`version.txt`
 en el zip, camino feliz de `--release-tag`) se verifica con este mismo
 release.
+
+---
+
+# v0.1.1 — biblioteca grande en hardware real (D-049…D-051)
+
+**D-049 — Pantalla "preparando biblioteca": bloqueante a propósito,
+interrumpible, con progreso para tagcache y para la caché de carátulas.**
+Medido en el iPod del dueño (4 556 pistas, ~1 083 álbumes, 1 028
+`cover.jpg`): al pulsar Música el aparato quedó 4 min 18 s sin pantalla
+ni botones (979 álbumes × 264 ms). Diagnóstico (cadena real, antes de
+esta decisión): `metro_screen_hub.c:834 hub_on_select case 0` →
+`metro_music.c:202 metro_music_db_ready()` →
+`moonlit_art_cache_on_db_ready()` → `moonlit_art_cache.c:111-141
+moonlit_art_precache(NULL)` síncrona, con `yield()` como único
+paliativo y llamando `moonlit_art_load_for_album()` por CADA álbum
+(open+read completo aun en hit). `moonlit_art_pfraw_is_cached()`
+(`moonlit_art.c:66`) existía y no se usaba — regresión frente a
+`../Aura-Firmware/firmware/rockbox/apps/aura/aura_music.c:345-384`, que
+sí la usa, corta con `pending == 0` y repinta cada 4. `updating_page`
+(`metro_screen_hub.c:760-779`) era una fila estática sin refresco y
+`music_lists_refresh()` (`:303-333`) se repetía en cada entrada.
+**Decisión:**
+1. `apps/metro/moonlit_screen_library.c/.h` (`apps/SOURCES`):
+   `bool moonlit_screen_library_prepare(void)`, bucle propio calcado de
+   `metro_run_sync_screen_if_needed()` (`metro_main.c:161-193`):
+   `metro_input_next(MCTX_DIALOG, HZ/10)` atiende `SYS_EVENT` (USB:
+   `metro_screen_usb_show()` + `default_event_handler()`, y devuelve
+   false) y `MACT_BACK` (pospone: devuelve false; lo pendiente queda
+   para la próxima entrada — idempotente). Visual moonlit: creciente
+   64 px `on_surface` centrado (`moonlit_logo_draw_crescent`, como el
+   splash), `MFONT_HEADLINE` "preparando biblioteca", `MFONT_BODY`
+   `on_surface_variant` con la fase, `metro_draw_progress()` 120×2 y
+   `MFONT_LABEL` "N de M" (minúsculas: convención de todo
+   `metro_lang.c`). Fase 1 (`run_phase_db`, `:156`) solo si
+   `!(metro_music_db_ready() && tagcache_is_fully_initialized())`:
+   "construyendo la base de música" con
+   `tagcache_get_commit_step()/_max_commit_step()` (patrón
+   `apps/main.c:380-388`; 0 hasta que el escaneo termina y arranca el
+   commit), refresco cada HZ/10; se sondea `metro_music_db_ready()`
+   porque es quien dispara `tagcache_rebuild()`/`tagcache_start_scan()`.
+   Fase 2 (`run_phase_art`): `moonlit_art_pending_count()`; 0 → no
+   dibuja nada; si no, "preparando carátulas" y `moonlit_art_precache()`
+   con `progress_cb` que repinta cada 4 (`LIB_REPAINT_EVERY`, `:64`;
+   `lcd_update()` cuesta más que un decode chico, AF `:376-380`) y
+   `should_abort` que sondea sin bloquear (`poll_interrupt(0)`, `:112`).
+   Strings `LANG_LIBRARY_PREPARING/_PHASE_DB/_PHASE_ART/_COUNT_FMT`
+   (`metro_lang.h:193-196`, `metro_lang.c:186-189`/`:348-351`).
+2. `moonlit_art_cache.c`: `moonlit_art_precache(progress_cb,
+   should_abort)` (`:135`) cuenta primero los pendientes y salta con
+   `moonlit_art_pfraw_is_cached()` (`:164`, cabecera de 16 bytes) antes
+   de cualquier `read()` completo; `should_abort` se consulta entre
+   álbumes, nunca a mitad de un decode (ningún `.pfraw` a medias);
+   devuelve false si se cortó. Nueva `int moonlit_art_pending_count()`
+   (`:124`). El conteo puro vive en `moonlit_art.c:81
+   moonlit_art_count_uncached()` (host-testeable,
+   `test/test_art.c:108 test_count_uncached`: 2 válidos + 1 cabecera de
+   otro tema + 1 ausente → 2 pendientes; 16/16 checks). Se retira
+   `moonlit_art_cache_on_db_ready()` y su enganche de
+   `metro_music.c:202` (`grep on_db_ready metro_music.c` → vacío;
+   comentario D-049 en `:195`).
+3. `metro_screen_hub.c hub_on_select case 0` (`:875`): llama
+   `moonlit_screen_library_prepare()` y DESPUÉS decide la página con
+   `metro_music_db_ready()` como antes: si la base sigue sin estar
+   lista (usuario pospuso en fase 1) empuja `updating_page`; si solo se
+   pospusieron carátulas, Música abre y Marea decodifica el resto una
+   por tick ocioso. Listas de Música cacheadas (`s_music_lists_valid`,
+   `:314-350`): se reconstruyen solo si cambió el sello
+   `tagcache_get_stat()->total_entries` (lectura de struct, cero disco;
+   se mueve con la primera construcción, el `tagcache_start_scan()` por
+   arranque y la reconstrucción de un sync) o tras
+   `metro_screen_hub_music_lists_invalidate()` desde
+   `metro_disk_handoff()` (`metro_main.c:213`: arranque y cada retorno
+   de USB — lo único que cambia playlists y `artist_images.cfg`, que
+   tagcache no ve). `db_stamp.txt` (M-091) se descartó: lectura de
+   archivo por entrada y solo cambia con un sync de Studio, se perdería
+   el escaneo por arranque. Quickplay (`metro_music_recent_albums`, 8
+   filas) y `metro_thumbs_reset()` siguen por entrada: reproducir
+   reordena Quickplay y ningún sello lo cubre.
+4. D-045 cerrada en su propio bloque (arriba).
+Verificación: `make -C firmware/rockbox/apps/metro/test test` verde
+(test_art 16/16); `build_sim.sh` sin warnings nuevos (los de
+`-Wmissing-field-initializers`/`-Wformat-truncation` en
+`metro_screen_hub.c` son previos a este cambio);
+`docs/screenshots/v0.1.1-preparando-biblioteca.png` (simdisk con la
+biblioteca de `gen_test_media.sh`, `.pfraw` de `moonlitcache/art/`
+borrados; `sim_shot.sh … 1 "WAIT,SELECT"`: fase 2 "4 de 11"); fase 1
+verificada borrando `database_*.tcd` del simdisk (mismo comando,
+"construyendo la base de música", "0 de 10", la base se reconstruye y
+Música abre). **Hipótesis abiertas:** (a) si la reconstrucción de una
+biblioteca vacía nunca deja `tagcache_is_usable()` en true, la fase 1
+espera hasta MENU (antes: la fila "actualizando biblioteca…" para
+siempre — mismo estado final, ahora con salida); (b) un USB durante la
+pantalla no rehace `metro_disk_handoff()` (igual que la pantalla de
+sync hoy), solo devuelve al hub; (c) el tiempo por álbum en fase 2
+sigue siendo el del decode JPEG (~264 ms medidos), la ganancia real es
+que solo se paga una vez por álbum y con pantalla/botones — pendiente
+de medir en el iPod con la biblioteca completa.

@@ -78,6 +78,21 @@ bool moonlit_art_pfraw_is_cached(const char *path, int size, int radius,
     return ok;
 }
 
+int moonlit_art_count_uncached(int count, moonlit_art_path_fn path_fn, void *ctx,
+                               int size, int radius, int32_t theme)
+{
+    char path[MOONLIT_ART_PATH_MAX];
+    int i, pending = 0;
+
+    for (i = 0; i < count; i++)
+    {
+        path_fn(i, path, sizeof(path), ctx);
+        if (!moonlit_art_pfraw_is_cached(path, size, radius, theme))
+            pending++;
+    }
+    return pending;
+}
+
 void moonlit_art_write_pfraw(const char *path, int size, int radius,
                               int32_t theme, const fb_data *data)
 {

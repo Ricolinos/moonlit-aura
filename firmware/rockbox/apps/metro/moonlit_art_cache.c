@@ -108,34 +108,78 @@ bool moonlit_art_load_for_album(int32_t album_seek, fb_data *out)
 static metro_music_item_t s_precache_albums[METRO_MUSIC_MAX_GROUPS];
 static fb_data s_precache_cover[MOONLIT_ART_CACHE_SIZE * MOONLIT_ART_CACHE_SIZE];
 
-void moonlit_art_precache(moonlit_art_progress_fn progress_cb)
+/* D-049: index -> album seek -> .pfraw path, for the pure counter in
+ * moonlit_art.c (moonlit_art_count_uncached()). */
+static void precache_path_at(int index, char *out, size_t outsz, void *ctx)
 {
-    int count, i;
+    (void)ctx;
+    moonlit_art_pfraw_path(s_precache_albums[index].seek, MOONLIT_ART_CACHE_SIZE, out, outsz);
+}
 
-    count = metro_music_albums(s_precache_albums, METRO_MUSIC_MAX_GROUPS);
+static int load_albums(void)
+{
+    return metro_music_albums(s_precache_albums, METRO_MUSIC_MAX_GROUPS);
+}
+
+int moonlit_art_pending_count(void)
+{
+    int count = load_albums();
+
     if (count <= 0)
-        return;
+        return 0;
+    return moonlit_art_count_uncached(count, precache_path_at, NULL,
+                                      MOONLIT_ART_CACHE_SIZE, MOONLIT_ART_CACHE_RADIUS,
+                                      (int32_t)metro_theme_get());
+}
+
+bool moonlit_art_precache(moonlit_art_progress_fn progress_cb,
+                          moonlit_art_abort_fn should_abort)
+{
+    char path[MAX_PATH];
+    int32_t theme = (int32_t)metro_theme_get();
+    int count, i, pending, done = 0;
+
+    count = load_albums();
+    if (count <= 0)
+        return true;
+
+    /* D-049 (AF/aura_music.c:352-358): count first so the progress the
+     * screen shows is "N of the ones actually missing", not "N of the
+     * whole library" -- and so a library with nothing missing costs
+     * `count` header reads, never a screen. */
+    pending = moonlit_art_count_uncached(count, precache_path_at, NULL,
+                                         MOONLIT_ART_CACHE_SIZE, MOONLIT_ART_CACHE_RADIUS,
+                                         theme);
+    if (pending == 0)
+        return true;
 
     for (i = 0; i < count; i++)
     {
+        /* D-049: header-only check before the full open()+read() that
+         * moonlit_art_load_for_album() would do on a hit -- measured on
+         * the owner's iPod, the old "load everything, let the hit path
+         * decide" pass cost 264 ms per album. */
+        moonlit_art_pfraw_path(s_precache_albums[i].seek, MOONLIT_ART_CACHE_SIZE,
+                               path, sizeof(path));
+        if (moonlit_art_pfraw_is_cached(path, MOONLIT_ART_CACHE_SIZE,
+                                        MOONLIT_ART_CACHE_RADIUS, theme))
+            continue;
+
         /* moonlit_art_load_for_album() decide hit vs. decode -- un
          * álbum sin carátula resoluble nunca escribe .pfraw (devuelve
          * false) y por lo tanto vuelve a intentar el decode en cada
-         * arranque, sin caché negativa a propósito (mismo criterio
+         * pasada, sin caché negativa a propósito (mismo criterio
          * que aura_music_precache_album_art(), AF/aura_music.c:221-300). */
         moonlit_art_load_for_album(s_precache_albums[i].seek, s_precache_cover);
+        done++;
         if (progress_cb)
-            progress_cb(i + 1, count);
+            progress_cb(done, pending);
         yield();
+
+        /* D-049: between albums only -- never mid-decode, so an abort
+         * leaves the cache consistent (every .pfraw on disk complete). */
+        if (should_abort && should_abort())
+            return false;
     }
-}
-
-static bool s_precached = false;
-
-void moonlit_art_cache_on_db_ready(void)
-{
-    if (s_precached)
-        return;
-    s_precached = true;
-    moonlit_art_precache(NULL);
+    return true;
 }

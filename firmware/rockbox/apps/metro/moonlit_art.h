@@ -52,6 +52,10 @@
  * segundo uso de `extra` que aura_photos.c le daba a mtime). */
 #define MOONLIT_ART_LAYOUT_ROW_MAJOR 1
 
+/* D-049: == MAX_PATH (firmware/include/fs_defines.h) -- not included
+ * here so this file keeps compiling with a host `cc` (test/). */
+#define MOONLIT_ART_PATH_MAX 260
+
 /* Bitmap size x size, fila contigua, con esquinas ya horneadas al
  * radio y fondo pedidos por moonlit_art_mask_corners() -- lee el
  * archivo de `path` a `out` (reservado por el llamador, size*size
@@ -74,6 +78,19 @@ void moonlit_art_write_pfraw(const char *path, int size, int radius,
  * pagar el read() completo. */
 bool moonlit_art_pfraw_is_cached(const char *path, int size, int radius,
                                   int32_t theme);
+
+/* D-049: producer of the i-th .pfraw path for moonlit_art_count_uncached()
+ * -- keeps this module free of metro_music/metro_settings (the caller
+ * maps index -> album seek -> path, moonlit_art_cache.c does that). */
+typedef void (*moonlit_art_path_fn)(int index, char *out, size_t outsz, void *ctx);
+
+/* D-049: how many of `count` paths are NOT cached (missing file or
+ * header mismatch), header reads only -- the number the "Preparando
+ * biblioteca" screen shows as the total, and the reason it can decide
+ * to show nothing at all (0 pending == library unchanged, AF pattern
+ * aura_music.c:352-358). Pure: host-tested in test/test_art.c. */
+int moonlit_art_count_uncached(int count, moonlit_art_path_fn path_fn, void *ctx,
+                               int size, int radius, int32_t theme);
 
 /* Recorta las 4 esquinas de un bitmap fila-contigua (buf, size x size)
  * al radio pedido, mezclando hacia bg en el borde -- se hornea UNA VEZ

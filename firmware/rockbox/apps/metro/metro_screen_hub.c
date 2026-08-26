@@ -46,6 +46,8 @@
 #include "moonlit_elevation.h" /* moonlit (D-011, M4): tarjeta de fila seleccionada */
 #include "moonlit_screen_marea.h" /* moonlit (D-029, M8): pivote Marea */
 #include "moonlit_logo.h" /* moonlit (D-016, D-044, M9): cabecera de marca del hub */
+#include "moonlit_screen_library.h" /* moonlit (D-049): "preparando biblioteca" antes de Música */
+#include "tagcache.h" /* moonlit (D-049): tagcache_get_stat()->total_entries as the lists' stamp */
 
 /* moonlit (D-044, M9): cabecera de marca propia -- el creciente de 40px
  * (D-016) ocupa exactamente un METRO_HUB_PITCH extra entre la barra de
@@ -300,6 +302,29 @@ static char s_playlist_files[METRO_MUSIC_MAX_GROUPS][METRO_MUSIC_ITEM_LEN];
 static char s_playlist_names[METRO_MUSIC_MAX_GROUPS][METRO_MUSIC_ITEM_LEN];
 static int s_playlists_n;
 
+/* moonlit (D-049): the five tagcache lists + playlists + artist images
+ * below are only rebuilt when something could have changed them. The
+ * stamp is tagcache_get_stat()->total_entries (a struct read, no disk)
+ * -- it moves on the first build, on the per-boot tagcache_start_scan()
+ * and on a sync rebuild -- plus an explicit invalidation from
+ * metro_disk_handoff() for what tagcache never sees (playlist files,
+ * artist_images.cfg, both only ever change over USB). db_stamp.txt
+ * (M-091) was the other candidate: it is a file read per entry and
+ * only changes on a Studio sync, so it would miss the per-boot scan. */
+static bool s_music_lists_valid;
+static int s_music_lists_entries;
+
+void metro_screen_hub_music_lists_invalidate(void)
+{
+    s_music_lists_valid = false;
+}
+
+static bool music_lists_are_valid(void)
+{
+    return s_music_lists_valid &&
+           s_music_lists_entries == tagcache_get_stat()->total_entries;
+}
+
 static void music_lists_refresh(void)
 {
     int i;
@@ -314,8 +339,15 @@ static void music_lists_refresh(void)
 
     /* R3-F4/DD-5 (M-065): empty (0) on a library with no play history
      * yet -- quickplay_pivot's empty_message (LANG_QUICKPLAY_EMPTY)
-     * covers that case, not a placeholder row. */
+     * covers that case, not a placeholder row. D-049: this one stays
+     * per-entry (8 rows of the runtime DB, cheap) because playing an
+     * album from anywhere reorders it -- no stamp covers that. */
     s_quickplay_n = metro_music_recent_albums(s_quickplay, METRO_QUICKPLAY_MAX);
+
+    if (music_lists_are_valid())
+        return;
+    s_music_lists_entries = tagcache_get_stat()->total_entries;
+    s_music_lists_valid = true;
 
     s_artists_n = metro_music_artists(s_artists, METRO_MUSIC_MAX_GROUPS);
     s_albums_n  = metro_music_albums(s_albums, METRO_MUSIC_MAX_GROUPS);
@@ -831,6 +863,16 @@ static void hub_on_select(void *ctx, int index)
     switch (base)
     {
         case 0:
+            /* moonlit (D-049): the blocking-but-interruptible
+             * "preparando biblioteca" screen runs first (tagcache
+             * build if needed, then the cover pre-pass that used to
+             * hide inside metro_music_db_ready()). Its return value is
+             * not what decides the page: if the user postponed while
+             * the database was still building, db_ready() below is
+             * still false and the static "actualizando" row shows as
+             * before; if only the covers were postponed, Música opens
+             * and Marea decodes the rest one per idle tick. */
+            moonlit_screen_library_prepare();
             if (!metro_music_db_ready())
                 metro_screen_list_push(&updating_page);
             else

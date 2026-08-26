@@ -187,6 +187,14 @@ enum metro_lang_id {
     LANG_FAMILY_MOONLIT,
     LANG_DIALOG_SWITCH_FMT,
 
+    /* moonlit (D-049): "preparando biblioteca" screen
+     * (moonlit_screen_library.c) -- title, one subtitle per phase,
+     * and the "%d de %d" counter. Appended at the end (M-009). */
+    LANG_LIBRARY_PREPARING,
+    LANG_LIBRARY_PHASE_DB,
+    LANG_LIBRARY_PHASE_ART,
+    LANG_LIBRARY_COUNT_FMT,
+
     LANG_COUNT
 };
 

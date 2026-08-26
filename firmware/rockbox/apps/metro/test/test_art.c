@@ -89,11 +89,48 @@ static void test_mask_corners_leaves_bg_at_corners(void)
     CHECK(buf[(TEST_SIZE / 2) * TEST_SIZE + TEST_SIZE / 2] == 0xFFFF);
 }
 
+/* D-049: moonlit_art_count_uncached() -- the number the "preparando
+ * biblioteca" screen shows as its total. 4 paths: two valid, one with a
+ * stale header (other theme), one missing -> 2 pending. */
+static const char *const s_count_paths[4] = {
+    "build/test_art_count_0.pfraw", /* valid */
+    "build/test_art_count_1.pfraw", /* valid */
+    "build/test_art_count_2.pfraw", /* header for theme 1, asked for 0 */
+    "build/test_art_count_3.pfraw", /* never written */
+};
+
+static void count_path_at(int index, char *out, size_t outsz, void *ctx)
+{
+    const char *const *paths = ctx;
+    snprintf(out, outsz, "%s", paths[index]);
+}
+
+static void test_count_uncached(void)
+{
+    fb_data src[TEST_SIZE * TEST_SIZE];
+
+    fill_gradient(src, TEST_SIZE, 0x3000);
+    moonlit_art_write_pfraw(s_count_paths[0], TEST_SIZE, TEST_RADIUS, 0, src);
+    moonlit_art_write_pfraw(s_count_paths[1], TEST_SIZE, TEST_RADIUS, 0, src);
+    moonlit_art_write_pfraw(s_count_paths[2], TEST_SIZE, TEST_RADIUS, 1, src);
+    remove(s_count_paths[3]);
+
+    CHECK(moonlit_art_count_uncached(4, count_path_at, (void *)s_count_paths,
+                                     TEST_SIZE, TEST_RADIUS, 0) == 2);
+    /* Other theme: only the third one matches now. */
+    CHECK(moonlit_art_count_uncached(4, count_path_at, (void *)s_count_paths,
+                                     TEST_SIZE, TEST_RADIUS, 1) == 3);
+    /* Empty library: nothing pending, path_fn never called. */
+    CHECK(moonlit_art_count_uncached(0, count_path_at, (void *)s_count_paths,
+                                     TEST_SIZE, TEST_RADIUS, 0) == 0);
+}
+
 int main(void)
 {
     test_round_trip();
     test_header_rejects_mismatch();
     test_mask_corners_leaves_bg_at_corners();
+    test_count_uncached();
 
     printf("test_art: %d/%d checks OK\n", checks - failures, checks);
     if (failures)

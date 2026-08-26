@@ -207,6 +207,10 @@ static void metro_disk_handoff(void)
     metro_manifest_reload(); /* R5-F1 (M-081): About reads the RAM copy */
     metro_sync_check_pending();
     metro_run_sync_screen_if_needed();
+    /* moonlit (D-049): playlists/artist_images.cfg only ever change
+     * over USB -- this is the one place that knows the disk was handed
+     * back. Tagcache changes invalidate on their own (hub's stamp). */
+    metro_screen_hub_music_lists_invalidate();
 }
 
 /* F9: the splash's progress bar (S1.4) covers tagcache's initial "is

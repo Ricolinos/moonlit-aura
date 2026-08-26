@@ -61,29 +61,27 @@ void moonlit_art_pfraw_path(int32_t seek, int size, char *out, size_t outsz);
 bool moonlit_art_load_for_album(int32_t album_seek, fb_data *out);
 
 typedef void (*moonlit_art_progress_fn)(int done, int total);
+typedef bool (*moonlit_art_abort_fn)(void);
 
-/* D-224: recorre metro_music_albums() una vez por biblioteca lista
- * (moonlit_art_cache_on_db_ready() más abajo la llama una sola vez por
- * arranque) y llama moonlit_art_load_for_album() por CADA álbum --
- * incluidos los que ya tienen .pfraw: esa llamada es la que decide
- * hit/miss y dejar constancia de cuál fue (DEBUGF "moonlit_art: hit"/
- * "moonlit_art: decode", 05-plan-correctivo.md M7 def-de-hecho) es su
- * trabajo, no el de esta función -- un hit es solo un open()+read() de
- * 16 bytes de cabecera, barato incluso recorriendo toda la biblioteca
- * en cada arranque. yield() tras cada álbum. `progress_cb` es opcional
- * (NULL = sin progreso visible); M7 no conecta ninguna pantalla a
- * esto todavía (moonlit_art_cache.c no incluye ningún metro_screen_*,
- * ver 05-plan-correctivo.md M7 "NO tocar: pantallas") -- queda como
- * infraestructura para cuando M8 (Marea) o una revisión posterior
- * decida mostrar progreso. */
-void moonlit_art_precache(moonlit_art_progress_fn progress_cb);
+/* D-049: albums whose MOONLIT_ART_CACHE_SIZE .pfraw for the active
+ * theme is missing or stale -- header reads only (one open() per
+ * album, no pixels). 0 means moonlit_art_precache() has nothing to do
+ * and the "Preparando biblioteca" screen never draws its phase 2. */
+int moonlit_art_pending_count(void);
 
-/* Enganche de una sola vez por arranque -- llamar desde
- * metro_music_db_ready() (capa de datos, no una pantalla) justo cuando
- * la base de datos se vuelve usable por primera vez, mismo punto que
- * aura_music_db_ready() dispara aura_music_precache_album_art()
- * (AF/aura_music.c:471-473). Idempotente: no hace nada si ya corrió en
- * este arranque. */
-void moonlit_art_cache_on_db_ready(void);
+/* D-224/D-049: recorre metro_music_albums() una vez y llama
+ * moonlit_art_load_for_album() SOLO por los álbumes sin .pfraw válido
+ * (moonlit_art_pfraw_is_cached() antes, cabecera de 16 bytes, nunca el
+ * read() completo del hit -- 264 ms/álbum medidos en el iPod del
+ * dueño con el pase anterior, 4 min 18 s para 979 álbumes). `progress_cb`
+ * recibe (hechos, pendientes) tras cada decode; `should_abort` se
+ * consulta entre álbumes (nunca a mitad de un decode) y, si devuelve
+ * true, la pasada se corta y esto devuelve false -- lo que falte queda
+ * para la próxima llamada, idempotente. Ambos opcionales (NULL).
+ * Único llamador: moonlit_screen_library.c (D-049); ya no corre dentro
+ * de metro_music_db_ready(), que bloqueaba el hub sin pantalla ni
+ * botones. */
+bool moonlit_art_precache(moonlit_art_progress_fn progress_cb,
+                          moonlit_art_abort_fn should_abort);
 
 #endif /* MOONLIT_ART_CACHE_H */
