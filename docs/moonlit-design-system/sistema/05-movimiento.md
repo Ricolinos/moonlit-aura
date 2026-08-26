@@ -42,13 +42,29 @@ pueden incluir ese header (D-035) citan el literal documentado:
 `METRO_SELECTION_FRAMES 4` × `METRO_SELECTION_FRAME_TICKS 2` en
 `metro_transitions.h` (patrón D-037).
 
+### Marea no bloqueante (D-053)
+
+El scroll de Marea (`componentes/marea.md`) es la única animación de
+moonlit que **no** corre en un bucle con `sleep()`: la posición del
+carrusel es una función del reloj (`anim_pos_x256()`: `out_expo` sobre
+`transition_ms` = 220 ms desde `s_anim_since`) y el bucle principal
+(`metro_main.c`) pide un cuadro por vuelta ociosa a `HZ/20` mientras
+`moonlit_screen_marea_animating()`. Un paso de rueda a mitad de camino
+redirige desde la posición actual (retarget), nunca salta. Cada cuadro
+repinta solo la banda izquierda (0,20,152,220) con `lcd_update_rect()`
+bajo `cpu_boost()`; el panel derecho y la cabecera se redibujan una
+sola vez, en el cuadro de asentamiento. Ninguna lectura de disco en el
+cuadro: los misses de caché se rellenan por `tick()` cuando ya no anima.
+Captura: `docs/screenshots/v0.1.2-marea-mid.png` (banda cambiada, panel
+y cabecera idénticos a la captura en reposo, verificado con PIL).
+
 ### Degradación
 
 | | `graphics=full` | `graphics=lite` |
 |---|---|---|
 | `animations=all` | C1 7 cuadros + C3 + CONTINUUM; C2 fade real; C4 | C1 7 cuadros + C3 (sin CONTINUUM); C2 → deslizamiento C1; C4 |
 | `animations=minimal` | C1 4 cuadros + C3; C2 → deslizamiento C1; C4 | C1 4 cuadros + C3; C2 → deslizamiento C1; C4 |
-| `animations=off` | nada: `redraw_current()` directo, selección salta | nada |
+| `animations=off` | nada: `redraw_current()` directo, selección salta; Marea salta al destino | nada |
 
 FEATHER (cascada de filas tras PUSH) sigue siendo solo `all`, como antes.
 

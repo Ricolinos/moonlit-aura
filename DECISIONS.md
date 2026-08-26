@@ -1372,3 +1372,204 @@ Verificación: `make -C firmware/rockbox/apps/metro/test test` verde;
 en `docs/moonlit-design-system/sistema/05-movimiento.md` §Paquete
 Waning; la del push verificada con PIL: columna x=83 entera del color
 borde-luz; la de C4: marcador 48/52 px, tono intermedio, sin bordes).
+
+---
+
+# v0.1.2 — Marea no bloqueante y base compartida (D-053…D-055)
+
+**D-053 — Marea anima por reloj, no bloquea (modelo Music Flow de
+Aura-Firmware).** Diagnóstico (v0.1.1): `moonlit_screen_marea.c:580-590`
+animaba **bloqueando** (`for frame 1..7 { show() completa; sleep(3) }`),
+sin `cpu_boost` (S5L8702 a 54 MHz), redibujando en los 8 cuadros (7 + el
+`redraw_current()` de `metro_main.c:533-534`) el panel derecho (33 440 px
++ 576 `plot_alpha` + 144 `isqrt`) y la cabecera, llamando en cada cuadro
+`metro_music_song_count_of_album()` (`:469-470`, barrido de tagcache) y
+leyendo hasta 3 `.pfraw` de disco antes del primer cuadro
+(`preload_range()`, `:537-551,576`). El render en sí (42 057 px/cuadro)
+es más barato que el de Aura (95 591): `moonlit_flow.c` no se toca.
+Aura (`aura_musicflow.c:316-321,1238-1259`; `aura_main.c:606-614`)
+resuelve la posición como función del reloj y el bucle principal solo
+pide cuadros. **Decisión** (commit `79171a86`):
+
+1. Estado por reloj: `MAREA_SCROLL_ANIM_MS 220` (= `motion.transition_ms`,
+   literal documentado, patrón D-037), `s_anim_from_x256`, `s_anim_since`
+   (`current_tick`), `anim_pos_x256()` = `metro_ease(METRO_EASE_OUT_EXPO,
+   elapsed_ms, 220)` interpolando origen → destino×256;
+   `moonlit_screen_marea_animating()` = "se pidió destino y aún no se
+   dibujó el asentamiento".
+2. `scroll_step()` solo fija el destino desde la posición animada
+   **actual** (retarget real) y regresa. Eliminados
+   `run_scroll_animation()`, `s_in_scroll_loop`, `s_scroll_missed`,
+   `preload_range()`, `MAREA_SCROLL_FRAMES/FRAME_DELAY`, `sleep()` y el
+   drenaje de botones (el bucle principal ya lee botones entre cuadros).
+   `moonlit_wheel_step()` (tope 3) se conserva. Con `animations=off` o
+   LCD dormido el origen es el destino: el primer cuadro es el de
+   asentamiento.
+3. Redibujo acotado: `moonlit_screen_marea_show_carousel()` = relleno de
+   la banda (0,20,152,220) + 7 `draw_slide()` + `lcd_update_rect()` de
+   esa banda, bajo `cpu_boost(true/false)`. `moonlit_screen_marea_show()`
+   completa (clear + cabecera + panel + `lcd_update()`) solo al entrar, al
+   cambiar tema/idioma (`redraw_current()`) y en el **cuadro de
+   asentamiento** — ahí y solo ahí `metro_music_song_count_of_album()`,
+   cacheado por índice (`s_songs_for_index`, patrón `target_artist()` de
+   Aura `:845-856`).
+4. `metro_main.c`: timeout `HZ/20` mientras `at_marea && animating()`
+   (patrón `metro_screen_hub_wants_ticks()`); en `MACT_NONE` si anima →
+   `show_carousel()`; tras `MACT_NEXT/PREV` en Marea se dibuja el primer
+   cuadro de inmediato en vez de `redraw_current()`. Cadencia por reloj =
+   salto de cuadros implícito: un cuadro lento no alarga la animación.
+5. Disco fuera del cuadro: `get_slot_for()` **nunca abre archivos** — un
+   miss reclama el slot (`MAREA_ART_PENDING`, monograma/relleno) y
+   `moonlit_screen_marea_tick()` (una carga por vuelta ociosa, **solo
+   cuando no anima**) lo rellena: `moonlit_art_load_for_album()` lee el
+   `.pfraw` o decodifica; `MAREA_ART_MISSING` fija el monograma sin
+   reintentos. Sin pendientes, el tick precarga el álbum más cercano sin
+   slot dentro de `MAREA_PREFETCH_RADIUS` (= 2+1+3: ventana visible + paso
+   máximo de rueda) — sustituye a `preload_range()` sin bloquear. Con
+   ello desaparece el bug "slot −1 reutilizado dentro del mismo cuadro"
+   de D-045.
+6. Verificación: tests host verdes; `build_sim.sh` sin warnings nuevos;
+   `docs/screenshots/v0.1.2-marea-mid.png` (`sim_shot.sh … 2
+   "WAIT,SELECT,WAIT,SELECT,WAIT,SCROLL_FWD"`), comparada con PIL contra
+   una captura en reposo del mismo build: banda 0..152 = 24 270 px
+   distintos, panel 160..320 = **0**, cabecera = **0** (`M8-marea-0.png`
+   es de otra paleta y no sirve de base). `grep -n 'sleep(\|song_count'`
+   → `sleep` vacío, `song_count` solo en `draw_panel()` bajo
+   `s_songs_for_index != s_target_index`; `grep -n 'read_pfraw\|open('`
+   → vacío (la lectura vive en `moonlit_art_cache.c`, llamada solo desde
+   `tick()`).
+
+**Hipótesis abiertas:** sin medición en hardware (M12): el costo real del
+cuadro bajo `cpu_boost` y si `HZ/20` alcanza para 7 tapas a 120 px; el
+radio de precarga 6 es un valor de partida.
+
+**D-054 — Base de datos tagcache compartida en `/.aura/tagcache` y sello
+compartido (contrato v15).** Hechos: `apps/tagcache.c/.h` son
+byte-idénticos en los tres repos (md5 `1e7a6754…`/`d9e5f97d…`,
+`TAGCACHE_MAGIC 0x54434810`); la ruta es runtime
+(`global_settings.tagcache_db_path`, `settings_list.c:1817`,
+`tagcache.c:5624 tc_stat.db_path`; `open_db_fd()` hace `mkdir`). El sello
+v12 (`metro_sync.c:117-180`) solo se escribía en `finish_ok()`: el
+rebuild de bootstrap de `metro_music_db_ready()` (`metro_music.c:179`)
+no sellaba y cada cambio de firmware tras una biblioteca copiada a mano
+reconstruía 5 minutos. **Decisión** (commit `65d909d1`):
+
+1. `AURA_SHARED_DB_DIR "/.aura/tagcache"` y `AURA_SHARED_DB_STAMP_PATH`
+   en `metro_settings.h` (único dueño de rutas del contrato junto con
+   `metro_settings.c`/`metro_sync.c`). `metro_force_shared_db_path()`
+   (`metro_settings.c`) hace `strmemccpy(global_settings.tagcache_db_path,
+   …)`; se llama en los **dos** cuerpos de `init()` de `apps/main.c`
+   justo después de `metro_apply_hygiene()` — es decir, después de
+   `settings_load()` (que sobreescribiría la ruta con `config.cfg`) y
+   antes de `init_dircache()`/`init_tagcache()`. Corrección al
+   diagnóstico del encargo: `metro_apply_hygiene()` **no** corre en
+   `metro_main()` sino dentro de `init()` (`main.c:481` y `:755`, M-019),
+   así que el punto correcto ya existía; lo que "llega tarde" es
+   `metro_main()` (`main.c:252`), que corre después de `init_tagcache()`
+   (`main.c:489`/`:798`). `MODIFICATIONS.md` actualizado.
+2. Migración sin rebuild: si no existe `/.aura/tagcache/database_idx.tcd`
+   y sí `ROCKBOX_DIR/database_idx.tcd`, `mkdir` + `rename()` de todo
+   `database_*.tcd|.txt` del árbol (misma partición FAT, atómico, nunca
+   copia). Si el compartido **ya** existe, los del árbol se **borran**:
+   son restos muertos que ningún hermano leerá (v15) y solo ocupan disco.
+   Al migrar una base sin sello se sella (misma regla que el arranque en
+   frío de `metro_sync_switch_needs_rebuild()`: la base que el firmware
+   activo venía usando está al día).
+3. Sello: `db_stamp.txt` pasa a `/.aura/tagcache/db_stamp.txt`;
+   `ROCKBOX_DIR/aura/db_stamp.txt` se migra por `rename` si el compartido
+   no existe (y se borra si sí). `metro_sync_switch_needs_rebuild()` ya
+   **no** recibe árbol saliente: compara siempre el sello compartido con
+   `/.aura/library-stamp` (`metro_sync_db_stamp_is_current()`); sin sello
+   de biblioteca lo crea, sella la base y devuelve **false** (la
+   entrante usa la misma base). `metro_music_db_ready()` sella tras el
+   rebuild de bootstrap la primera vez que `tagcache_is_usable()`
+   (`s_scan_triggered`), nunca una base que ya existía.
+4. Studio ignora el directorio salvo para borrarlo al forzar rebuild
+   (v15); nada que hacer en firmware.
+5. Verificación (simulador): con `simdisk/.rockbox/database_*.tcd`
+   (11 archivos) y sin `/.aura/` → tras el arranque
+   `ls simdisk/.aura/tagcache/` = 11 `.tcd` + `db_stamp.txt`,
+   `simdisk/.rockbox/` solo conserva `database.ignore`; segundo arranque:
+   `stat` de los `.tcd` idéntico (sin rebuild);
+   `cat db_stamp.txt` == `cat library-stamp`
+   (`fw-20260826T104732-0000006b`). `grep -rn 'database_\|db_stamp'
+   apps/metro/ apps/main.c` → solo `metro_settings.{c,h}`, `metro_sync.c`
+   y las llamadas a `metro_sync_record_db_stamp()`. Test host del sello:
+   no se separó — la lógica pura es `strcmp` de dos archivos de una
+   línea; todo el valor está en el I/O, que se verificó en el simulador.
+
+**Hipótesis abiertas:** el cambio a una hermana que **todavía no** adopte
+v15 (base propia dentro de su árbol) recibirá marcador solo si el sello
+compartido difiere del de biblioteca — su base propia puede estar vieja
+sin que moonlit lo sepa; se cierra cuando Aura/Metro implementen v15.
+`tagcache_ram` recarga la base desde la ruta nueva sin cambio de código
+(`tc_stat.db_path`), verificado en simulador, no en el iPod.
+
+**D-055 — Claves estables de caché de carátulas y thumbs compartidos
+`/.aura/thumbs`.** Hechos: las carátulas se indexaban por `album_seek`
+(`moonlit_art_cache.c:42-48` `<seek>-120.pfraw`, `metro_screen_hub.c`
+`album-<seek>.mth`), que tagcache renumera en cada rebuild → caché
+huérfana/equivocada y otros 4 min de decodificación; `finish_ok()` no
+limpiaba nada. Fotos y artistas ya usaban `<archivo>.<mtime>.mth`.
+**Decisión** (commit `05b7f159`):
+
+1. Clave de álbum = `a-<crc32 hex8 de la ruta de la pista
+   representativa>.<tag_mtime de esa pista>`
+   (`metro_music_album_art_key()`, `metro_music.c`): la pista es el
+   primer resultado de `metro_music_songs_of_album()`, la ruta viene de
+   `tagcache_retrieve(tag_filename)`, el mtime de
+   `tagcache_get_numeric(tag_mtime)` (no hay `stat()` de archivo en el
+   API de Rockbox y tagcache ya lo guarda), el CRC de `crc_32()` de
+   `firmware/include/crc32.h`. **Desviación deliberada** respecto al
+   encargo (`a-<crc>-<mtime>`): el separador es `.` para que la clave
+   tenga la forma `<estable>.<mtime>` que `metro_thumbs.c remove_stale()`
+   ya entiende — un cambio de carátula deja el `.mth` viejo huérfano y
+   el motor lo borra solo. Memo de 48 entradas (1 344 B `.bss`),
+   invalidado cuando cambia `tagcache total_entries` (mismo indicador
+   que `music_lists_are_valid()`) o por `metro_music_album_art_key_reset()`
+   al terminar un sync. Aplica a `moonlitcache/art/<clave>-120.pfraw`
+   (sigue en el árbol) y a `/.aura/thumbs/albums/<clave>.mth`. Marea ya
+   no calcula rutas (D-053): la clave se resuelve solo en `tick()`.
+   `moonlit_art_pending_count()` memoriza la respuesta "0 pendientes"
+   por (`total_entries`, tema): con claves estables es la respuesta
+   estable, y así entrar a Música no paga una búsqueda de tagcache por
+   álbum cada vez.
+2. `AURA_SHARED_THUMBS_DIR "/.aura/thumbs"` (solo en `metro_settings.c`);
+   `metro_settings_shared_thumbs_dir(subdir)` sustituye a
+   `metro_settings_metro_cache_dir()` en `metro_thumbs.c` (formato crudo
+   80×80 idéntico en Metro y moonlit, `METRO_TILE_SIZE`).
+   `metro_settings_migrate_shared_thumbs()` (desde `metro_main()`, tras
+   `metro_settings_load()`): `rename` de `moonlitcache/{albums,artists,
+   photos}` si el compartido no existe; devuelve true y entonces se pide
+   una limpieza (esquema de claves anterior).
+3. Limpieza de huérfanos: `moonlit_art_request_gc()` (bandera
+   `moonlitcache/art/.gc-pending`, sobrevive reinicios) la pide
+   `finish_ok()` del sync con `music: true` y la migración;
+   `moonlit_art_gc()` la ejecuta la pantalla "preparando biblioteca"
+   tras la precarga, con la pantalla puesta: tabla de `crc32` de las
+   claves vigentes en el scratch estático de la precarga
+   (`s_precache_cover`, 28 800 B = 7 200 entradas, cero `.bss` nuevo) y
+   un barrido de `art/*-120.pfraw` y `thumbs/albums/*.mth` borrando lo
+   que no esté en la tabla — incluidos los nombres pre-D-055. Elegido
+   sobre la limpieza en `finish_ok()` (que corre sin pantalla y a veces
+   en segundo plano) y sobre un GC por presupuesto (necesitaría la tabla
+   viva entre vueltas).
+4. Verificación (simulador): tras entrar a Música,
+   `ls simdisk/.aura/thumbs/albums/` → `a-031b464b.1787718316.mth` …;
+   `moonlitcache/` solo conserva `art/` con `a-<crc>.<mtime>-120.pfraw`
+   y los nombres viejos (`108-120.pfraw`, `album-108.mth`) desaparecieron
+   por la limpieza de migración. Borrado `simdisk/.aura/tagcache/*` y
+   reinicio (rebuild real, base y sello regenerados): `stat` de los 8
+   `.pfraw` y 7 `.mth` **idéntico** — nada se decodificó de nuevo y la
+   pantalla "preparando biblioteca" no entró en fase 2.
+
+**`.bss`:** `arm-elf-eabi-size` antes = 8 570 044 (v0.1.1, D-052),
+después = 8 571 388 (+1 344 B: el memo de 48 claves de `metro_music.c`; los slots de Marea crecen 148 B y el estado del bucle bloqueante desaparece) — bajo el techo D-043 de 8 574 076. `build_target.sh --firmware` sin warnings nuevos en `apps/metro/`.
+
+**Hipótesis abiertas:** el costo de `metro_music_album_art_key()` en
+frío (una búsqueda filtrada de tagcache + un `retrieve` de disco por
+álbum) no está medido en el iPod; con `tagcache_ram` la búsqueda es en
+RAM y el memo/la respuesta cacheada evitan repetirlo, pero la primera
+pasada de precarga de 979 álbumes lo paga entero. La pista representativa
+es el primer resultado de tagcache para el álbum (orden de escaneo): si
+esa pista se borra, el álbum cambia de clave y se decodifica una vez.

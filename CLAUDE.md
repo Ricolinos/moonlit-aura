@@ -14,7 +14,7 @@ Firmware para iPod Classic 6G (S5L8702, 320×240 @ LCD_DPI 160, 64 MB, sin GPU/F
 
 ## Reglas que no se deducen del código
 - Idiomas: Markdown en español de México sin voseo; código, comentarios y commits en inglés; UI en español (`firmware/rockbox/apps/metro/metro_lang.c`).
-- Toda decisión se cierra en `DECISIONS.md` (D-NNN) antes de codificar. D-001…D-052 vinculantes. Metro histórico: `DECISIONS-METRO-ARCHIVE.md` (solo lectura).
+- Toda decisión se cierra en `DECISIONS.md` (D-NNN) antes de codificar. D-001…D-055 vinculantes. Metro histórico: `DECISIONS-METRO-ARCHIVE.md` (solo lectura).
 - Plan vigente: `docs/plan/05-plan-correctivo.md` (hitos M1–M12). `docs/plans/archivo/` es histórico, nunca trabajo pendiente.
 - Colores: solo `design-system/tokens.json` (roles MD3, esquemas night/dawn). En C solo `firmware/rockbox/apps/metro/moonlit_palette.c`
   incluye `firmware/rockbox/apps/metro/moonlit_tokens.h`; todo el mundo llama `moonlit_color(rol)`/`moonlit_surface(nivel, borde)`. Cero literales RGB en `apps/metro/`.
@@ -26,7 +26,8 @@ Firmware para iPod Classic 6G (S5L8702, 320×240 @ LCD_DPI 160, 64 MB, sin GPU/F
 - `struct viewport` local → `viewport_set_defaults()` (M-027). Texto siempre vía `metro_draw_text*()` (M-051).
 - Rutas `.rockbox/aura/`, `/.aura/`, caché `moonlitcache/`, árboles `/.firmware-*`: solo en `firmware/rockbox/apps/metro/metro_settings.c`,
   `metro_sync.c`, `metro_device.c`, `metro_media_categories.c` y la tabla de familias `metro_firmware_families.c` (D-047).
-  Contratos inmutables: `../Aura-Firmware/CONTRATO-firmware-studio.md` v14 + `CONTRATO-moonlit-studio.md` v2 de este repo.
+  Contratos inmutables: `../Aura-Firmware/CONTRATO-firmware-studio.md` v15 + `CONTRATO-moonlit-studio.md` v3 de este repo.
+  Rutas compartidas entre familias (v15, D-054/D-055): `/.aura/tagcache` (base + `db_stamp.txt`) y `/.aura/thumbs/` (`.mth` 80 px).
 - Cambios fuera de `apps/metro/` → `MODIFICATIONS.md` en la misma pasada + comentario `moonlit (D-NNN)`.
 - Nunca escribir en `../Aura-Firmware`, `../Metro-Aura`, `../Aura-Studio`. Sin material de Apple ni Microsoft en el árbol.
 - Diseño: antes de tocar pantalla, animación, ícono o componente, skill `moonlit-design-system` → `docs/moonlit-design-system/00-INDICE.md`.

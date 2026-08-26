@@ -1,5 +1,12 @@
 # Contrato entre `moonlit-aura` y Aura Studio
 
+**Versión 3 — 2026-08-26 (v0.1.2, D-054/D-055).** Cambios respecto a v2:
+referencia al contrato canónico **v15** (base tagcache y miniaturas
+compartidas entre familias, redactado por Aura-Firmware en paralelo);
+§A.9 base compartida `/.aura/tagcache/` con sello `db_stamp.txt`; §A.10
+miniaturas compartidas `/.aura/thumbs/`; §A.4 aclara que `moonlitcache/`
+ya solo contiene `art/`.
+
 **Versión 2 — 2026-08-26 (release v0.1.0, D-046/D-047/D-048).**
 Cambios respecto a v1: referencia al contrato canónico **v14** (tres
 familias, §A bis "registro de familias"); §A.3 "una fila por hermana";
@@ -20,7 +27,7 @@ Contratos referenciados (fuente canónica, se leen desde el repo hermano):
 
 | Contrato | Versión referenciada | Ruta |
 |---|---|---|
-| Firmware ↔ Studio | **v14** (2026-08-26; tres familias, §A bis registro de familias) | `Aura-Firmware/CONTRATO-firmware-studio.md` |
+| Firmware ↔ Studio | **v15** (2026-08-26; v14 + base tagcache y miniaturas compartidas en `/.aura/`) | `Aura-Firmware/CONTRATO-firmware-studio.md` |
 | Nombre del dispositivo | **v2** (2026-08-17) | `Aura-Firmware/CONTRATO-dispositivo.md` |
 | Estructura de biblioteca | **v1.3** (2026-08-18) | `Aura-Firmware/docs/contracts/library-layout-v1.md` |
 
@@ -55,11 +62,12 @@ en Studio que aquí se requieren (§C) **no** se ejecutan desde este repo
    reinicio en seco (`metro_settings.c`, `metro_firmware_switch_to()`).
    En Studio corresponde a `FirmwareFamily.dormantTreeName =
    ".firmware-moonlit"`.
-4. **Caché privada `/.rockbox/aura/moonlitcache/<fuente>/`**
-   (`metro_settings.c:216`, D-023). Árbol interno de moonlit, ajeno al
-   contrato: Studio no lo lee ni lo escribe (C23) y la limpieza de
-   convivencia entre familias lo borra completo, igual que
-   `metrocache/`, `photocache/` y `cfcache/`. Nunca `metrocache/`.
+4. **Caché privada `/.rockbox/aura/moonlitcache/art/`**
+   (`metro_settings.c`, D-023; desde D-055 solo `art/`, los `.mth` viven
+   en §A.10). Árbol interno de moonlit, ajeno al contrato: Studio no lo
+   lee ni lo escribe (C23) y la limpieza de convivencia entre familias lo
+   borra completo, igual que `metrocache/`, `photocache/` y `cfcache/`.
+   Nunca `metrocache/`.
 5. **`install_manifest.cfg`** se ignora (C28). `version.txt` dentro de
    `rockbox.zip` solo se escribe con `--release-tag` (C22, M-056).
 6. **Build reproducible**: nada que viaje en `rockbox.zip` usa
@@ -83,8 +91,26 @@ en Studio que aquí se requieren (§C) **no** se ejecutan desde este repo
    `firmware/tools/package_dist.sh` copia a `.rockbox/fonts/` en cada
    build — ya no es aspiracional, es un archivo real del árbol
    instalado). En Studio: `FirmwareFamily.installedTreeSentinel`.
+9. **Base tagcache compartida `/.aura/tagcache/`** (v15, D-054, C29):
+   `database_*.tcd` + `db_stamp.txt`, una sola para las tres familias
+   (`apps/tagcache.c` byte-idéntico; ruta fijada en
+   `global_settings.tagcache_db_path` antes de `tagcache_init()`).
+   moonlit migra por `rename()` la base de su árbol al primer arranque,
+   sella tras cada (re)construcción exitosa — sync de Studio o rebuild de
+   bootstrap — comparando siempre contra `/.aura/library-stamp`, y al
+   cambiar de familia deja el marcador `music: true` solo si ese sello
+   difiere. Studio **no** lee ni escribe el directorio; lo **borra**
+   completo (junto con el sello) cuando fuerza una reconstrucción.
+10. **Miniaturas compartidas `/.aura/thumbs/{albums,artists,photos}/`**
+   (v15, D-055, C30): `.mth` de 80×80 `fb_data` crudo, formato idéntico
+   en Metro y moonlit. Clave de álbum `a-<crc32 de la ruta de la pista
+   representativa>.<tag_mtime>` — estable a través de rebuilds; fotos y
+   artistas conservan `<archivo>.<mtime>`. Studio ignora el directorio
+   salvo para borrarlo al forzar rebuild. Huérfanos: moonlit los limpia
+   tras un sync con música (bandera `moonlitcache/art/.gc-pending`,
+   barrido bajo "preparando biblioteca").
 
-Todo lo demás (C1–C28 de `docs/COMPAT_STUDIO.md`) se hereda de Metro-Aura
+Todo lo demás (C1–C30 de `docs/COMPAT_STUDIO.md`) se hereda de Metro-Aura
 sin cambios de formato.
 
 ## §B — Frontera GPL: bootloader y `mks5lboot`

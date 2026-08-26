@@ -26,22 +26,29 @@ la escala horizontal por fila; el ancho proyectado de cada fila
 ## Carátulas y monograma
 
 `get_slot_for()` cachea hasta `MAREA_CACHE_SLOTS` (37, LRU por distancia al
-índice comprometido) y **nunca decodifica un JPEG dentro de `show()`** —
-solo lee el `.pfraw` ya horneado por M7. Un cache-miss cae a un relleno
-liso proyectado (tapas laterales) o, exactamente en el centro, a una
-tarjeta plana con la inicial del álbum en `primary` (D.5) — y encola el
-álbum para que `moonlit_screen_marea_tick()` lo decodifique en la próxima
-vuelta ociosa del bucle principal (mismo presupuesto de un decode por
-tick que el motor de miniaturas, DD-9).
+índice comprometido) y **nunca toca disco dentro de `show()`/
+`show_carousel()`** (D-053): un cache-miss reclama el slot en estado
+`MAREA_ART_PENDING` y dibuja un relleno liso proyectado (tapas laterales)
+o, exactamente en el centro, una tarjeta plana con la inicial del álbum
+en `primary` (D.5). `moonlit_screen_marea_tick()` — una carga por vuelta
+ociosa del bucle principal, **solo cuando no anima** — lee el `.pfraw`
+horneado por M7 (clave estable D-055) o decodifica la carátula si falta;
+sin pendientes, precarga el álbum más cercano sin slot dentro de
+`MAREA_PREFETCH_RADIUS` (6). Un álbum sin carátula queda
+`MAREA_ART_MISSING` (monograma definitivo, sin reintentos).
 
 ## Navegación
 
-Rueda: `MACT_NEXT`/`MACT_PREV` mueven el índice comprometido, animado 220 ms
-`METRO_EASE_OUT_EXPO` solo bajo `lcd_active()` y `animations=all` (si no,
-salto directo). Antes de entrar al bucle de cuadros, `preload_range()`
-lee de disco los `.pfraw` de todos los álbumes que cualquier cuadro del
-scroll puede mostrar; dentro del bucle no se abre ningún archivo (un
-miss cae a monograma y se repinta al salir) — D-045, cerrada en v0.1.1. `MACT_SELECT` empuja la subpágina de canciones del álbum
+Rueda: `MACT_NEXT`/`MACT_PREV` fijan el destino (`scroll_step()`, paso
+`moonlit_wheel_step()` ≤ 3) y regresan de inmediato; la posición visual
+es una función del reloj — 220 ms `METRO_EASE_OUT_EXPO` desde la posición
+animada **actual** (retarget) — y `metro_main.c` pide un cuadro cada
+`HZ/20` mientras `moonlit_screen_marea_animating()` (D-053, modelo Music
+Flow de Aura). Cada cuadro repinta solo la banda izquierda bajo
+`cpu_boost()`; el panel derecho (título, artista, "N canciones" cacheado
+por índice) y la cabecera se redibujan una vez, en el asentamiento. Bajo
+`animations=off` o LCD dormido el destino se dibuja directo. D-045 (v0.1.1,
+precarga síncrona) queda sustituida. `MACT_SELECT` empuja la subpágina de canciones del álbum
 enfocado (la misma que Álbumes/Quickplay/un artista, `metro_screen_hub.c`).
 `MACT_PLAYPAUSE` reproduce el álbum enfocado desde la pista 0. `MACT_BACK`
 saca a Marea de la pila. Contexto reusado: `MCTX_LIST` (D-030), sin tocar
