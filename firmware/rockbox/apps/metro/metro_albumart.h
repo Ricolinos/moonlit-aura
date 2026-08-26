@@ -93,4 +93,12 @@ const fb_data *metro_albumart_background_bitmap(void);
  * or no art at all -- caller falls back to the usual accent tile. */
 bool metro_albumart_decode_track_cover(const char *track_path, fb_data *out);
 
+/* D-042/PC-2 (M7, docs/plan/05-plan-correctivo.md II.4 "Precarga de
+ * Marea"): misma decodificación de arriba, pero remuestreada a `size`
+ * x `size` en vez del METRO_TILE_SIZE fijo -- moonlit_art_cache.c la
+ * usa para la tapa de 120px de Marea. `size` debe ser <=
+ * METRO_ALBUMART_SIZE (136); no hay caso de uso que necesite ampliar
+ * en vez de reducir. */
+bool metro_albumart_decode_track_cover_sized(const char *track_path, fb_data *out, int size);
+
 #endif /* METRO_ALBUMART_H */

@@ -45,6 +45,7 @@
 #include "metro_artist_images.h"
 #include "metro_fsutil.h"
 #include "metro_volume.h"
+#include "moonlit_art_cache.h" /* D-042, D-224: precarga de Marea */
 
 /* Enough unique values for a few thousand artists/albums/genres --
  * same size Aura-Firmware settled on for the same purpose (D-021).
@@ -192,6 +193,13 @@ bool metro_music_db_ready(void)
     {
         tagcache_start_scan();
         s_update_triggered = true;
+
+        /* D-042/D-224: misma puerta que arriba, mismo motivo (tagcache
+         * recién confirmado listo) -- ver AF/aura_music.c:471-473. Una
+         * sola vez por arranque; moonlit_art_cache_on_db_ready() se
+         * encarga de su propia bandera además de esta, para no
+         * repetirse si metro_music_db_ready() se vuelve a llamar. */
+        moonlit_art_cache_on_db_ready();
     }
 
     return tagcache_is_usable();

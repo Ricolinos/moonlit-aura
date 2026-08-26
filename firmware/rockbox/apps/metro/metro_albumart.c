@@ -201,24 +201,27 @@ const fb_data *metro_albumart_background_bitmap(void)
     return (const fb_data *)s_bg_scratch;
 }
 
-/* R3-F4/DD-5 (M-065): nearest-neighbour downscale of an ALREADY-DECODED
- * METRO_ALBUMART_SIZE x METRO_ALBUMART_SIZE bitmap to a
- * METRO_TILE_SIZE x METRO_TILE_SIZE one -- pure pixel resampling, no
- * JPEG involved, so it can't hit the JPEG_DECODE_OVERHEAD gap a second
- * from-JPEG decode at 80px would risk for a cover near that size
- * (docs/DESVIACIONES.md R3-3). Both sizes are square, so this is a
- * plain scale, no cover-crop math needed. */
-static void downscale_to_tile(const fb_data *src, fb_data *out)
+/* R3-F4/DD-5 (M-065), generalized D-042/PC-2 (M7, docs/plan/05-plan-
+ * correctivo.md II.4): nearest-neighbour downscale of an ALREADY-
+ * DECODED METRO_ALBUMART_SIZE x METRO_ALBUMART_SIZE bitmap to a
+ * `size` x `size` one -- pure pixel resampling, no JPEG involved, so
+ * it can't hit the JPEG_DECODE_OVERHEAD gap a second from-JPEG decode
+ * near that size would risk (docs/DESVIACIONES.md R3-3). Both sizes
+ * are square, so this is a plain scale, no cover-crop math needed.
+ * `size` must be <= METRO_ALBUMART_SIZE (upscaling isn't a case either
+ * caller needs: METRO_TILE_SIZE=80 and moonlit's MOONLIT_ART_CACHE_SIZE
+ * =120 are both smaller). */
+static void downscale_to(const fb_data *src, fb_data *out, int size)
 {
     int oy, ox;
 
-    for (oy = 0; oy < METRO_TILE_SIZE; oy++)
+    for (oy = 0; oy < size; oy++)
     {
-        int sy = oy * METRO_ALBUMART_SIZE / METRO_TILE_SIZE;
-        for (ox = 0; ox < METRO_TILE_SIZE; ox++)
+        int sy = oy * METRO_ALBUMART_SIZE / size;
+        for (ox = 0; ox < size; ox++)
         {
-            int sx = ox * METRO_ALBUMART_SIZE / METRO_TILE_SIZE;
-            out[oy * METRO_TILE_SIZE + ox] = src[sy * METRO_ALBUMART_SIZE + sx];
+            int sx = ox * METRO_ALBUMART_SIZE / size;
+            out[oy * size + ox] = src[sy * METRO_ALBUMART_SIZE + sx];
         }
     }
 }
@@ -237,7 +240,17 @@ static void downscale_to_tile(const fb_data *src, fb_data *out)
  * file, independent of what's playing). */
 static struct mp3entry s_track_id3;
 
-bool metro_albumart_decode_track_cover(const char *track_path, fb_data *out)
+/* D-042/PC-2 (M7): variante parametrizada -- decodifica siempre al
+ * mismo destino ya probado (METRO_ALBUMART_SIZE, "same already-proven-
+ * safe target" del comentario de metro_albumart.h) y remuestrea las
+ * PIXELS YA DECODIFICADOS a `size`, en vez de arriesgar un segundo
+ * decode de JPEG al tamaño final (la razón que R3-F4/DD-5 ya dejó
+ * escrita arriba). moonlit_art_cache.c (D-042) la llama con
+ * MOONLIT_ART_CACHE_SIZE=120 para la tapa de Marea;
+ * metro_albumart_decode_track_cover() de abajo es ahora un envoltorio
+ * de esta con size=METRO_TILE_SIZE=80, sin cambiar su firma ni sus 3
+ * llamadores existentes. */
+bool metro_albumart_decode_track_cover_sized(const char *track_path, fb_data *out, int size)
 {
     char art_path[MAX_PATH];
     struct dim dim = { METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE };
@@ -270,6 +283,11 @@ bool metro_albumart_decode_track_cover(const char *track_path, fb_data *out)
     if (!ok)
         return false;
 
-    downscale_to_tile((const fb_data *)s_scratch, out);
+    downscale_to((const fb_data *)s_scratch, out, size);
     return true;
+}
+
+bool metro_albumart_decode_track_cover(const char *track_path, fb_data *out)
+{
+    return metro_albumart_decode_track_cover_sized(track_path, out, METRO_TILE_SIZE);
 }
