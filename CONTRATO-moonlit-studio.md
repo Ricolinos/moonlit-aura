@@ -154,6 +154,12 @@ mks5lboot sin cambios; el SHA del bootloader cambia solo por el RBVERSION embebi
   035e14db2be7ce093a434a2dac8fff419c64a8be84644122710e2a1850fc3a91  mks5lboot
   78161219a816b1d11bd6bef556c4cda2cfd582e294b88cde099f63dd925bfd30  rockbox.ipod
   (publicado en https://github.com/Ricolinos/moonlit-aura/releases/tag/v0.1.1)
+
+checksums.txt del release v0.1.2 (BOOT-1 sigue vigente):
+  e79e487746657bc862e189415cb375c4b8e19b768d46638e4c61ba518fbcaa7a  bootloader-ipod6g.ipod
+  035e14db2be7ce093a434a2dac8fff419c64a8be84644122710e2a1850fc3a91  mks5lboot
+  ca9d8bcd3b834b3faf35e7892ea4de934d52173fa219628569ccca2185c83607  rockbox.ipod
+  (publicado en https://github.com/Ricolinos/moonlit-aura/releases/tag/v0.1.2)
 ```
 
 Los cuatro binarios (`mks5lboot`, `bootloader-ipod6g.ipod`,
