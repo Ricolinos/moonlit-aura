@@ -562,3 +562,71 @@ D-039), `apps/metro/metro_screen_usb.c` (D-040),
 (ya resolvían color/fuente por rol MD3 desde M2/M4); solo se
 verificaron con captura. Elimina: `apps/metro/metro_glyphs_table.c`,
 `apps/metro/metro_glyphs.h`.
+
+# Hito M6 — Motor `moonlit_flow` vertical + pruebas en host (D-041)
+
+**D-041 — Copia de `aura_flow.c`/`aura_wheel.c` desde
+`aura-upstream/main` @ `7ec39edb` (2026-08-23), giro de eje mínimo,
+cierre de la HIPÓTESIS de D-019.**
+
+1. **Trazabilidad.** `git show aura-upstream/main:firmware/rockbox/apps/aura/aura_flow.c`
+   (229 líneas) y `aura_flow.h` (136), `aura_wheel.c` (51) y
+   `aura_wheel.h` (58) — tamaños idénticos a los citados en
+   `04-auditoria-brecha.md` I.4 y `05-plan-correctivo.md` §M6. Cada
+   archivo nuevo lleva en cabecera `moonlit: derived from <archivo>
+   @ aura-upstream 7ec39edbf7cbe8547afa55880336ecdf2f890104`.
+
+2. **Giro de eje en `moonlit_flow` (`aura_flow.c` → `moonlit_flow.c`).**
+   Solo los símbolos atados a la geometría horizontal cambian de
+   nombre/valor: `AURA_FLOW_SCREEN_W 320` → `MOONLIT_FLOW_AXIS_LEN 220`
+   (240 − 20 px de barra de estado, D-030); `AURA_FLOW_DISPLAY_W 128`
+   → `MOONLIT_FLOW_DISPLAY_LEN 120` (tapa central, D-030);
+   `DISPLAY_LEFT_R`/`MAXSLIDE_LEFT_R` → `..._TOP_R`; el campo
+   `proj->screen_x` → `screen_y`; `aura_flow_source_column()` →
+   `moonlit_flow_source_row()`; `aura_flow_vertical_scale()` →
+   `moonlit_flow_cross_scale()`. `MOONLIT_FLOW_CAM_DIST 240` se
+   conserva sin retunear — **HIPÓTESIS** abierta hasta M8, cuando haya
+   pantalla real donde compararlo. `diff` contra el original
+   sed-renombrado: 58 líneas (`<` + `>`), bajo el tope de 60 del plan.
+   El resto del módulo (punto fijo, tabla de seno, `allowed_shift`,
+   la nota D-219 sobre `clz32`) es copia literal — no se reescribió
+   nada que no dependiera del eje.
+
+3. **`moonlit_wheel` — copia literal (cierra D-019).** `aura_wheel.c`
+   no depende de orientación de pantalla (opera sobre grados/seg
+   escalares); prefijo `aura_wheel_`→`moonlit_wheel_` es el único
+   cambio.
+
+4. **HIPÓTESIS de D-019 cerrada: mismas unidades que Aura.**
+   `firmware/target/arm/ipod/button-clickwheel.c:194` (compartido por
+   ipod6g, `HAVE_WHEEL_ACCELERATION` en `config/ipod6g.h:72`):
+   `v = (v * 360) / WHEELCLICKS_PER_ROTATION; /* conversion to
+   degree/sec */`, acumulado en `wheel_velocity` y empaquetado en el
+   dato del botón como `(1<<31)|(1<<24)|wheel_velocity`
+   (`button-clickwheel.c:237-238`). `button_apply_acceleration()`
+   (`firmware/drivers/button.c:632-641`) extrae la velocidad con
+   `data & 0xffffff` — mismo campo y misma unidad que
+   `button_get_data() & 0xFFFFFF` en `aura_main_wheel_velocity()`
+   (`AF/aura_musicflow.c:1240`). **Resolución: PC-1(a)** — mismas
+   unidades, sin tabla de conversión. `apps/metro/metro_input.c` gana
+   `metro_input_last_wheel_velocity()`: guarda `get_action_data() &
+   0xffffff` en cada `MACT_PREV`/`MACT_NEXT` bajo
+   `HAVE_WHEEL_ACCELERATION` (0 en target sin esa macro o sin evento de
+   rueda todavía). Sin consumidor en M6 (Marea llega en M8) — expuesto
+   para que `moonlit_wheel_step()` lo use entonces.
+
+5. **`test_flow.c`/`test_wheel.c`.** Los 7 casos de `test_flow.c` se
+   adaptan al eje (`screen_y`/`AXIS_LEN`); `test_realistic_side_slide_layout`
+   pasa de 3 tapas (centro + 1 por lado) a 5 (centro + 2 por lado,
+   D-030 "2 tapas por lado"), con offsets reescalados por
+   `MOONLIT_FLOW_AXIS_LEN/AURA_FLOW_SCREEN_W = 220/320`.
+   `test_wheel.c` es nuevo (Aura no tenía test host para
+   `aura_wheel.c`): límites de `moonlit_wheel_step` (1..3, monótono) y
+   del umbral de hojeo por letras.
+
+Implementada en M6: `apps/metro/moonlit_flow.{c,h}`,
+`apps/metro/moonlit_wheel.{c,h}`, `apps/metro/metro_input.{c,h}`
+(`metro_input_last_wheel_velocity()`), `apps/metro/test/test_flow.c`,
+`apps/metro/test/test_wheel.c`, `apps/metro/test/Makefile`,
+`apps/SOURCES` (fuera de `apps/metro/`, ver `MODIFICATIONS.md`). Sin
+pantalla ni consumidor todavía (M8).

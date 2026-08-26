@@ -366,3 +366,17 @@ Ver `DECISIONS.md` D-034…D-038 para el resto de M4 (íntegro dentro de
 
 Ver `DECISIONS.md` D-039…D-040 para el resto de M5 (íntegro dentro de
 `apps/metro/`, sin más archivos fuera de ese árbol).
+
+### moonlit M6 (2026-08-25, D-041)
+
+- `apps/SOURCES`: se agregan las entradas `metro/moonlit_flow.c` y
+  `metro/moonlit_wheel.c` — motor de proyección y dinámica de rueda de
+  Marea, copiados de `aura-upstream/main` (`aura_flow.c`,
+  `aura_wheel.c`) con prefijo renombrado y, en `moonlit_flow`, el eje
+  de barrido girado de columnas a filas (D-041). Comentario inline
+  `moonlit (D-014, D-041, M6)` / `moonlit (D-019, D-041, M6)`.
+
+Ver `DECISIONS.md` D-041 para el resto de M6 (`apps/metro/moonlit_flow.{c,h}`,
+`apps/metro/moonlit_wheel.{c,h}`, `apps/metro/metro_input.{c,h}`,
+`apps/metro/test/test_flow.c`, `apps/metro/test/test_wheel.c`,
+`apps/metro/test/Makefile`, todo dentro de `apps/metro/`).
