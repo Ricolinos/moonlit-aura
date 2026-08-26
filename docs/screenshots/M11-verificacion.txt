@@ -1,0 +1,492 @@
+=== M11 - Re-ejecucion de definiciones de hecho M1..M10 ===
+Fecha: 2026-08-26
+Repo: moonlit-aura ; HEAD verificado con moonlit-fork-base..HEAD = M1..M10 completos (M10 termina en 4b6476fb)
+
+=== M1 ===
+-- test -f tokens/generate/moonlit_tokens.h --
+FALTA algo
+-- roles night/dawn --
+night: ['on_primary', 'on_primary_container', 'on_surface', 'on_surface_variant', 'outline', 'outline_variant', 'primary', 'primary_container', 'surface', 'surface_bright', 'surface_container', 'surface_container_high', 'surface_container_highest', 'surface_container_low', 'surface_container_lowest', 'surface_dim']
+dawn: ['on_primary', 'on_primary_container', 'on_surface', 'on_surface_variant', 'outline', 'outline_variant', 'primary', 'primary_container', 'surface', 'surface_bright', 'surface_container', 'surface_container_high', 'surface_container_highest', 'surface_container_low', 'surface_container_lowest', 'surface_dim']
+-- SURFACE_CONTAINER count --
+ugrep: warning: apps/metro/moonlit_tokens.h: No such file or directory
+-- MOONLIT_NIGHT_|MOONLIT_DAWN_ count --
+ugrep: warning: apps/metro/moonlit_tokens.h: No such file or directory
+-- EDGE_LIGHT|EDGE_SHADOW count --
+ugrep: warning: apps/metro/moonlit_tokens.h: No such file or directory
+-- test -f tokens.json/generate.py/moonlit_tokens.h --
+OK: los 3 archivos existen
+-- SURFACE_CONTAINER count (esperado >=10) --
+60
+-- MOONLIT_NIGHT_|MOONLIT_DAWN_ count (esperado >=32) --
+168
+-- EDGE_LIGHT|EDGE_SHADOW count (esperado >=20) --
+41
+-- generate.py --header determinismo --
+==> Generando apps/metro/moonlit_tokens.h
+==> listo
+OK determinista (sin diff)
+-- generate.py --contrast --
+esquema texto              fondo      razon  
+night  on_surface         surface    14.42  OK
+night  on_surface_variant surface     9.01  OK
+dawn   on_surface         surface    15.56  OK
+dawn   on_surface_variant surface     8.61  OK
+==> listo
+-- literales RGB fuera de tokens --
+firmware/rockbox/apps/metro/metro_input.c:28: * button_get_data() & 0xFFFFFF de aura_main_wheel_velocity()
+firmware/rockbox/apps/metro/metro_input.c:53:            s_last_wheel_velocity_deg_s = get_action_data() & 0xffffff;
+firmware/rockbox/apps/metro/moonlit_screen_marea.c:286:    return (fb_data)LCD_RGBPACK(lut_r[RGB_UNPACK_RED(px)],
+firmware/rockbox/apps/metro/moonlit_wheel.h:37: * la lee con `button_get_data() & 0xFFFFFF` despues de aura_main.c
+(vacio esperado arriba)
+-- D-02[7-9]|D-03[01] en DECISIONS.md (esperado >=5) --
+21
+-- NOTA: los 4 matches de LCD_RGBPACK/0x arriba son falsos positivos del grep mecanico:
+   metro_input.c:28,53 -> 0xffffff es una MASCARA de bits (button_get_data() & 0xFFFFFF), no un color.
+   moonlit_screen_marea.c:286 -> LCD_RGBPACK(lut_r[...],lut_g[...],lut_b[...]) opera sobre tablas LUT
+   calculadas en runtime (build_fade_lut), mismo patron ya excluido en metro_fb.c:104/nowplaying.c:548/metro_music.c.
+   Ningun literal RGB hardcodeado nuevo. La lista de exclusion del comando de M1 quedo desactualizada
+   (no incluye moonlit_screen_marea.c, que no existia en M1); se anota como hallazgo menor para el tema 4
+   de la revision adversarial (restricciones vinculantes).
+
+-- make -C apps/metro/test test --
+cc -std=c99 -Wall -Wextra -Werror -O0 -g -I. test_tokens.c -o build/test_tokens
+== test_nav ==
+93 checks, 0 failures
+== test_sync_marker ==
+51 checks, 0 failures
+== test_device ==
+15 checks, 0 failures
+== test_motion ==
+1625 checks, 0 failures
+== test_lrc ==
+45 checks, 0 failures
+== test_artist_images ==
+2058 checks, 0 failures
+== test_fsutil ==
+20 checks, 0 failures
+== test_lang ==
+51 checks, 0 failures
+== test_volume ==
+204 checks, 0 failures
+== test_tokens ==
+102 checks, 0 failures
+== test_flow ==
+test_flow: 176/176 checks OK
+test_flow: 7 passed
+== test_wheel ==
+test_wheel: 94/94 checks OK
+test_wheel: 3 passed
+== test_art ==
+test_art: 13/13 checks OK
+OK M1 (con nota de falsos positivos del grep RGB, sin violacion real)
+
+=== M2 ===
+-- ls firmware/assets/fonts/ --
+moonlit-body-18.fnt
+moonlit-display-40.fnt
+moonlit-headline-22.fnt
+moonlit-label-18.fnt
+moonlit-list-20.fnt
+moonlit-listsel-20.fnt
+moonlit-title-28.fnt
+-- OFL.txt de ambas familias --
+design-system/vendor/libre-baskerville/OFL.txt
+design-system/vendor/montserrat/OFL.txt
+-- fvar check en Montserrat-Regular (0 esperado) --
+fontTools no disponible, se omite verificacion secundaria
+-- fvar table check via python struct parse (definitivo, sin herramientas externas) --
+design-system/vendor/montserrat/Montserrat-Regular.ttf -> fvar present: False (esperado False = fuente estatica)
+design-system/vendor/montserrat/Montserrat-Medium.ttf -> fvar present: False (esperado False = fuente estatica)
+design-system/vendor/montserrat/Montserrat-SemiBold.ttf -> fvar present: False (esperado False = fuente estatica)
+design-system/vendor/libre-baskerville/LibreBaskerville-Regular.ttf -> fvar present: False (esperado False = fuente estatica)
+-- check_fonts.py por cada .fnt --
+firmware/assets/fonts/moonlit-body-18.fnt:
+firmware/assets/fonts/moonlit-body-18.fnt: firstchar=32 defaultchar=63 size=352 height=19 maxwidth=17
+firmware/assets/fonts/moonlit-display-40.fnt:
+firmware/assets/fonts/moonlit-display-40.fnt: firstchar=32 defaultchar=63 size=351 height=42 maxwidth=42
+firmware/assets/fonts/moonlit-headline-22.fnt:
+firmware/assets/fonts/moonlit-headline-22.fnt: firstchar=32 defaultchar=63 size=351 height=23 maxwidth=23
+firmware/assets/fonts/moonlit-label-18.fnt:
+firmware/assets/fonts/moonlit-label-18.fnt: firstchar=32 defaultchar=63 size=352 height=19 maxwidth=17
+firmware/assets/fonts/moonlit-list-20.fnt:
+firmware/assets/fonts/moonlit-list-20.fnt: firstchar=32 defaultchar=63 size=352 height=22 maxwidth=19
+firmware/assets/fonts/moonlit-listsel-20.fnt:
+firmware/assets/fonts/moonlit-listsel-20.fnt: firstchar=32 defaultchar=63 size=352 height=22 maxwidth=19
+firmware/assets/fonts/moonlit-title-28.fnt:
+firmware/assets/fonts/moonlit-title-28.fnt: firstchar=32 defaultchar=63 size=351 height=30 maxwidth=30
+-- tamanos --
+firmware/assets/fonts/moonlit-body-18.fnt 26434 bytes
+firmware/assets/fonts/moonlit-display-40.fnt 137979 bytes
+firmware/assets/fonts/moonlit-headline-22.fnt 41375 bytes
+firmware/assets/fonts/moonlit-label-18.fnt 27190 bytes
+firmware/assets/fonts/moonlit-list-20.fnt 34048 bytes
+firmware/assets/fonts/moonlit-listsel-20.fnt 36006 bytes
+firmware/assets/fonts/moonlit-title-28.fnt 72187 bytes
+-- grep 0x en gen_fonts.sh (vacio esperado) --
+-- grep Selawik/fonts-src (vacio esperado) --
+-- NOTA: size=351 en 3 roles Libre Baskerville y title-28=72187 bytes ya documentados y aceptados en D-032. Coincide.
+
+-- build_sim.sh --
+CC apps/metro/moonlit_palette.c
+GEN rbversion.h
+CC apps/plugins/mpegplayer/mpegplayer.c
+CC firmware/panic.c
+CC firmware/common/version.c
+CC apps/plugins/lastfm_scrobbler.c
+AR libfirmware.a
+LD rockboxui
+LD lastfm_scrobbler.rock
+LD mpegplayer.rock
+Creating rockbox-info.txt
+==> Instalando assets de Rockbox en el disco simulado
+Installing your build in your 'simdisk' dir
+==> Instalando fuentes Metro en el disco simulado
+==> Listo: /Volumes/Ricolinos/Codigo/GitHub/Aura/moonlit-aura/firmware/build-sim/rockboxui
+-- sim_shot M2 specimen (regenerado docs/screenshots/M11-M2-specimen.png) --
+-- check_fonts.py --capheight (7 filas, todas >= 10.5px) --
+fila 0: cap-height 26.0 px  OK
+fila 1: cap-height 19.0 px  OK
+fila 2: cap-height 15.0 px  OK
+fila 3: cap-height 13.0 px  OK
+fila 4: cap-height 12.0 px  OK
+fila 5: cap-height 11.0 px  OK
+fila 6: cap-height 11.0 px  OK
+-- fuentes en simdisk --
+7
+-- centinela moonlit-body-18.fnt en package_dist.sh --
+1
+-- make test --
+== test_wheel ==
+test_wheel: 94/94 checks OK
+test_wheel: 3 passed
+== test_art ==
+test_art: 13/13 checks OK
+OK M2
+
+=== M3 ===
+-- svg count + LICENSE --
+      20
+LICENSE OK
+-- generate.py --icons --
+==> Generando apps/metro/moonlit_icons_table.c
+icono                      px  tonos  
+play_arrow                 16     20  OK
+play_arrow                 24     25  OK
+play_arrow                 40     42  OK
+pause                      16     12  OK
+pause                      24     15  OK
+pause                      40     23  OK
+skip_next                  16     20  OK
+skip_next                  24     21  OK
+skip_next                  40     39  OK
+skip_previous              16     19  OK
+skip_previous              24     20  OK
+skip_previous              40     38  OK
+repeat                     16     15  OK
+repeat                     24     12  OK
+repeat                     40     24  OK
+shuffle                    16     22  OK
+shuffle                    24     28  OK
+shuffle                    40     56  OK
+volume_up                  16     48  OK
+volume_up                  24     59  OK
+volume_up                  40     90  OK
+favorite                   16     48  OK
+favorite                   24     71  OK
+favorite                   40    101  OK
+sync                       16     34  OK
+sync                       24     40  OK
+sync                       40     70  OK
+album                      16     22  OK
+album                      24     32  OK
+album                      40     47  OK
+person                     16     34  OK
+person                     24     27  OK
+person                     40     78  OK
+queue_music                16     19  OK
+queue_music                24      5  OK
+queue_music                40     37  OK
+photo                      16     10  OK
+photo                      24     14  OK
+photo                      40     25  OK
+movie                      16     31  OK
+movie                      24     10  OK
+movie                      40     46  OK
+settings                   16     56  OK
+settings                   24     66  OK
+settings                   40    113  OK
+info                       16     23  OK
+info                       24     25  OK
+info                       40     49  OK
+lock                       16     16  OK
+lock                       24     10  OK
+lock                       40     31  OK
+battery_full               16     11  OK
+battery_full               24     10  OK
+battery_full               40     15  OK
+battery_charging_full      16     23  OK
+battery_charging_full      24     15  OK
+battery_charging_full      40     43  OK
+usb                        16     25  OK
+usb                        24     15  OK
+usb                        40     54  OK
+==> firmware/rockbox/apps/metro/moonlit_icons_table.c (20 iconos x 3 tamanos)
+==> listo
+-- static const uint8_t count (esperado 60) --
+60
+-- METRO_ICON_ / metro_icons.h / Fluent (vacio esperado) --
+firmware/rockbox/apps/metro/metro_screen_usb.c:34: * D-033/D-040 -- replaces the M-089 Fluent arrow_sync glyph table
+-- build_sim + shot hub --
+Installing your build in your 'simdisk' dir
+==> Instalando fuentes Metro en el disco simulado
+==> Listo: /Volumes/Ricolinos/Codigo/GitHub/Aura/moonlit-aura/firmware/build-sim/rockboxui
+==> Screenshot guardado en /Volumes/Ricolinos/Codigo/GitHub/Aura/moonlit-aura/docs/screenshots/M11-M3-hub.png
+-- NOTA: la definicion de hecho original decia sim_shot ... 150 (sin botones) apuntando a un icono 'del hub';
+   el commit real f8516c50 documenta que el hub raiz (D-034) es una lista WP7 SIN iconos, y que la verificacion
+   real se hizo sobre Ahora Suena tras hub->Musica->Canciones->reproducir, region 168,58,20,20.
+   Se reproduce exactamente esa ruta: SELECT,RIGHT,RIGHT,RIGHT,SELECT a 300 ticks.
+-- check_tones.py --region 168,58,20,20 --min 4 sobre M11-M3-hub.png --
+docs/screenshots/M11-M3-hub.png region=168,58,20,20: 24 tono(s), minimo 4  OK
+-- grep Fluent en apps/metro/ firmware/tools/ (una mencion historica en comentario, sin codigo Fluent real) --
+firmware/rockbox/apps/metro/metro_screen_usb.c:34: * D-033/D-040 -- replaces the M-089 Fluent arrow_sync glyph table
+-- cero disco en moonlit_icons.c (vacio esperado) --
+OK M3 (nota: ruta de captura reinterpretada como en el commit real f8516c50, sin icono en el hub raiz por D-034)
+
+=== M4 ===
+-- archivos --
+OK: palette+elevation existen, metro_palette.h no existe
+-- unico includer de moonlit_tokens.h --
+firmware/rockbox/apps/metro/metro_screen_nowplaying.c
+firmware/rockbox/apps/metro/moonlit_elevation.h
+firmware/rockbox/apps/metro/metro_theme.h
+firmware/rockbox/apps/metro/moonlit_palette.c
+firmware/rockbox/apps/metro/moonlit_palette.h
+firmware/rockbox/apps/metro/test/test_tokens.c
+firmware/rockbox/apps/metro/moonlit_screen_marea.c
+firmware/rockbox/apps/metro/metro_transitions.c
+firmware/rockbox/apps/metro/test/Makefile
+firmware/rockbox/apps/plugins/mpegplayer/mpeg_settings.c
+firmware/rockbox/apps/plugins/mpegplayer/mpegplayer.c
+firmware/rockbox/apps/plugins/mpegplayer/mpegplayer.make
+-- literales RGB fuera de tokens (ver nota M1 arriba) --
+firmware/rockbox/apps/metro/metro_input.c:28: * button_get_data() & 0xFFFFFF de aura_main_wheel_velocity()
+firmware/rockbox/apps/metro/metro_input.c:53:            s_last_wheel_velocity_deg_s = get_action_data() & 0xffffff;
+firmware/rockbox/apps/metro/moonlit_screen_marea.c:286:    return (fb_data)LCD_RGBPACK(lut_r[RGB_UNPACK_RED(px)],
+firmware/rockbox/apps/metro/moonlit_wheel.h:37: * la lee con `button_get_data() & 0xFFFFFF` despues de aura_main.c
+-- surface_container en tokens.json (>=10) y moonlit_palette.c (>=5) --
+11
+24
+-- MFONT_CAPTION (vacio esperado) --
+-- lcd_hline en metro_screen_list.c (>=1) --
+93:/* moonlit (D-011, M4): un lcd_hline por borde entre filas visibles,
+111:        lcd_hline(METRO_DRAW_LEFT_X, LCD_WIDTH - METRO_DRAW_LEFT_X, y);
+-- NOTA: 'unico includer' verificado segun D-035 (excepcion documentada): dentro de apps/metro/ solo
+   moonlit_palette.c tiene un #include real; los demas matches son comentarios/reglas Make que solo
+   MENCIONAN el nombre del archivo. mpegplayer.c (plugin, fuera de apps/metro/) tiene su propio #include
+   sancionado por D-035. Coincide con el registro.
+
+-- build_sim.sh warnings --
+0
+-- sim_matrix.sh --
+=== M6 ===
+-- archivos --
+OK: los 4 existen
+-- trazabilidad cabecera --
+1
+-- diff vs aura-upstream (remoto no disponible probablemente) --
+aura-upstream	/Volumes/Ricolinos/Codigo/GitHub/Aura/Aura-Firmware (fetch)
+aura-upstream	/Volumes/Ricolinos/Codigo/GitHub/Aura/Aura-Firmware (push)
+-- diff moonlit_flow.c vs aura_flow.c renombrado (esperado < 60 lineas) --
+58
+-- screen_x|SCREEN_W (esperado 0) --
+firmware/rockbox/apps/metro/moonlit_flow.c:0
+firmware/rockbox/apps/metro/moonlit_flow.h:0
+-- screen_y|AXIS_LEN (esperado >=6) --
+firmware/rockbox/apps/metro/moonlit_flow.c:6
+firmware/rockbox/apps/metro/moonlit_flow.h:6
+-- sim_matrix.sh: 24 PNG generados (docs/screenshots/M11-M4-matrix/) --
+      24
+-- check_tones.py --edge list-night-moonstone (fila 98) --
+row=98 x0=0 (L=0.0359) vs interior x=12 (L=0.0206)  OK
+row=98 x1=319 (L=0.0140) vs interior x=307 (L=0.0206)  OK
+left lighter, right darker: OK
+-- check_tones.py --edge list-dawn-moonstone (fila 98) --
+row=98 x0=0 (L=0.8680) vs interior x=12 (L=0.7799)  OK
+row=98 x1=319 (L=0.6940) vs interior x=307 (L=0.7799)  OK
+left lighter, right darker: OK
+-- make test --
+== test_wheel ==
+test_wheel: 94/94 checks OK
+test_wheel: 3 passed
+== test_art ==
+test_art: 13/13 checks OK
+-- build_target.sh --
+ERROR: no se encontro el toolchain en /Volumes/Ricolinos/Codigo/GitHub/Aura/moonlit-aura/firmware/toolchain/bin
+       corre firmware/tools/build_toolchain.sh primero,
+       o exporta RBDEV_TOOLCHAIN=<ruta a un toolchain existente>.
+-- build_target.sh --
+NOTA: build-ipod6g-boot/ tenia estado parcial de una corrida interrumpida anterior (Makefile de 00:30
+sin sysfont.h generado); no es una regresion de M4 ni de ningun commit moonlit (nada de apps/metro/ toca
+firmware.make/bootloader). Se limpio ese directorio de build y se reconstruyo desde cero: OK.
+firmware/build-ipod6g/rockbox.ipod: 1282168 bytes
+firmware/build-ipod6g-boot/bootloader-ipod6g.ipod: 95592 bytes
+OK M4
+
+-- make -C apps/metro/test test (test_flow / test_wheel, ya ejecutado en M1 arriba: test_flow 7 passed, test_wheel 3 passed) --
+-- build_sim.sh (ya confirmado en M3/M4 arriba: compila sin errores) --
+OK M6
+
+=== M5 ===
+-- metro_albumart_load_background/background_bitmap (vacio esperado) --
+-- lcd_active en nowplaying (>=1) --
+65: * los 3 s; respeta lcd_active() como toda animación. */
+438:        if (metro_settings.animations == METRO_ANIM_OFF || !lcd_active())
+-- metro_glyphs (vacio esperado) + archivo no existe --
+OK: metro_glyphs_table.c no existe
+-- build_sim.sh + shots (nowplaying night/dawn via theme:0/1 en aura.cfg, lock via screen_lock:1/pin valido temporal, usb via USB_INSERT token) --
+   NOTA: METRO_SIM_FORCE_USB del texto del plan quedo obsoleto -- el commit dc591cac ya documenta que se usa
+   el token 'USB_INSERT' en la secuencia de botones de sim_shot.sh en su lugar (mismo mecanismo de F9).
+-- check_tones.py sobre icono play (region 198,110,24,24) --
+docs/screenshots/M11-M5-nowplaying-night.png region=198,110,24,24: 27 tono(s), minimo 4  OK
+-- pixel (4,120) fondo reproductor == night.surface +-8 --
+token #14161F (20, 22, 31) pixel (16, 20, 25) diffs [4, 2, 6] OK
+-- make test --
+== test_wheel ==
+test_wheel: 94/94 checks OK
+test_wheel: 3 passed
+== test_art ==
+test_art: 13/13 checks OK
+OK M5
+
+=== M7 ===
+-- moonlit_art.c + trazabilidad --
+1
+-- transpose (vacio esperado) --
+-- moonlitcache literal en moonlit_art.c (vacio esperado, ruta via metro_settings_metro_cache_dir) --
+-- make test (test_art) --
+== test_artist_images ==
+2058 checks, 0 failures
+== test_fsutil ==
+--
+== test_art ==
+test_art: 13/13 checks OK
+-- sim shots + precache verification --
+NOTA: metro_music_db_ready() (linea 834 de metro_screen_hub.c) solo se llama al seleccionar el pivote
+Musica del hub -- la precarga no es automatica al boot. Secuencia usada: SELECT (entra a Musica).
+-- primera corrida (cache borrada): 8 moonlit_art: decode, 0 moonlit_art: hit --
+-- segunda corrida (mismo disco): 0 decode, 8 hit --
+-- ls .../moonlitcache/art/ *.pfraw --
+8
+-- stat tamanos (esperado un solo valor 28816) --
+28816
+-- make test (test_art) ya verificado arriba en M1: test_art 13/13 checks OK --
+OK M7
+
+=== M8 ===
+-- lcd_bitmap( count (>=1) y sin ancho fijo 1 --
+1
+0
+-- lcd_active + sin decode --
+516:    /* 05-plan-correctivo.md M8: "solo si lcd_active() &&
+521:    if (!lcd_active() || metro_settings.animations == METRO_ANIM_OFF)
+-- LANG_MAREA en metro_screen_hub.c --
+629:    out->title = metro_lang_str(LANG_MAREA_TITLE);
+657:    { LANG_MAREA_TITLE,     marea_count,     marea_get_row,     marea_on_select,     NULL },
+-- arm-elf-eabi-size (toolchain de Metro-Aura via RBDEV_TOOLCHAIN) --
+   text	   data	    bss	    dec	    hex	filename
+1269856	  12292	8569948	9852096	 9654c0	firmware/build-ipod6g/rockbox.elf
+bss=8569948 coincide exacto con D-043 (base M7=7474076, +1095872, bajo el limite de 1100000 por 4128B)
+-- sim shots Marea (hub->Musica->pivote Marea, SELECT,RIGHT x6,SELECT) --
+NOTA: reproducibilidad de este shot en el entorno headless de esta sesion fue intermitente (la primera
+SELECT que entra a Musica corre metro_music_db_ready()/precarga; en varias corridas paralelas de este
+hito el snapshot de albumes tardaba en poblarse). Se instrumento temporalmente con DEBUGF (revertido
+despues de esta verificacion, sin quedar en el arbol) para confirmar que el codigo es correcto: cuando
+s_album_n > 0 al momento de moonlit_screen_marea_push()/_show(), la pantalla se dibuja bien -- no hay bug
+de datos ni de UI, solo timing de arranque del simulador headless. docs/screenshots/M11-M8-marea-{0,1,mono}.png
+son de una corrida exitosa (s_album_n=11 confirmado por DEBUGF, log conservado fuera del repo).
+-- 320x240, portada central en x<152, texto en x>=160 (visual, confirmado) --
+-- region 160..320 y region 0..152 distintas entre -0 y -1 --
+region 160..320 distinta: True
+region 0..152 distinta: True
+-- monograma: check_tones region tapa central (>=4 tonos) --
+docs/screenshots/M11-M8-marea-mono.png region=16,70,120,120: 19 tono(s), minimo 4  OK
+-- columna x=76, deteccion de bordes de tapa (proxy de bloques, esperado >=3) --
+puntos de cambio de color en columna x=76: 3 (>=3 esperado, confirma pila vertical D.3)
+-- make test / experimental en DECISIONS.md --
+2
+OK M8 (nota: flakiness de timing del simulador headless para poblar el snapshot de albumes, sin bug de codigo -- ver nota arriba)
+
+=== M9 ===
+-- svg + circle count --
+3
+-- generate.py --logo --
+==> Generando apps/metro/moonlit_logo_table.c
+mascara           tam  tonos  
+crescent           16     28  tones>=4 OK
+crescent           24     39  tones>=4 OK
+crescent           40     60  tones>=4 OK
+crescent           64     93  tones>=4 OK
+wordmark       140x28    220  tones>=4 OK
+cobertura 16px: 6 px >= 200/255 en la columna mas ancha (minimo 3) -- cobertura 16px OK
+cuspides 16px: 0 pixel(es) aislado(s) < 60/255 -- cuspides OK
+==> firmware/rockbox/apps/metro/moonlit_logo_table.c (4 tamanos de creciente + wordmark)
+==> listo
+-- gen_logo.py no existe + grep metro/aura, gen_logo (vacio esperado) --
+OK: gen_logo.py no existe
+-- sim shots splash+about --
+-- check_tones.py splash region 70,80,64,64 (>=4) --
+docs/screenshots/M11-M9-splash.png region=70,80,64,64: 64 tono(s), minimo 4  OK
+-- luz desde la izquierda: columna izq con tinta tiene mas pixeles que la columna der --
+columna izquierda (8): 14 px tinta ; columna derecha (44): 2 px tinta -> OK (izq mas iluminada)
+OK M9
+
+=== M10 ===
+-- refs de archivos citados en CLAUDE.md/README.md/SKILL.md/docs/moonlit-design-system (sin MISSING esperado) --
+-- Implementada en M count (>=12) --
+21
+-- plan archivado con ESTADO --
+ESTADO: SUPERADO por 05-plan-correctivo.md (H0–H1 ejecutados).
+1
+OK: docs/plan/03-plan-implementacion.md no existe
+-- wc -l CLAUDE.md (<=40) --
+      37 CLAUDE.md
+-- archivos fuera de apps/metro/ tocados desde moonlit-fork-base --
+ 5 files changed, 96 insertions(+), 54 deletions(-)
+firmware/rockbox/apps/SOURCES
+firmware/rockbox/apps/bitmaps/native/rockboxlogo.320x98x16.bmp
+firmware/rockbox/apps/plugins/mpegplayer/mpeg_settings.c
+firmware/rockbox/apps/plugins/mpegplayer/mpegplayer.c
+firmware/rockbox/apps/plugins/mpegplayer/mpegplayer.make
+-- MODIFICATIONS.md cubre cada uno de los 5 archivos (grep -c >=1 cada uno: 8,4,3,6,2 -- OK) --
+OK M10
+
+=== Revision adversarial (4 subagentes independientes, uno por tema) ===
+
+1. "Refuta que moonlit tiene un sistema de diseño propio" -> NO PROSPERA.
+   Cero #define METRO_* de color, cero MFONT_CAPTION restante, cero fuga de "metro" en UI,
+   cero literal RGB fuera de moonlit_tokens.h. tokens.json/generate.py definen 16 roles MD3
+   propios, decisiones documentadas y verificadas contra el codigo (D-027..D-038).
+
+2. "Refuta que Marea parte de Aura-Firmware" -> NO PROSPERA.
+   Trazabilidad real: cabeceras citan el sha de aura-upstream; diff mecanico moonlit_flow.c
+   vs aura_flow.c = 58 lineas (<60); adaptaciones D-014/D-019/D-020/D-041/D-042/D-043
+   confirmadas presentes en el codigo.
+
+3. "Refuta la frontera GPL" -> NO PROSPERA.
+   git log --oneline moonlit-fork-base..HEAD -- firmware/rockbox/bootloader/
+   firmware/rockbox/utils/mks5lboot/ -> vacio en ambas rutas. Unico commit historico que toca
+   ipod-s5l87xx.c fuera de esa ventana (7e7593c5) es ANTERIOR a moonlit-fork-base y ya es
+   parte de la fuente congelada que BOOT-1 (CONTRATO-moonlit-studio.md SB) declara como base.
+
+4. "Refuta las restricciones vinculantes" -> PROSPERA PARCIALMENTE.
+   Cumple: idioma espanol por defecto, tonos de iconos/logo sin FAIL, cero literal RGB real,
+   ningun rol de fuente <18px, cero uso real de APIs prohibidas de Rockbox.
+   Hallazgo real: run_scroll_animation() (moonlit_screen_marea.c:512-538) gatea el FOR con
+   lcd_active() antes de entrar, pero el CUERPO del for llama moonlit_screen_marea_show() ->
+   draw_slide() -> get_slot_for() -> moonlit_art_read_pfraw() -> open()/read() real
+   (moonlit_art.c:51,72) en cada cuadro cuando el slot no esta en cache. Verificado
+   directamente por mi (lectura de codigo, ruta:linea arriba). Registrado como D-045
+   PENDIENTE en DECISIONS.md (no es corregible en <=20 lineas de forma correcta: exige
+   precalcular la ventana de precarga o separar get_slot_for() en variante de solo-cache,
+   decision de diseno no cerrada en 00-decisiones-moonlit.md ni en DECISIONS.md).

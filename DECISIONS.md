@@ -913,3 +913,84 @@ estado vacía), `apps/metro/metro_screen_usb.c` (creciente de 40px),
 y `apps/bitmaps/native/rockboxlogo.320x98x16.bmp` (fuera de
 `apps/metro/`, ver `MODIFICATIONS.md`); elimina
 `firmware/tools/gen_logo.py`.
+
+# Hito M11 — Revisión adversarial global
+
+**D-045 — Lectura de disco dentro del bucle de animación de scroll de
+Marea, pendiente (hallazgo real de la revisión adversarial, no
+corregido en este hito).** Un subagente independiente de M11, encargado
+de refutar activamente "las restricciones vinculantes de `CLAUDE.md`"
+(regla: "Ninguna lectura de disco dentro de un bucle de animación"),
+encontró una violación real y reproducible:
+`run_scroll_animation()` (`apps/metro/moonlit_screen_marea.c:512-538`)
+está correctamente gateada por `lcd_active() &&
+metro_settings.animations != METRO_ANIM_OFF` **antes** de entrar al
+`for` (líneas 519-524, patrón de `hub_row_animates()`), pero el cuerpo
+del `for` (línea 533) llama a `moonlit_screen_marea_show()` en cada
+cuadro, que llama a `draw_slide()` (`:413`), que llama a
+`get_slot_for()` (`:192`). Cuando el álbum que entra a la ventana
+visible durante el scroll no está en los 37 slots de caché LRU
+(`s_slots`), `get_slot_for()` (`:226`) ejecuta
+`moonlit_art_read_pfraw()`, que en `moonlit_art.c:51,72` hace
+`open()`+`read()` reales sobre el `.pfraw` cacheado en disco —
+**dentro del bucle de animación por cuadro**, no antes de él.
+
+El comentario del propio código (`:170-173`) distingue "decodificar un
+JPEG" (prohibido en el bucle; el decode real vive en
+`moonlit_screen_marea_tick()`, llamado desde `metro_main.c:458`, fuera
+de cualquier bucle) de "leer un `.pfraw` ya horneado" (que sí ocurre
+en el bucle) y cita "D-030/M8" como respaldo — pero D-030
+(`:240-243` de este archivo) solo describe el layout de columnas de
+Marea, no concede esa excepción. El texto vinculante de `CLAUDE.md` no
+distingue tipos de lectura de disco.
+
+**Por qué queda pendiente y no se corrige en este mismo hito (regla de
+M11: corrección inline solo si es ≤ 20 líneas):** una corrección
+correcta no es un parche mecánico de una línea. Requiere precalcular,
+**antes** de entrar al `for` de `run_scroll_animation()`, la unión de
+todos los índices de álbum que podrían volverse visibles en cualquier
+punto entre `from_x256` y `to_x256` (no solo en el punto de llegada) y
+forzar su lectura de `.pfraw` ahí — o, alternativamente, separar
+`get_slot_for()` en una variante de solo-lectura-de-caché usada dentro
+del bucle (que nunca golpea disco y cae a monograma en un miss, igual
+que ya hace con un miss de JPEG) y una variante con lectura real usada
+solo en la precarga previa al bucle y en `moonlit_screen_marea_tick()`.
+Ambas rutas exigen decidir la ventana de precarga contra el
+presupuesto fijo de `MAREA_CACHE_SLOTS` (37, D.3 del plan 03) y
+verificarse contra scroll rápido de rueda (`step > 1`, D-019), algo
+que ninguna definición de hecho de M8 ni M11 ejercita mecánicamente —
+no es una decisión de diseño ya cerrada en `docs/plan/00-decisiones-moonlit.md`
+ni en este archivo, así que no se inventa aquí. Severidad acotada en
+la práctica: una sola pantalla (Marea, ya D-043 "experimental hasta
+M12"), lectura de un archivo de tamaño fijo (28 816 B) ya horneado
+(nunca un decode de JPEG), gateada por `lcd_active()`. Queda como
+trabajo pendiente para un hito posterior o para M12 junto con el
+retuneo de `MOONLIT_FLOW_CAM_DIST`.
+
+**Refutaciones de M11 que NO prosperaron (confirmadas por subagentes
+independientes, uno por tema, sin ver el código/hallazgos del otro):**
+1. *"moonlit no tiene sistema de diseño propio"* — no prospera. Cero
+   `#define METRO_*` de color, cero `MFONT_CAPTION` restante, cero
+   fuga de "metro" en UI (`metro_lang.c`), cero literal RGB fuera de
+   `moonlit_tokens.h`. `design-system/tokens.json`/`generate.py`
+   definen 16 roles MD3 propios con decisiones documentadas y
+   verificadas contra el código (D-027…D-038).
+2. *"Marea no parte de Aura-Firmware"* — no prospera. Trazabilidad
+   real confirmada: cabeceras citan el sha de `aura-upstream`, el diff
+   mecánico de `moonlit_flow.c` contra `aura_flow.c` da 58 líneas
+   (< 60), y las adaptaciones documentadas en D-014/D-019/D-020/D-041/
+   D-042/D-043 (proyección vertical, ejes renombrados, límites de
+   `.bss`, sin zoom/reflejo) están realmente presentes en el código.
+3. *"La frontera GPL del bootloader no se sostiene"* — no prospera.
+   `git log --oneline moonlit-fork-base..HEAD -- firmware/rockbox/bootloader/
+   firmware/rockbox/utils/mks5lboot/` vacío en ambas rutas. El único
+   commit histórico que toca `ipod-s5l87xx.c` fuera de esa ventana
+   (`7e7593c5`) es *anterior* a `moonlit-fork-base` y ya forma parte de
+   la fuente congelada que la cláusula BOOT-1 de
+   `CONTRATO-moonlit-studio.md` §B declara como base.
+4. *"Las restricciones vinculantes no se cumplen"* — no prospera en
+   general (idioma español por defecto, tonos de iconos/logo
+   verificados sin `FAIL`, cero literal RGB real, ningún rol de fuente
+   < 18px, cero uso real de las APIs prohibidas de Rockbox), **salvo**
+   el hallazgo real de disco-en-bucle-de-animación de Marea documentado
+   arriba en D-045.
