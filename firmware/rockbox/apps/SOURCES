@@ -352,7 +352,6 @@ metro/metro_splash_lang.c
 metro/metro_fb.c
 metro/metro_motion.c
 metro/metro_transitions.c
-metro/metro_turnstile_table.c
 metro/moonlit_icons.c /* moonlit (D-033): reemplaza metro/metro_icons_table.c, mascaras 8-bit Material Symbols */
 metro/moonlit_icons_table.c
 metro/moonlit_logo.c /* moonlit (D-016, D-044, M9): logotipo Waning Crescent, mascaras 8-bit */

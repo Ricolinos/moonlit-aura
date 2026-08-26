@@ -35,9 +35,9 @@
 #include "metro_motion.h"
 #include "metro_settings.h"
 #include "metro_theme.h"
-#include "metro_turnstile_table.h"
 #include "metro_draw.h"  /* R3-F8: metro_draw_text() para el volador */
 #include "moonlit_fonts.h"
+#include "moonlit_palette.h" /* moonlit (D-052 C3): color del filo de luna, una vez por transicion */
 #include "string-extra.h"
 
 #define METRO_FB_PIXELS (LCD_WIDTH * LCD_HEIGHT)
@@ -149,50 +149,10 @@ static void note_transition_cost(const char *name, struct level_spec spec, long 
         s_over_budget_streak = 0;
 }
 
-/* Shared by metro_transitions_slide() (twist, always) and
- * metro_transitions_push()'s fallback (animations=minimal, or
- * graphics=lite even under animations=all) -- both capture/render
- * were already done by the caller. */
-static void run_slide(int direction, struct level_spec spec)
-{
-    int i;
-
-    cpu_boost(true);
-    for (i = 1; i <= spec.frames; i++)
-    {
-        int p = metro_ease(METRO_EASE_OUT_EXPO, i, spec.frames);
-        int dx = (direction < 0 ? -1 : 1) * (p * LCD_WIDTH / 256);
-
-        metro_fb_present_slide(s_fb_from, s_fb_to, dx);
-        drain_button_queue_if_full();
-        if (i < spec.frames)
-            sleep(spec.frame_delay);
-    }
-    cpu_boost(false);
-}
-
-void metro_transitions_slide(metro_transitions_draw_fn draw_to, int direction)
-{
-    struct level_spec spec = anim_level_spec(effective_level());
-    long start_tick = current_tick;
-
-    if (!lcd_active() || spec.frames == 0)
-    {
-        draw_to();
-        return;
-    }
-
-    metro_fb_capture(s_fb_from);
-    metro_fb_render(s_fb_to, draw_to);
-    run_slide(direction, spec);
-
-    note_transition_cost("slide", spec, start_tick);
-}
-
 /* --- R3-F8/DD-9 (M-069): CONTINUUM --------------------------------------
  *
  * El título de la fila elegida vuela hasta la ceja de la página nueva
- * mientras el resto del PUSH hace su turnstile detrás. Es el continuum
+ * mientras el resto del PUSH se desliza detrás (D-052 C1: antes giraba, F12). Es el continuum
  * real de WP7: lo que el usuario tocó es lo único que NO gira -- se
  * queda plano, legible, y viaja a su lugar nuevo.
  *
@@ -227,7 +187,7 @@ void metro_transitions_arm_continuum(const char *text, int from_y)
 
 /* Borra la ceja de la página de destino DENTRO del buffer off-screen,
  * antes de que empiece la animación: si no, se vería dos veces al
- * mismo tiempo (la de s_fb_to girando con el turnstile, y el volador
+ * mismo tiempo (la de s_fb_to deslizándose con el PUSH, y el volador
  * encima viajando hacia ella). Se recorta al ancho real del texto para
  * no tocar el reloj ni la batería, que viven en el otro extremo del
  * mismo encabezado. */
@@ -242,13 +202,15 @@ static void erase_dest_eyebrow(void)
                         w, h, metro_color_bg());
 }
 
-/* Un cuadro del volador, encima de las dos capas del turnstile y antes
+/* Un cuadro del volador, encima de las dos capas del slide y antes
  * del único lcd_update() del cuadro.
  *
- * Curva PROPIA (OUT_QUAD), no la del turnstile (OUT_EXPO): out-expo
- * gasta el 82 % del recorrido en los dos primeros cuadros de ocho --
- * perfecto para una rotación que debe sentirse instantánea, pésimo
- * para un texto que tiene que LEERSE viajando. Con out-expo el título
+ * Curva OUT_QUAD -- la misma que desde D-052 usa el propio PUSH/POP
+ * (antes el giro de F12 iba en OUT_EXPO y el volador en OUT_QUAD, y el
+ * argumento de entonces sigue valiendo para ambos): out-expo gasta el
+ * 82 % del recorrido en los dos primeros cuadros de ocho -- perfecto
+ * para una rotación que debe sentirse instantánea, pésimo para un
+ * texto que tiene que LEERSE viajando. Con out-expo el título
  * aterrizaba casi de inmediato y se quedaba quieto los seis cuadros
  * restantes, que es justo lo contrario de lo que CONTINUUM cuenta.
  * Out-quad reparte el viaje a lo largo de toda la animación y sigue
@@ -265,35 +227,21 @@ static void draw_continuum_frame(int i, int frames)
                      landed ? metro_color_secondary() : metro_color_fg());
 }
 
-/* F12: angle in degrees -> nearest metro_turnstile_table.h index.
- * Rounds to the closest of the 32 precomputed angles instead of
- * interpolating between two rows -- the animation only spans ~250ms
- * either way, and PUSH/POP already only run under animations=all
- * (8 frames), so the extra precision an interpolated lookup would buy
- * is not visible. */
-static int turnstile_angle_index(int angle_deg)
+/* moonlit (D-052 C1/C3): the ONE slide loop every push/pop/twist runs
+ * through -- both capture/render were already done by the caller.
+ * direction < 0: `to` enters from the left ("Luz de canto": PUSH under
+ * every level, pivot-prev twist); direction > 0: `to` enters from the
+ * right (POP, pivot-next twist). Each frame: two row-copy blits
+ * (LCD_WIDTH*LCD_HEIGHT px total), the 1px "Filo de luna" seam
+ * (LCD_HEIGHT px, skipped by compose_slide on the last frame where the
+ * seam would be a screen edge), CONTINUUM's flying title if armed, one
+ * lcd_update(). ~77k px/frame -- a third of the F12 rotation's 230k
+ * column-walk this replaced. */
+static void run_slide(int direction, struct level_spec spec, enum metro_ease_kind ease,
+                      bool continuum, const char *name)
 {
-    int span = METRO_TURNSTILE_ANGLE_MAX - METRO_TURNSTILE_ANGLE_MIN;
-    int idx = ((angle_deg - METRO_TURNSTILE_ANGLE_MIN) * (METRO_TURNSTILE_ANGLES - 1)
-               + span / 2) / span;
-
-    if (idx < 0)
-        idx = 0;
-    if (idx >= METRO_TURNSTILE_ANGLES)
-        idx = METRO_TURNSTILE_ANGLES - 1;
-    return idx;
-}
-
-/* F12: both surfaces rotate the SAME way each frame -- direction > 0
- * (push): outgoing sweeps 0 -> 50 deg, incoming sweeps -80 -> 0 deg
- * (WP7's own "Turnstile Out"/"Turnstile In (forward)",
- * INVESTIGACION.md F.3). direction < 0 (pop): the exact mirror,
- * outgoing 0 -> -80, incoming 50 -> 0 ("Turnstile In (back)" plus its
- * unstated-but-symmetric out). No opacity fade on top of the
- * projection itself (DESVIACIONES.md F12-1) -- the perspective
- * shrink alone already reads as "leaving". */
-static void run_turnstile(int direction, struct level_spec spec, bool continuum)
-{
+    long seam = (long)moonlit_surface(MSURFACE_HIGH, MEDGE_LIGHT);
+    long start_tick = current_tick;
     int i;
 
     if (continuum)
@@ -302,55 +250,48 @@ static void run_turnstile(int direction, struct level_spec spec, bool continuum)
     cpu_boost(true);
     for (i = 1; i <= spec.frames; i++)
     {
-        int p = metro_ease(METRO_EASE_OUT_EXPO, i, spec.frames);
-        int angle_out, angle_in;
+        int p = metro_ease(ease, i, spec.frames);
+        int dx = (direction < 0 ? -1 : 1) * (p * LCD_WIDTH / 256);
 
-        if (direction > 0)
-        {
-            angle_out = (p * 50) / 256;
-            angle_in = -80 + (p * 80) / 256;
-        }
-        else
-        {
-            angle_out = -(p * 80) / 256;
-            angle_in = 50 - (p * 50) / 256;
-        }
-
-        lcd_set_foreground(metro_color_bg());
-        lcd_fillrect(0, 0, LCD_WIDTH, LCD_HEIGHT);
-        metro_fb_draw_turnstile_layer(s_fb_from, turnstile_angle_index(angle_out));
-        metro_fb_draw_turnstile_layer(s_fb_to, turnstile_angle_index(angle_in));
+        metro_fb_compose_slide(s_fb_from, s_fb_to, dx, seam);
         /* Encima de las dos capas y antes del único update del cuadro
-         * -- el mismo contrato "compón varias capas, actualiza una
-         * vez" que draw_turnstile_layer() ya establecía (F12). */
+         * -- el contrato "compón varias capas, actualiza una vez" que
+         * el giro de F12 establecía y compose_slide() hereda. En el
+         * último cuadro el volador ES la ceja de la página nueva (misma
+         * fuente, color y posición), que erase_dest_eyebrow() había
+         * borrado de s_fb_to para que no se viera doble. */
         if (continuum)
             draw_continuum_frame(i, spec.frames);
         lcd_update();
+        METRO_TRACE("%s frame %d/%d at +%ld ticks", name, i, spec.frames,
+                    current_tick - start_tick);
 
         drain_button_queue_if_full();
         if (i < spec.frames)
             sleep(spec.frame_delay);
     }
     cpu_boost(false);
+}
 
-    /* The table only has METRO_TURNSTILE_ANGLES discrete samples
-     * (metro_turnstile_table.h) -- the last frame's angle_in rounds
-     * to whichever one is closest to 0 deg, rarely exactly 0, so the
-     * projected result is a near-miss of the real destination rather
-     * than a pixel-exact match. Settle on the real thing once,
-     * unprojected -- otherwise the header/pivots (which nothing
-     * redraws again after this, unlike the rows FEATHER touches next)
-     * would stay very slightly warped for good. */
-    lcd_bitmap_part(s_fb_to, 0, 0, LCD_WIDTH, 0, 0, LCD_WIDTH, LCD_HEIGHT);
-    /* R3-F8: ese asentado vuelve a pintar s_fb_to -- que es justamente
-     * el buffer al que le borramos la ceja para que no se viera doble.
-     * Sin volver a dibujarla aquí, la ceja de la página nueva quedaría
-     * ausente hasta el próximo redibujo completo (FEATHER, que corre
-     * enseguida, solo toca el área de filas). El último cuadro del
-     * volador ES la ceja: misma fuente, mismo color, misma posición. */
-    if (continuum)
-        draw_continuum_frame(spec.frames, spec.frames);
-    lcd_update();
+void metro_transitions_slide(metro_transitions_draw_fn draw_to, int direction)
+{
+    struct level_spec spec = anim_level_spec(effective_level());
+    long start_tick = current_tick;
+
+    if (!lcd_active() || spec.frames == 0)
+    {
+        draw_to();
+        return;
+    }
+
+    metro_fb_capture(s_fb_from);
+    metro_fb_render(s_fb_to, draw_to);
+    /* El twist conserva su dirección natural (izquierda/derecha según
+     * el pivote) y su curva OUT_EXPO de siempre -- D-052 solo cambia
+     * PUSH/POP. */
+    run_slide(direction, spec, METRO_EASE_OUT_EXPO, false, "slide");
+
+    note_transition_cost("slide", spec, start_tick);
 }
 
 bool metro_transitions_effective_all(void)
@@ -358,7 +299,19 @@ bool metro_transitions_effective_all(void)
     return effective_level() == METRO_ANIM_ALL;
 }
 
-
+/* moonlit (D-052 C1, "Luz de canto"): PUSH/POP is a slide from the
+ * LEFT at every level -- direction > 0 (deepening) means the new page
+ * enters from x < 0 (compose_slide dx < 0), direction < 0 (going
+ * back) is the exact mirror: the outgoing page retreats to the left
+ * and the destination is uncovered from the right. That is the
+ * INVERSE of the twist's convention, on purpose: light comes from the
+ * left (D-012), so what is new arrives from there. Replaces the
+ * F12 rotation that ran here under ALL+FULL. Easing OUT_QUAD, not
+ * OUT_EXPO: see draw_continuum_frame() -- at 7 frames the expo curve
+ * lands almost at once and idles, the quad one spreads the travel over
+ * all 210 ms and still brakes at the end. Under MINIMAL (4 frames) and
+ * under graphics=lite the same loop runs; only the frame count and
+ * CONTINUUM (ALL+FULL, PUSH only) differ. */
 void metro_transitions_push(metro_transitions_draw_fn draw_to, int direction)
 {
     enum metro_anim_level level = effective_level();
@@ -381,20 +334,16 @@ void metro_transitions_push(metro_transitions_draw_fn draw_to, int direction)
     metro_fb_capture(s_fb_from);
     metro_fb_render(s_fb_to, draw_to);
 
-    if (level == METRO_ANIM_ALL && metro_settings.graphics == METRO_GFX_FULL)
-    {
-        /* Tercera puerta (las otras dos son este mismo `if`: nivel de
-         * FX, y que solo PUSH llegue hasta aquí): direction > 0 = ir
-         * hacia adentro. Al volver (POP) no hay fila de origen de la
-         * cual volar. */
-        run_turnstile(direction, spec, continuum && direction > 0);
-        note_transition_cost("push-turnstile", spec, start_tick);
-    }
-    else
-    {
-        run_slide(direction, spec);
-        note_transition_cost("push-slide", spec, start_tick);
-    }
+    /* Tercera puerta de CONTINUUM (las otras dos: nivel ALL con
+     * graphics=full, y que solo PUSH llegue hasta aquí): direction > 0
+     * = ir hacia adentro. Al volver (POP) no hay fila de origen de la
+     * cual volar. */
+    continuum = continuum && direction > 0 &&
+                level == METRO_ANIM_ALL && metro_settings.graphics == METRO_GFX_FULL;
+
+    run_slide(-direction, spec, METRO_EASE_OUT_QUAD, continuum,
+              direction > 0 ? "push" : "pop");
+    note_transition_cost(direction > 0 ? "push" : "pop", spec, start_tick);
 }
 
 /* FADE's own timing (6x3 under `all`, PLAN_MAESTRO.md S3.3) rather
@@ -416,11 +365,11 @@ void metro_transitions_fade(metro_transitions_draw_fn draw_to)
 
     /* present_fade() is reserved to graphics=full (metro_fb.h); every
      * other combination -- including animations=all with
-     * graphics=lite -- rides the same slide as PUSH/POP/twist instead
-     * of a second bespoke fallback animation. */
+     * graphics=lite -- rides the same slide as PUSH (C1, from the
+     * left) instead of a second bespoke fallback animation. */
     if (level == METRO_ANIM_MINIMAL || metro_settings.graphics != METRO_GFX_FULL)
     {
-        metro_transitions_slide(draw_to, 1);
+        metro_transitions_push(draw_to, 1);
         return;
     }
 
@@ -434,6 +383,8 @@ void metro_transitions_fade(metro_transitions_draw_fn draw_to)
         int p = metro_ease(METRO_EASE_LINEAR, i, fade_spec.frames);
 
         metro_fb_present_fade(s_fb_from, s_fb_to, p);
+        METRO_TRACE("fade frame %d/%d at +%ld ticks", i, fade_spec.frames,
+                    current_tick - start_tick);
         drain_button_queue_if_full();
         if (i < fade_spec.frames)
             sleep(fade_spec.frame_delay);
@@ -441,4 +392,11 @@ void metro_transitions_fade(metro_transitions_draw_fn draw_to)
     cpu_boost(false);
 
     note_transition_cost("fade", fade_spec, start_tick);
+}
+
+void metro_transitions_trace(const char *name, int frame, int frames, long start_tick)
+{
+    (void)name; (void)frame; (void)frames; (void)start_tick;
+    METRO_TRACE("%s frame %d/%d at +%ld ticks", name, frame, frames,
+                current_tick - start_tick);
 }

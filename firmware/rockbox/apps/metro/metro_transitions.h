@@ -38,17 +38,17 @@ typedef metro_fb_draw_fn metro_transitions_draw_fn;
  * from the left (pivot-prev). Falls straight through to draw_to()
  * with no animation at all when animations=off, !lcd_active(), or
  * after auto-degradation (M-015) has dropped the effective level to
- * off. Never uses turnstile -- that substitution is specific to
- * PUSH/POP (metro_transitions_push() below), the plan's own catalog
- * table keeps SLIDE and PUSH/POP as separate rows. */
+ * off. Keeps its natural direction and OUT_EXPO curve; carries the
+ * "Filo de luna" seam (D-052 C3) like every slide. */
 void metro_transitions_slide(metro_transitions_draw_fn draw_to, int direction);
 
 /* PUSH/POP (deepening into a page / going back, PLAN_MAESTRO.md S3.3):
- * same direction convention as metro_transitions_slide() (> 0 push,
- * < 0 pop). Under animations=all AND graphics=full, substitutes
- * metro_transitions_slide()'s plain slide for a turnstile rotation
- * (F12, present_turnstile) -- any other level/graphics combination
- * falls back to the exact same slide metro_transitions_slide() uses. */
+ * > 0 push, < 0 pop. moonlit (D-052 C1, "Luz de canto"): at every
+ * animations/graphics level this is a slide with the INVERSE of
+ * metro_transitions_slide()'s convention -- the new page enters from
+ * the LEFT on push, the outgoing one retreats to the left on pop --
+ * OUT_QUAD, 7 frames under `all` / 4 under `minimal`, with the seam
+ * (C3). CONTINUUM rides on top only under all+full and only on push. */
 void metro_transitions_push(metro_transitions_draw_fn draw_to, int direction);
 
 /* F12: true when the EFFECTIVE animations level (metro_settings.animations
@@ -61,13 +61,13 @@ void metro_transitions_push(metro_transitions_draw_fn draw_to, int direction);
  * directly and duplicating the degradation logic. */
 bool metro_transitions_effective_all(void);
 
-/* FADE: entering/leaving Now Playing, returning from a plugin
- * (PLAN_MAESTRO.md S3.3). Only actually cross-fades (metro_fb.c's
- * present_fade, per-pixel blend) when animations=all AND
+/* FADE ("Menguante", D-052 C2): entering/leaving Now Playing, Marea,
+ * the photo viewer, returning from a plugin (PLAN_MAESTRO.md S3.3).
+ * Only actually cross-fades (metro_fb.c's present_fade, per-pixel
+ * blend, 7 frames x 3 ticks, OUT_QUAD) when animations=all AND
  * graphics=full; animations=minimal or graphics=lite both fall back
- * to metro_transitions_slide(draw_to, 1) -- present_fade is reserved
- * to graphics=full (metro_fb.h), and `minimal` "usa SLIDE" for every
- * transition per the plan's own table, this one included. */
+ * to metro_transitions_push(draw_to, 1) -- the C1 slide from the left
+ * -- since present_fade is reserved to graphics=full (metro_fb.h). */
 void metro_transitions_fade(metro_transitions_draw_fn draw_to);
 
 /* R3-F8/DD-9 (M-069): CONTINUUM -- arma el "texto volador" para el
@@ -81,5 +81,13 @@ void metro_transitions_fade(metro_transitions_draw_fn draw_to);
  * sobreviva a la llamada. */
 #define METRO_CONTINUUM_TITLE_MAX 64
 void metro_transitions_arm_continuum(const char *text, int from_y);
+
+/* moonlit (D-052): one METRO_TRACE line ("<name> frame i/n at +t
+ * ticks") for an animation loop that lives OUTSIDE this module (the
+ * selection "Marea que sube", C4, in metro_screen_list.c/_hub.c) so
+ * M12's on-device measurement (Debug -> Show Log File) sees real
+ * per-frame ticks for every moonlit animation in one log. No-op cost
+ * on non-DEBUG builds without logf. */
+void metro_transitions_trace(const char *name, int frame, int frames, long start_tick);
 
 #endif /* METRO_TRANSITIONS_H */

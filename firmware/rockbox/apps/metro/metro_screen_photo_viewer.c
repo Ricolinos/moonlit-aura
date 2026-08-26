@@ -159,9 +159,9 @@ static metro_jpeg_probe_t probe_jpeg_dimensions(const char *path, int *out_w, in
  * the cover scale factor (max(LCD_WIDTH/w, LCD_HEIGHT/h), the opposite
  * of FORMAT_KEEP_ASPECT's fit-scale), then clamps the DECODE size down
  * (display size stays the true cover size) if that would overflow
- * METRO_PHOTO_VIEW_SCRATCH_SIZE -- an integer sqrt by bisection, same
- * technique metro_transitions.c's Q10.6 turnstile math already uses
- * (shift instead of float), just a different shift width. */
+ * METRO_PHOTO_VIEW_SCRATCH_SIZE -- an integer sqrt by bisection, the same
+ * shift-instead-of-float fixed-point idiom metro_motion.c's easing
+ * tables use, just a different shift width. */
 static void compute_decode_and_display_size(int src_w, int src_h,
                                              int *decode_w, int *decode_h,
                                              int *display_w, int *display_h)

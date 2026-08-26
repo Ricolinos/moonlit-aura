@@ -353,7 +353,7 @@ void metro_screen_list_handle(int action, int steps)
  * and metro_main.c's dispatch decided this is the moment to run it --
  * see the module comment on s_feather_pending. Redraws only the row
  * area (metro_draw_clear_rows_area()) each frame, never the header/
- * pivots above it -- those already settled during the PUSH/turnstile
+ * pivots above it -- those already settled during the PUSH slide
  * that ran just before this. */
 void metro_screen_list_run_feather_if_pending(void)
 {
