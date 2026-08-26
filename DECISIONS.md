@@ -249,3 +249,49 @@ registra en M1 (decisión de alcance); se implementa en M8.
 contrato). El nombre de familia va en la cabecera del `.fnt` y en
 `tokens.json`, no en el nombre de archivo. Se registra en M1 (decisión
 de alcance); se implementa en M2.
+
+# Hito M2 — Pipeline de fuentes: vendor OFL, `.fnt` y `moonlit_fonts` (D-032)
+
+**D-032 — Cierra dos hipótesis de tamaño de `05-plan-correctivo.md` §M2
+con datos reales, y documenta una discrepancia resuelta con el dueño.**
+
+1. **Glifo faltante en Libre Baskerville-Regular.** El plan exige
+   `firstchar=32 size=352` para los 7 `.fnt` (rango decimal 32–383,
+   D-007). Al generar, `moonlit-display-40.fnt` (y title-28, headline-22,
+   los 3 roles en Libre Baskerville) salieron con `size=351`, no 352.
+   Causa verificada: `design-system/vendor/libre-baskerville/LibreBaskerville-Regular.ttf`
+   (descargada de `github.com/impallari/Libre-Baskerville`, la fuente
+   exacta que cita D-004) no trae el glifo U+017F ("ſ", *long s*,
+   carácter histórico sin uso en español ni en ninguna cadena de
+   `metro_lang.c`). `firmware/rockbox/tools/convttf.c:693`
+   (`if ( !(charindex) ) continue;`) salta cualquier código sin glifo
+   al barrer `32..383`, así que `lastchar` topa en U+017E (382) y
+   `firmware/rockbox/tools/convttf.c:726`
+   (`size = lastchar - firstchar + 1`) da 351. Montserrat sí trae
+   U+017F completo (los 4 roles en esa familia dan 352). **Decisión
+   (confirmada con el dueño, no unilateral):** se acepta `size=351`
+   para los 3 roles Libre Baskerville como excepción documentada, no
+   como umbral relajado sin registro — `design-system/generate.py`
+   (`FONT_SIZE_EXCEPTIONS`) la aplica y falla si cualquier otro valor
+   aparece. Sin impacto funcional.
+2. **Tamaño real en bytes, incluida una segunda excepción no prevista
+   por el plan.** `05-plan-correctivo.md` §M2 esperaba "todos < 60000
+   salvo display-40". Medido (`stat -f %z`): `moonlit-body-18.fnt`
+   26434, `moonlit-headline-22.fnt` 41375, `moonlit-label-18.fnt`
+   27190, `moonlit-list-20.fnt` 34048, `moonlit-listsel-20.fnt` 36006 —
+   los 5 bajo 60000 como esperaba el plan. Pero **`moonlit-title-28.fnt`
+   también excede el umbral: 72187 bytes**, no anticipado por el plan
+   (solo excluía display-40, que da 137979). Causa: la estimación de
+   D-004 ("tamaños reales 9,6–34,8 KB por fuente") se midió con un
+   conjunto de prueba más chico que el rango decimal 32–383 completo
+   que D-007 exige aquí; a Libre Baskerville 28px con el charset
+   completo le corresponden más glifos reales que a esa muestra. Sin
+   consecuencia práctica: `font_load_ex(path, 0, 400)` (`moonlit_fonts.c`)
+   carga el archivo completo sin el límite de 10 KB de `MAX_FONT_SIZE`
+   (M-010 ya lo estableció para Selawik-display-48, 189 KB, mayor
+   todavía). HIPÓTESIS C.1 de `04-auditoria-brecha.md` queda cerrada
+   con estos números reales, no con la estimación original.
+
+Implementada en M2: `design-system/generate.py` (`--fonts`,
+`FONT_SIZE_EXCEPTIONS`), `firmware/tools/check_fonts.py`,
+`firmware/assets/fonts/moonlit-*.fnt`.

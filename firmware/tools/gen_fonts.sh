@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Convierte las fuentes Selawik vendoreadas a .fnt de Rockbox (formato
-# RB12) con tools/convttf, un rol/tamaño a la vez -- ver DECISIONS.md
-# M-010.
-#
-# Requiere tools/convttf compilado (requiere freetype2 vía pkg-config,
-# `brew install freetype pkg-config`); se compila aquí mismo si falta.
+# Wrapper de design-system/generate.py --fonts (M2). La logica real
+# (rango decimal 32-383 de convttf, D-007; verificacion de cabecera
+# RB12; excepcion de tamano D-032) vive en ese script -- este archivo
+# solo resuelve el venv y lo invoca, para que quien conocia
+# `firmware/tools/gen_fonts.sh` de antes de M2 lo siga encontrando ahi.
 #
 # Uso:
 #   firmware/tools/gen_fonts.sh
@@ -12,58 +11,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SRC_DIR="$ROOT_DIR/firmware/rockbox"
-FONTS_SRC="$ROOT_DIR/firmware/assets/fonts-src"
-FONTS_OUT="$ROOT_DIR/firmware/assets/fonts"
-CONVTTF="$SRC_DIR/tools/convttf"
+VENV_PY="$ROOT_DIR/design-system/.venv/bin/python3"
 
-if [[ ! -x "$CONVTTF" ]]; then
-  echo "==> Compilando tools/convttf"
-  ( cd "$SRC_DIR/tools" && \
-    cc -lm -std=c99 -O2 -Wall -g convttf.c -o convttf \
-      $(pkg-config --cflags --libs freetype2) )
+if [[ ! -x "$VENV_PY" ]]; then
+  echo "==> Creando design-system/.venv (falta pillow para --icons/--logo mas adelante)"
+  python3 -m venv "$ROOT_DIR/design-system/.venv"
+  "$VENV_PY" -m pip install --quiet pillow
 fi
 
-mkdir -p "$FONTS_OUT"
-
-# rol:archivo-fuente:tamaño-px -- ver DECISIONS.md M-010
-ROLES=(
-  "display:Selawik-Light.ttf:48:1"
-  "title:Selawik-Light.ttf:28:1"
-  "list:Selawik-Regular.ttf:20:1"
-  "listsel:Selawik-Semibold.ttf:20:1"
-  "caption:Selawik-Regular.ttf:14:0"
-)
-
-# Rango de caracteres: latin basico + Latin-1 Supplement + Latin
-# Extended-A (0x20-0x17F) -- suficiente para espanol con acentos/enie,
-# sin cargar el conjunto completo de simbolos de Selawik.
-#
-# Sin "-x" (trim horizontal): convttf recorta hasta 2px por lado de
-# TODO glifo "casi vacio", incluido el espacio (0x20), que a 20px pasa
-# de ~5px a ~1px de ancho -- el texto se ve sin espacios. Aura-Firmware
-# tampoco lo usa (design-system/generate.py: solo "-p <size>"). Ver
-# DECISIONS.md M-028.
-START=0x20
-LIMIT=0x17F
-DEFAULT=0x3F # '?'
-
-# Cuarto campo = "-c N", separación extra entre glifos (R5-F2, M-082).
-# Rockbox no tiene kerning por pares, así que es lo único ajustable: a
-# 48px Light la "ll" de "pantalla" se fundía en un solo trazo (bearings
-# laterales de Selawik que redondean a 0 al rasterizar), y 1px lo separa
-# sin abrir el texto de más. Fracciones como 0.5 no sirven: el avance se
-# redondea a píxel entero y el medio píxel se pierde. La caption de 14px
-# se deja en 0 -- no hay queja ahí y +1px por glifo es proporcionalmente
-# mucho a ese tamaño.
-for entry in "${ROLES[@]}"; do
-  IFS=':' read -r role srcfont size spacing <<< "$entry"
-  in="$FONTS_SRC/$srcfont"
-  out="$FONTS_OUT/metro-$role-$size.fnt"
-  echo "==> $role: $srcfont @ ${size}px, -c ${spacing} -> $(basename "$out")"
-  "$CONVTTF" -p "$size" -s "$START" -l "$LIMIT" -D "$DEFAULT" \
-    -c "$spacing" -o "$out" "$in"
-done
-
-echo "==> Listo: $FONTS_OUT"
-ls -la "$FONTS_OUT"
+exec "$VENV_PY" "$ROOT_DIR/design-system/generate.py" --fonts

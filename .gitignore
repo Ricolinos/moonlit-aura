@@ -13,11 +13,12 @@ firmware/dist/*
 .DS_Store
 *.dSYM/
 
+# Cache de bytecode de Python (herramientas en firmware/tools/, design-system/)
+__pycache__/
+*.pyc
+
 # venv usado por firmware/tools/gen_logo.py (Pillow) -- ver DECISIONS.md M-002
 firmware/tools/.venv/
-
-# Fuentes fuente vendoreadas (TTF de Selawik) — SÍ se versionan, no ignorar
-!firmware/assets/fonts-src/
 
 # Binarios de los tests host-side (make -C firmware/rockbox/apps/metro/test)
 firmware/rockbox/apps/metro/test/build/

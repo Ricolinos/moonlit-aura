@@ -3,13 +3,16 @@
 
 Lee tokens.json (unica fuente de verdad, D-010) y produce:
 
-  - apps/metro/moonlit_tokens.h  Header C con los 16 roles MD3 de color
-                                  (D-028) por esquema (night/dawn, D-027),
-                                  presets de acento, espaciado, forma,
-                                  elevacion y movimiento.
+  - apps/metro/moonlit_tokens.h    Header C con los 16 roles MD3 de color
+                                    (D-028) por esquema (night/dawn, D-027),
+                                    presets de acento, espaciado, forma,
+                                    elevacion y movimiento (--header).
+  - firmware/assets/fonts/*.fnt    Las 7 fuentes bitmap MD3 (Libre
+                                    Baskerville + Montserrat estatica,
+                                    D-004), via tools/convttf con rango
+                                    decimal 32-383 (D-007) (--fonts).
 
-Este hito (M1) solo implementa --header y --contrast. Fuentes (--fonts),
-iconos (--icons) y logotipo (--logo) llegan en M2/M3/M9 como subcomandos
+Iconos (--icons) y logotipo (--logo) llegan en M3/M9 como subcomandos
 nuevos de este mismo archivo -- no se porta nada del generador de
 Aura-Firmware mas alla de la forma de tokens.json y el patron
 dict-plano -> #define de generate_header()/generate_aura_ds_defines()
@@ -17,12 +20,17 @@ dict-plano -> #define de generate_header()/generate_aura_ds_defines()
 """
 import argparse
 import json
+import struct
+import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 TOKENS_PATH = ROOT / "tokens.json"
 HEADER_OUT = ROOT.parent / "firmware" / "rockbox" / "apps" / "metro" / "moonlit_tokens.h"
+ROCKBOX_TOOLS = ROOT.parent / "firmware" / "rockbox" / "tools"
+CONVTTF = ROCKBOX_TOOLS / "convttf"
+FONTS_OUT = ROOT.parent / "firmware" / "assets" / "fonts"
 
 SCHEMES = ("night", "dawn")
 
@@ -165,6 +173,103 @@ def generate_header(tokens):
     HEADER_OUT.write_text("\n".join(lines))
 
 
+# D-007: rango decimal 32-383 (charmap 0x20-0x17F expresado en decimal,
+# nunca hex -- convttf.c:1101,1113 usa atoi()/atol(), que no entienden
+# "0x..." y truncan a 0). '?' = 63 decimal como defaultchar.
+FONT_CHARSET_START = 32
+FONT_CHARSET_LIMIT = 383
+FONT_CHARSET_DEFAULT = 63
+FONT_EXPECTED_SIZE = FONT_CHARSET_LIMIT - FONT_CHARSET_START + 1  # 352
+
+# D-032: Libre Baskerville-Regular no trae el glifo U+017F ("long s",
+# codigo 383 del rango 32-383) -- convttf.c:693 salta cualquier codigo
+# sin glifo al calcular lastchar, asi que topa en U+017E (382) y
+# size = 382-32+1 = 351 en vez de 352. Montserrat si lo trae completo.
+# Caracter historico sin uso en espanol/UI (metro_lang.c) -- sin
+# impacto funcional. Excepcion documentada, no un umbral relajado.
+FONT_SIZE_EXCEPTIONS = {
+    "libre-baskerville-regular": FONT_EXPECTED_SIZE - 1,  # 351
+}
+
+RB12_HEADER = struct.Struct("<4sHHHHiiiiii")
+
+
+def ensure_convttf():
+    if CONVTTF.exists():
+        return
+    print("==> Compilando convttf (herramienta de fuentes de Rockbox)...")
+    freetype_flags = subprocess.run(
+        ["pkg-config", "--cflags", "--libs", "freetype2"],
+        capture_output=True, text=True,
+    )
+    if freetype_flags.returncode != 0:
+        die("pkg-config freetype2 no disponible (brew install freetype pkg-config)")
+    cmd = (
+        ["cc", "-lm", "-std=c99", "-O2", "-Wall", "-g", "convttf.c", "-o", "convttf"]
+        + freetype_flags.stdout.split()
+    )
+    result = subprocess.run(cmd, cwd=ROCKBOX_TOOLS)
+    if result.returncode != 0 or not CONVTTF.exists():
+        die("no se pudo compilar tools/convttf")
+
+
+def read_rb12_header(path):
+    with open(path, "rb") as f:
+        data = f.read(RB12_HEADER.size)
+    if len(data) < RB12_HEADER.size:
+        die(f"{path}: archivo mas chico que la cabecera RB12 ({len(data)} bytes)")
+    (magic, maxwidth, height, ascent, depth, firstchar, defaultchar,
+     size, bits_size, noffset, nwidth) = RB12_HEADER.unpack(data)
+    if magic != b"RB12":
+        die(f"{path}: cabecera invalida (magic={magic!r}, se esperaba RB12)")
+    return {
+        "maxwidth": maxwidth, "height": height, "ascent": ascent, "depth": depth,
+        "firstchar": firstchar, "defaultchar": defaultchar, "size": size,
+        "bits_size": bits_size, "noffset": noffset, "nwidth": nwidth,
+    }
+
+
+def font_filename(role_name, role):
+    slug = role.get("file_slug", role_name)
+    return f"moonlit-{slug}-{role['px']}.fnt"
+
+
+def generate_fonts(tokens):
+    print("==> Generando fuentes bitmap (firmware/assets/fonts/*.fnt)")
+    ensure_convttf()
+    FONTS_OUT.mkdir(parents=True, exist_ok=True)
+
+    faces = tokens["font"]["faces"]
+    type_scale = tokens["type_scale"]
+
+    for role_name, role in type_scale.items():
+        if role_name == "comment":
+            continue
+        ttf_path = ROOT / faces[role["face"]]
+        if not ttf_path.exists():
+            die(f"falta {ttf_path} (rol '{role_name}', ver design-system/vendor/)")
+        out_fnt = FONTS_OUT / font_filename(role_name, role)
+        cmd = [
+            str(CONVTTF), "-p", str(role["px"]),
+            "-s", str(FONT_CHARSET_START), "-l", str(FONT_CHARSET_LIMIT),
+            "-D", str(FONT_CHARSET_DEFAULT), "-c", str(role["spacing"]),
+            "-o", str(out_fnt), str(ttf_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0 or not out_fnt.exists():
+            die(f"convttf fallo para {role_name}@{role['px']}px:\n{result.stdout}\n{result.stderr}")
+
+        header = read_rb12_header(out_fnt)
+        expected_size = FONT_SIZE_EXCEPTIONS.get(role["face"], FONT_EXPECTED_SIZE)
+        if header["firstchar"] != FONT_CHARSET_START:
+            die(f"{out_fnt}: firstchar={header['firstchar']}, se esperaba {FONT_CHARSET_START} (D-007)")
+        if header["size"] != expected_size:
+            die(f"{out_fnt}: size={header['size']}, se esperaba {expected_size} (D-007/D-032)")
+
+        print(f"   {role_name} ({role['face']} @ {role['px']}px) -> {out_fnt.name} "
+              f"(firstchar={header['firstchar']}, size={header['size']}, height={header['height']})")
+
+
 # WCAG 2.x contraste relativo (formula estandar, sRGB -> luminancia lineal).
 def _srgb_channel(c):
     c = c / 255.0
@@ -218,10 +323,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--header", action="store_true", help="genera apps/metro/moonlit_tokens.h")
     parser.add_argument("--contrast", action="store_true", help="verifica contraste WCAG on_surface/on_surface_variant vs surface")
+    parser.add_argument("--fonts", action="store_true", help="genera firmware/assets/fonts/moonlit-*.fnt")
     args = parser.parse_args()
 
-    if not args.header and not args.contrast:
-        parser.error("nada que hacer: pasa --header y/o --contrast")
+    if not (args.header or args.contrast or args.fonts):
+        parser.error("nada que hacer: pasa --header, --contrast y/o --fonts")
 
     tokens = json.loads(TOKENS_PATH.read_text())
 
@@ -229,6 +335,8 @@ def main():
         generate_header(tokens)
     if args.contrast:
         check_contrast(tokens)
+    if args.fonts:
+        generate_fonts(tokens)
 
     print("==> listo")
 
