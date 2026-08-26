@@ -469,7 +469,7 @@ static void draw_mode_row(struct mp3entry *id3)
     x += NP_MODE_PITCH;
     metro_widgets_draw_icon(MOONLIT_ICON_REPEAT, x, NP_MODE_Y, repeat ? on : off);
     if (global_settings.repeat_mode == REPEAT_ONE)
-        metro_draw_text(MFONT_CAPTION, x + METRO_WIDGETS_ICON_SIZE + 2, NP_MODE_Y,
+        metro_draw_text(MFONT_LABEL, x + METRO_WIDGETS_ICON_SIZE + 2, NP_MODE_Y,
                         "1", on);
 }
 
@@ -610,15 +610,15 @@ static void draw_progress_and_times(struct mp3entry *id3)
     metro_draw_progress(NP_LEFT_X, NP_BAR_Y, bar_w, NP_BAR_H, pct);
 
     format_time(elapsed_buf, sizeof(elapsed_buf), (long)id3->elapsed);
-    metro_draw_text(MFONT_CAPTION, NP_LEFT_X, NP_TIMES_Y, elapsed_buf,
+    metro_draw_text(MFONT_LABEL, NP_LEFT_X, NP_TIMES_Y, elapsed_buf,
                     metro_color_secondary());
 
     /* Derecha: duración total (la maqueta muestra dos cifras fijas a
      * los extremos; restante cambiaría cada segundo y "baila"). */
     format_time(total_buf, sizeof(total_buf), (long)id3->length);
-    lcd_setfont(metro_font_id(MFONT_CAPTION));
+    lcd_setfont(metro_font_id(MFONT_LABEL));
     lcd_getstringsize((const unsigned char *)total_buf, &w, &h);
-    metro_draw_text(MFONT_CAPTION, LCD_WIDTH - NP_LEFT_X - w, NP_TIMES_Y, total_buf,
+    metro_draw_text(MFONT_LABEL, LCD_WIDTH - NP_LEFT_X - w, NP_TIMES_Y, total_buf,
                     metro_color_secondary());
 }
 

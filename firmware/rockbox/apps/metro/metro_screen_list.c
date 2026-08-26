@@ -31,8 +31,31 @@
 #include "metro_motion.h"
 #include "metro_transitions.h"
 #include "metro_music.h" /* R4/FA-8: metro_music_playpause() */
+#include "moonlit_palette.h" /* moonlit (D-011, M4): divisores outline_variant */
 
 static metro_nav_t s_nav;
+
+/* moonlit (D-011, M4): un lcd_hline por borde entre filas visibles,
+ * en outline_variant (D-028) -- se dibuja ANTES que metro_draw_rows(),
+ * asi que la tarjeta de la fila seleccionada (metro_draw_rows_ex(),
+ * metro_draw.c) lo tapa dentro de su propio slot y no compite con sus
+ * bordes de luz/sombra. Solo aplica a listas de texto -- las
+ * cuadriculas (tile_cols > 0) no llaman a esto. */
+static void draw_row_dividers(int count)
+{
+    int i, y = METRO_DRAW_ROWS_FIRST_Y - 4;
+    int visible = METRO_DRAW_ROWS_VISIBLE + 1;
+
+    if (visible > count)
+        visible = count;
+
+    lcd_set_foreground(moonlit_color(MROLE_OUTLINE_VARIANT));
+    for (i = 1; i < visible; i++)
+    {
+        y += METRO_DRAW_ROW_PITCH;
+        lcd_hline(METRO_DRAW_LEFT_X, LCD_WIDTH - METRO_DRAW_LEFT_X, y);
+    }
+}
 
 /* F10: floating index letter (S1.4) -- shown for 600ms after a fast
  * scroll (steps >= 3) lands on a new row, using that row's own first
@@ -138,7 +161,10 @@ void metro_screen_list_show(void)
     else if (pivot->tile_cols > 0)
         metro_draw_tiles(pivot, metro_nav_first_visible(&s_nav), metro_nav_sel(&s_nav), 0);
     else
+    {
+        draw_row_dividers(pivot->count(pivot->ctx));
         metro_draw_rows(pivot, metro_nav_first_visible(&s_nav), metro_nav_sel(&s_nav), 0);
+    }
 
     /* R2-F2/DD-7: the floating index letter doesn't apply to grids
      * (also never gets armed for one -- see metro_screen_list_handle()) */

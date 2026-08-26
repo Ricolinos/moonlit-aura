@@ -29,8 +29,11 @@
 #include "audio.h"
 #include "metro_theme.h"
 #include "metro_lang.h"
+#include "moonlit_elevation.h"
 
-#define METRO_HEADER_HEIGHT 24
+/* moonlit (D-011, M4): 20px, surface_container_lowest -- ver
+ * metro_draw_header(). */
+#define METRO_HEADER_HEIGHT 20
 
 void metro_draw_clear(void)
 {
@@ -160,16 +163,21 @@ void metro_draw_header(const char *page_title)
     int clock_x = LCD_WIDTH - 40;
     int status = audio_status();
 
-    metro_draw_text(MFONT_CAPTION, METRO_DRAW_LEFT_X, METRO_HEADER_TEXT_Y, page_title,
+    /* moonlit (D-011, M4): barra de estado propia, surface_container_lowest
+     * (D-028) -- antes se leia directo sobre el fondo plano de la
+     * pantalla (metro_color_bg()). Sin esquinas (toca el borde superior). */
+    moonlit_draw_surface(0, 0, LCD_WIDTH, METRO_HEADER_HEIGHT, MSURFACE_LOWEST, 0);
+
+    metro_draw_text(MFONT_LABEL, METRO_DRAW_LEFT_X, METRO_HEADER_TEXT_Y, page_title,
                      metro_color_secondary());
 
     if (now != NULL)
     {
-        lcd_setfont(metro_font_id(MFONT_CAPTION));
+        lcd_setfont(metro_font_id(MFONT_LABEL));
         snprintf(timebuf, sizeof(timebuf), "%02d:%02d", now->tm_hour, now->tm_min);
         lcd_getstringsize((const unsigned char *)timebuf, &w, &h);
         clock_x = LCD_WIDTH - 40 - w;
-        metro_draw_text(MFONT_CAPTION, clock_x, METRO_HEADER_TEXT_Y, timebuf,
+        metro_draw_text(MFONT_LABEL, clock_x, METRO_HEADER_TEXT_Y, timebuf,
                          metro_color_secondary());
     }
 
@@ -248,6 +256,24 @@ void metro_draw_rows_ex(const struct metro_pivot *pivot, int first, int sel,
 
         pivot->get_row(pivot->ctx, i, &row);
 
+        /* moonlit (D-011, M4): capa de estado MD3 -- la fila
+         * seleccionada se eleva sobre una tarjeta surface_container_high
+         * (D-028) con un marcador de 3px en primary a la izquierda, en
+         * vez de solo cambiar el color del texto (WP7). El texto se
+         * dibuja despues, encima (metro_draw_text* ya usa DRMODE_FG). */
+        if (selected)
+        {
+            /* Sin radio -- la tarjeta llega de borde a borde (x=0..320,
+             * como el resaltado de fila de siempre); un radio aqui
+             * dejaria una esquina flotando en el borde de pantalla. El
+             * marcador arranca en x=1, no x=0, para no tapar el propio
+             * borde de luz de moonlit_draw_surface() (D-012). */
+            moonlit_draw_surface(0, row_y - 4, LCD_WIDTH, METRO_ROW_PITCH,
+                                  MSURFACE_HIGH, 0);
+            lcd_set_foreground(moonlit_color(MROLE_PRIMARY));
+            lcd_fillrect(1, row_y - 4, 3, METRO_ROW_PITCH);
+        }
+
         /* F10: clip the title so it can never run into the
          * right-aligned subtitle (long filenames especially --
          * videos/photos, up to METRO_FSUTIL_NAME_LEN bytes). Subtitle
@@ -258,9 +284,9 @@ void metro_draw_rows_ex(const struct metro_pivot *pivot, int first, int sel,
         if (row.subtitle)
         {
             int sub_w, sub_h;
-            lcd_setfont(metro_font_id(MFONT_CAPTION));
+            lcd_setfont(metro_font_id(MFONT_LABEL));
             lcd_getstringsize((const unsigned char *)row.subtitle, &sub_w, &sub_h);
-            metro_draw_text(MFONT_CAPTION, LCD_WIDTH - 12 - sub_w, row_y + 4,
+            metro_draw_text(MFONT_LABEL, LCD_WIDTH - 12 - sub_w, row_y + 4,
                              row.subtitle, metro_color_tertiary());
             title_clip_w = LCD_WIDTH - 12 - sub_w - x - 8;
         }
@@ -383,15 +409,15 @@ static void draw_tile_caption(const struct metro_pivot *pivot, int sel, int coun
     {
         int sub_w, sub_h;
 
-        lcd_setfont(metro_font_id(MFONT_CAPTION));
+        lcd_setfont(metro_font_id(MFONT_LABEL));
         lcd_getstringsize((const unsigned char *)row.subtitle, &sub_w, &sub_h);
-        metro_draw_text(MFONT_CAPTION, LCD_WIDTH - METRO_ROWS_LEFT_X - sub_w,
+        metro_draw_text(MFONT_LABEL, LCD_WIDTH - METRO_ROWS_LEFT_X - sub_w,
                          y + 4, row.subtitle, metro_color_tertiary());
         title_clip_w = LCD_WIDTH - METRO_ROWS_LEFT_X - sub_w
                        - METRO_ROWS_LEFT_X - 8;
     }
 
-    metro_draw_text_cut_right(MFONT_CAPTION, METRO_ROWS_LEFT_X, y + 4,
+    metro_draw_text_cut_right(MFONT_LABEL, METRO_ROWS_LEFT_X, y + 4,
                                row.title, metro_color_fg(), title_clip_w);
 }
 

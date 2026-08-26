@@ -350,9 +350,9 @@ static void draw_centered_message(enum metro_lang_id id)
     const char *text = metro_lang_str(id);
     int w, h;
 
-    lcd_setfont(metro_font_id(MFONT_CAPTION));
+    lcd_setfont(metro_font_id(MFONT_LABEL));
     lcd_getstringsize((const unsigned char *)text, &w, &h);
-    metro_draw_text(MFONT_CAPTION, (LCD_WIDTH - w) / 2, (LCD_HEIGHT - h) / 2,
+    metro_draw_text(MFONT_LABEL, (LCD_WIDTH - w) / 2, (LCD_HEIGHT - h) / 2,
                      text, metro_color_fg());
 }
 

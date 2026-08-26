@@ -37,13 +37,6 @@ enum metro_font_role {
     MFONT_COUNT
 };
 
-/* Compat temporal (M2): los 19 sitios que hoy dicen MFONT_CAPTION
- * (header/subtitles/values, antes Regular 14px de la familia previa)
- * compilan sin tocarlos -- el rol MD3 mas cercano es MFONT_BODY (18px,
- * ningun rol < 18px per D-005). Se retira en M4 cuando esos sitios se
- * re-anotan con su rol MD3 real (label en la mayoria de los casos). */
-#define MFONT_CAPTION MFONT_BODY
-
 /* Loads all 7 roles from FONT_DIR ("/.rockbox/fonts/moonlit-*.fnt").
  * Safe to call more than once. Call once from metro_main() before the
  * first screen draws. */

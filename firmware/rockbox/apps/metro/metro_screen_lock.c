@@ -188,7 +188,7 @@ static void draw_entry(enum lock_mode mode, bool mismatch)
         }
     }
 
-    metro_draw_text(MFONT_CAPTION, 12, LOCK_HINT_Y, metro_lang_str(hint_id),
+    metro_draw_text(MFONT_LABEL, 12, LOCK_HINT_Y, metro_lang_str(hint_id),
                      metro_color_secondary());
     lcd_update();
 }

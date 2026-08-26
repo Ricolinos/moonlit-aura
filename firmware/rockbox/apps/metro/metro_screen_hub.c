@@ -43,6 +43,7 @@
 #include "metro_theme.h"
 #include "metro_lang.h"
 #include "metro_keymap.h"
+#include "moonlit_elevation.h" /* moonlit (D-011, M4): tarjeta de fila seleccionada */
 
 #define METRO_HUB_FIRST_Y 32
 #define METRO_HUB_PITCH   52
@@ -835,6 +836,19 @@ static int breath_alpha(long t)
     return 256 - (int)(t * 256 / METRO_HUB_BREATH_FADE);
 }
 
+/* moonlit (D-011, M4): misma capa de estado MD3 que metro_draw_rows_ex()
+ * (metro_draw.c) -- surface_container_high detras de la fila elegida,
+ * marcador de 3px en primary a la izquierda (arrancando en x=1 para no
+ * tapar el borde de luz de moonlit_draw_surface(), D-012). El hub tiene
+ * su propio bucle de dibujo (no pasa por metro_draw_rows_ex()), asi que
+ * necesita su propia llamada. */
+static void draw_hub_row_card(int y)
+{
+    moonlit_draw_surface(0, y - 8, LCD_WIDTH, METRO_HUB_PITCH, MSURFACE_HIGH, 0);
+    lcd_set_foreground(moonlit_color(MROLE_PRIMARY));
+    lcd_fillrect(1, y - 8, 3, METRO_HUB_PITCH);
+}
+
 static void draw_now_playing_row(int y, bool selected)
 {
     struct metro_row row;
@@ -893,6 +907,9 @@ void metro_screen_hub_show(void)
         struct metro_row row;
         bool selected = (i == sel);
 
+        if (selected)
+            draw_hub_row_card(y);
+
         if (playing && i == 0)
         {
             draw_now_playing_row(y, selected);
@@ -927,6 +944,8 @@ bool metro_screen_hub_tick(void)
      * 48 px y sube 150 KB al LCD por cuadro). */
     lcd_set_foreground(metro_color_bg());
     lcd_fillrect(0, METRO_HUB_FIRST_Y, LCD_WIDTH, METRO_HUB_PITCH);
+    if (metro_nav_sel(nav) == 0)
+        draw_hub_row_card(METRO_HUB_FIRST_Y);
     draw_now_playing_row(METRO_HUB_FIRST_Y, metro_nav_sel(nav) == 0);
     lcd_update_rect(0, METRO_HUB_FIRST_Y, LCD_WIDTH, METRO_HUB_PITCH);
     return true;

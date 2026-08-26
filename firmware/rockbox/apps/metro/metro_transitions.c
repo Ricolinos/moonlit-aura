@@ -73,6 +73,15 @@ static void drain_button_queue_if_full(void)
         button_clear_queue();
 }
 
+/* moonlit (D-011, M4): duracion de PUSH/POP bajo animations=all, desde
+ * design-system/tokens.json:motion.transition_ms (220ms) -- literal, no
+ * macro importada: este archivo no puede incluir moonlit_tokens.h
+ * (moonlit_palette.c/.h es su unico includer, M4). HZ=100 fijo en todo
+ * Rockbox (firmware/kernel/include/tick.h), asi que 3 ticks de
+ * frame_delay = 30ms/cuadro; 220/30 = 7.33 -> 7 cuadros (210ms real,
+ * antes 8 cuadros = 240ms sin relacion con ningun token). */
+#define METRO_TRANSITION_MS 220
+
 struct level_spec {
     int frames;
     int frame_delay;
@@ -85,7 +94,7 @@ static struct level_spec anim_level_spec(enum metro_anim_level level)
     switch (level)
     {
         case METRO_ANIM_ALL:
-            s.frames = 8;
+            s.frames = 7; /* == METRO_TRANSITION_MS / (3 ticks * 10ms), redondeado */
             s.frame_delay = 3;
             break;
         case METRO_ANIM_MINIMAL:
@@ -191,7 +200,7 @@ void metro_transitions_slide(metro_transitions_draw_fn draw_to, int direction)
  * fuentes que Metro ya tiene, nunca escalado por muestreo (son fuentes
  * bitmap de tamaño fijo y un escalado falso se ve sucio). Aquí el
  * escalón es uno solo -- MFONT_LIST_SEL (20 px, la fila seleccionada)
- * a MFONT_CAPTION (14 px, la ceja) -- y no los tres que DD-9 suponía,
+ * a MFONT_LABEL (18 px, la ceja, moonlit M4) -- y no los tres que DD-9 suponía,
  * porque el destino real resultó ser la ceja y no el título grande:
  * ver docs/DESVIACIONES.md R3-7. El color acompaña al mismo salto
  * (fg -> secondary), en el mismo cuadro, para que el cambio se lea
@@ -226,7 +235,7 @@ static void erase_dest_eyebrow(void)
 {
     int w, h;
 
-    lcd_setfont(metro_font_id(MFONT_CAPTION));
+    lcd_setfont(metro_font_id(MFONT_LABEL));
     lcd_getstringsize((const unsigned char *)s_cont_text, &w, &h);
 
     metro_fb_fill_rect(s_fb_to, METRO_DRAW_LEFT_X, METRO_CONTINUUM_TO_Y,
@@ -251,7 +260,7 @@ static void draw_continuum_frame(int i, int frames)
     int y = s_cont_from_y + ((METRO_CONTINUUM_TO_Y - s_cont_from_y) * p) / 256;
     bool landed = (p >= 128);
 
-    metro_draw_text(landed ? MFONT_CAPTION : MFONT_LIST_SEL,
+    metro_draw_text(landed ? MFONT_LABEL : MFONT_LIST_SEL,
                      METRO_DRAW_LEFT_X, y, s_cont_text,
                      landed ? metro_color_secondary() : metro_color_fg());
 }

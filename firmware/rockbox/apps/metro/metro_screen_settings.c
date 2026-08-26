@@ -361,10 +361,9 @@ static void general_on_select(void *ctx, int index)
 
 /* --- display: theme, accent, brightness, backlight --------------------- */
 
+/* moonlit (D-028, M4): 4 presets MD3 en vez de los 10 acentos WP7. */
 static const enum metro_lang_id accent_names[METRO_ACCENT_COUNT] = {
-    LANG_ACCENT_BLUE, LANG_ACCENT_BROWN, LANG_ACCENT_GREEN, LANG_ACCENT_LIME,
-    LANG_ACCENT_MAGENTA, LANG_ACCENT_MANGO, LANG_ACCENT_PINK,
-    LANG_ACCENT_PURPLE, LANG_ACCENT_RED, LANG_ACCENT_TEAL,
+    LANG_ACCENT_MOONSTONE, LANG_ACCENT_TIDE, LANG_ACCENT_EMBER, LANG_ACCENT_MOSS,
 };
 
 /* A handful of presets rather than the raw 1..MAX_BRIGHTNESS_SETTING

@@ -313,6 +313,8 @@ metro/metro_main.c
 metro/metro_screen_splash.c
 metro/moonlit_fonts.c /* moonlit (D-032): reemplaza metro/metro_fonts.c, 7 roles MD3 */
 metro/metro_theme.c
+metro/moonlit_palette.c /* moonlit (D-011, D-028, M4): roles MD3 + presets, unico includer de moonlit_tokens.h */
+metro/moonlit_elevation.c /* moonlit (D-011, D-012, M4): tarjetas de elevacion tonal */
 metro/metro_draw.c
 metro/metro_screen_specimen.c
 metro/metro_nav.c

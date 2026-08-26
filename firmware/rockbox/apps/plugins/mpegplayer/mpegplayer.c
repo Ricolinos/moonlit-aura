@@ -105,12 +105,19 @@
 #include "video_out.h"
 #include "stream_thread.h"
 #include "stream_mgr.h"
-/* moonlit (D-025): relative path instead of relying on the -I that
- * mpegplayer.make adds -- tools/make.inc generates make.dep with the
- * global CFLAGS only (-MG -MM), so a bare "metro_palette.h" became a
- * phantom $(BUILDDIR)/metro_palette.h target and a fresh configure
- * could not build. Header is still the palette single source. */
-#include "../../metro/metro_palette.h"
+/* moonlit (D-025, D-035): metro_palette.h no existe mas -- M4 lo
+ * retira en favor de moonlit_palette.c/.h, pero ese modulo tiene un
+ * .c (funciones, no solo #define) y un plugin de Rockbox no enlaza
+ * objetos de apps/metro/ (solo la tabla rb->, ver el comentario de
+ * mpegplayer.make junto a -I$(APPSDIR)/metro). moonlit_tokens.h sigue
+ * siendo un header puro de #define -- lo mismo que metro_palette.h
+ * era -- asi que es el que este plugin puede incluir directo (D-035:
+ * excepcion documentada a "moonlit_palette.c es el unico includer de
+ * moonlit_tokens.h", que M4 fija para apps/metro/, no para plugins).
+ * Ruta relativa por la misma razon que D-025: tools/make.inc genera
+ * make.dep con los CFLAGS globales solamente (-MG -MM), sin el -I que
+ * mpegplayer.make agrega. */
+#include "../../metro/moonlit_tokens.h"
 
 
 /* button definitions */
@@ -1377,13 +1384,15 @@ static void osd_text_init(void)
 /* R2-F4/DD-11 (M-059): reads Metro's own personalization once, at
  * osd_init() time -- ported from Aura-Firmware's aura_load_personalization()
  * (consulted read-only as mechanism reference), but reading METRO's
- * schema (theme:0/1, accent:0..9, language:0/1 -- apps/metro/metro_settings.c)
+ * schema (theme:0/1, accent:0..3, language:0/1 -- apps/metro/metro_settings.c)
  * instead of Aura's (theme/theme_id/accent_rgb24, plus a whole
  * per-style theme.cfg file for custom themes). Metro has no installable
- * themes (M-012) -- colors only ever come from the 10 compiled accents
- * in metro_palette.h plus the compiled dark/light base tones, same
- * source metro_theme.c itself draws from; a plugin can't include or
- * link against that module, only the pure-header palette it reads. */
+ * themes (M-012) -- moonlit (D-035, M4): colors now come from the 4
+ * MD3 accent presets (moonstone/tide/ember/moss) plus the compiled
+ * night/dawn surface tones in moonlit_tokens.h, same source
+ * moonlit_palette.c itself draws from; a plugin can't include or link
+ * against that module (it has a .c), only the pure-header tokens it
+ * reads directly. */
 #define METRO_CFG_PATH "/.rockbox/aura/aura.cfg"
 
 static unsigned s_metro_secondary;
@@ -1397,10 +1406,12 @@ static int s_metro_language; /* 0=ES, 1=EN -- METRO_LANG_ES/EN */
  * blank. Same load-once-at-init, read-via-accessor shape as
  * metro_load_personalization() itself (see the block comment above
  * metro_osd_colors()). */
-/* moonlit (D-032): metro-caption-14.fnt no existe mas (M2 retira los
- * 5 roles de la familia previa) -- MFONT_CAPTION es ahora #define
- * MFONT_BODY en apps/metro/moonlit_fonts.h, asi que el equivalente
- * real es moonlit-body-18.fnt, no un nombre "caption" nuevo. */
+/* moonlit (D-032, D-038): metro-caption-14.fnt no existe mas (M2
+ * retira los 5 roles de la familia previa); su rol MD3 real es
+ * MFONT_LABEL (M4 retiro el alias temporal MFONT_CAPTION), pero el OSD
+ * de video sigue cargando moonlit-body-18.fnt -- MFONT_BODY, no
+ * MFONT_LABEL -- porque ya estaba en uso desde M2 y no hay requisito de
+ * M4 que pida cambiarlo (alcance de este plugin, fuera de apps/metro/). */
 #define METRO_OSD_FONT_PATH FONT_DIR "/moonlit-body-18.fnt"
 static int s_metro_font_id = -1;
 
@@ -1453,38 +1464,42 @@ int metro_font_title(void)
     return s_metro_title_font_id >= 0 ? s_metro_title_font_id : FONT_UI;
 }
 
-/* Same order as apps/metro/metro_theme.c's accent_colors[] -- index
- * must match enum metro_accent there (0=blue .. 9=teal). */
-static const unsigned metro_accent_colors[10] = {
-    METRO_ACCENT_COLOR_BLUE,
-    METRO_ACCENT_COLOR_BROWN,
-    METRO_ACCENT_COLOR_GREEN,
-    METRO_ACCENT_COLOR_LIME,
-    METRO_ACCENT_COLOR_MAGENTA,
-    METRO_ACCENT_COLOR_MANGO,
-    METRO_ACCENT_COLOR_PINK,
-    METRO_ACCENT_COLOR_PURPLE,
-    METRO_ACCENT_COLOR_RED,
-    METRO_ACCENT_COLOR_TEAL,
+/* moonlit (D-035, M4): 4 presets MD3 en vez de los 10 acentos WP7 --
+ * mismo orden que enum metro_accent en apps/metro/metro_theme.h
+ * (0=moonstone .. 3=moss, D-028). 'primary' se tiñe distinto por
+ * esquema (MD3 real, no el mismo hex reflejado), asi que hacen falta
+ * dos tablas -- metro_load_personalization() elige una segun el tema. */
+#define MPEG_ACCENT_PRESET_COUNT 4
+static const unsigned metro_accent_colors_night[MPEG_ACCENT_PRESET_COUNT] = {
+    MOONLIT_NIGHT_MOONSTONE_PRIMARY,
+    MOONLIT_NIGHT_TIDE_PRIMARY,
+    MOONLIT_NIGHT_EMBER_PRIMARY,
+    MOONLIT_NIGHT_MOSS_PRIMARY,
+};
+static const unsigned metro_accent_colors_dawn[MPEG_ACCENT_PRESET_COUNT] = {
+    MOONLIT_DAWN_MOONSTONE_PRIMARY,
+    MOONLIT_DAWN_TIDE_PRIMARY,
+    MOONLIT_DAWN_EMBER_PRIMARY,
+    MOONLIT_DAWN_MOSS_PRIMARY,
 };
 
 /* Always leaves every osd.* color field valid -- falls back to the
- * compiled dark/magenta defaults on any missing file, missing key, or
- * malformed value (same "fallback de seguridad" criterion metro_theme.c
- * itself follows). */
+ * compiled night/moonstone defaults on any missing file, missing key,
+ * or malformed value (same "fallback de seguridad" criterion
+ * moonlit_palette.c itself follows). */
 static void metro_load_personalization(void)
 {
     int fd;
     char line[64];
     char *name, *value;
-    int theme_mode = 0; /* METRO_THEME_DARK, metro_theme.h's own default */
-    int accent = 4;     /* METRO_ACCENT_MAGENTA, metro_theme.h's own default */
+    int theme_mode = 0; /* METRO_THEME_DARK / noche, metro_theme.h's own default */
+    int accent = 0;     /* METRO_ACCENT_MOONSTONE, metro_theme.h's own default */
 
-    osd.bgcolor        = METRO_DARK_BG;
-    osd.fgcolor        = METRO_DARK_FG;
-    s_metro_secondary  = METRO_DARK_SECONDARY;
-    s_metro_tertiary   = METRO_DARK_TERTIARY;
-    osd.accent         = metro_accent_colors[4];
+    osd.bgcolor        = MOONLIT_NIGHT_SURFACE;
+    osd.fgcolor        = MOONLIT_NIGHT_ON_SURFACE;
+    s_metro_secondary  = MOONLIT_NIGHT_ON_SURFACE_VARIANT;
+    s_metro_tertiary   = MOONLIT_NIGHT_OUTLINE;
+    osd.accent         = metro_accent_colors_night[0];
     s_metro_language   = 0;
 
     fd = rb->open(METRO_CFG_PATH, O_RDONLY);
@@ -1506,16 +1521,19 @@ static void metro_load_personalization(void)
 
     rb->close(fd);
 
-    if (theme_mode == 1) /* METRO_THEME_LIGHT */
-    {
-        osd.bgcolor       = METRO_LIGHT_BG;
-        osd.fgcolor       = METRO_LIGHT_FG;
-        s_metro_secondary = METRO_LIGHT_SECONDARY;
-        s_metro_tertiary  = METRO_LIGHT_TERTIARY;
-    }
+    if (accent < 0 || accent >= MPEG_ACCENT_PRESET_COUNT)
+        accent = 0;
 
-    if (accent >= 0 && accent < 10)
-        osd.accent = metro_accent_colors[accent];
+    if (theme_mode == 1) /* METRO_THEME_LIGHT / amanecer */
+    {
+        osd.bgcolor       = MOONLIT_DAWN_SURFACE;
+        osd.fgcolor       = MOONLIT_DAWN_ON_SURFACE;
+        s_metro_secondary = MOONLIT_DAWN_ON_SURFACE_VARIANT;
+        s_metro_tertiary  = MOONLIT_DAWN_OUTLINE;
+        osd.accent        = metro_accent_colors_dawn[accent];
+    }
+    else
+        osd.accent = metro_accent_colors_night[accent];
 }
 
 /* Cheap accessors into the state metro_load_personalization() already

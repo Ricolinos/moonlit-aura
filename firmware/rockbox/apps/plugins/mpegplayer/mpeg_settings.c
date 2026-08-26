@@ -19,10 +19,10 @@ struct mpeg_settings settings;
  *   - Colors: Aura's aura_load_personalization() supports fully custom
  *     runtime themes (a whole theme.cfg file per style) because Aura
  *     has installable themes; Metro doesn't (M-012) -- metro_load_personalization()
- *     (mpegplayer.c) only ever picks among the 10 compiled accent
- *     colors in metro_palette.h plus the compiled dark/light base
- *     tones, matching exactly what metro_theme.c already does for the
- *     rest of the app.
+ *     (mpegplayer.c) only ever picks among the 4 compiled MD3 accent
+ *     presets in moonlit_tokens.h plus the compiled night/dawn surface
+ *     tones (moonlit D-035), matching exactly what moonlit_palette.c
+ *     already does for the rest of the app.
  *
  * The per-target MPEG_START_TIME_* button block (~400 lines, one #elif
  * per Rockbox target) that used to fill the top of this file, and

@@ -96,9 +96,9 @@ void metro_widgets_draw_empty_state(const char *message)
 
     metro_draw_tile(x, y, METRO_EMPTY_TILE_SIZE, " ");
 
-    lcd_setfont(metro_font_id(MFONT_CAPTION));
+    lcd_setfont(metro_font_id(MFONT_BODY));
     lcd_getstringsize((const unsigned char *)message, &w, &h);
-    metro_draw_text(MFONT_CAPTION, (LCD_WIDTH - w) / 2, y + METRO_EMPTY_TILE_SIZE + 16,
+    metro_draw_text(MFONT_BODY, (LCD_WIDTH - w) / 2, y + METRO_EMPTY_TILE_SIZE + 16,
                      message, metro_color_secondary());
 }
 

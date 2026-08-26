@@ -132,7 +132,7 @@ static void draw_sync_screen(void)
     metro_draw_header("");
     metro_draw_text(MFONT_TITLE, 12, 100, metro_lang_str(msg), metro_color_fg());
     if (is_error)
-        metro_draw_text(MFONT_CAPTION, 12, 140, metro_lang_str(LANG_SYNC_DISMISS_HINT),
+        metro_draw_text(MFONT_LABEL, 12, 140, metro_lang_str(LANG_SYNC_DISMISS_HINT),
                          metro_color_secondary());
     lcd_update();
 }
