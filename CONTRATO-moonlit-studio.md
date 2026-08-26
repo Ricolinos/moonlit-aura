@@ -117,7 +117,10 @@ cada release se anotan aquí en M12 de `docs/plan/05-plan-correctivo.md`
 
 ```
 checksums.txt del release v0.1.0:
-  <SHA-256 de checksums.txt del release v0.1.0 — se rellena tras publicar>
+  a9145ba8f3f030589593b40a64977b0be064b15272846d78417573169755e1df  bootloader-ipod6g.ipod
+  035e14db2be7ce093a434a2dac8fff419c64a8be84644122710e2a1850fc3a91  mks5lboot
+  246d7035ae4f5d208417a21b522f6786da9f181017718e892c690b5ac196cdae  rockbox.ipod
+  (publicado en https://github.com/Ricolinos/moonlit-aura/releases/tag/v0.1.0)
 ```
 
 Los cuatro binarios (`mks5lboot`, `bootloader-ipod6g.ipod`,
