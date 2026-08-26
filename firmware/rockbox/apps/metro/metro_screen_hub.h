@@ -20,6 +20,8 @@
 #ifndef METRO_SCREEN_HUB_H
 #define METRO_SCREEN_HUB_H
 
+#include "metro_music.h"
+
 /* Root of the twist (PLAN_MAESTRO.md S1.4 "Hub"): a plain vertical
  * list in MFONT_DISPLAY, no pivots. Always nav depth 1 -- shares
  * metro_screen_nav()'s depth-1 frame for its own selection/windowing
@@ -45,5 +47,21 @@ bool metro_screen_hub_tick(void);
 /* Same predicate tick() uses, without drawing -- for the main loop to
  * shorten its input wait while there is something to animate. */
 bool metro_screen_hub_wants_ticks(void);
+
+/* moonlit (D-029, M8): the album list Marea's carousel scrolls
+ * through -- the SAME static array music_lists_refresh() already
+ * fills (metro_music_albums()) the moment the user enters Música,
+ * exposed here instead of a second METRO_MUSIC_MAX_GROUPS-sized copy
+ * (~216KB) inside moonlit_screen_marea.c. Valid only while Música
+ * (and so any subpage under it, Marea included) stays on the nav
+ * stack -- moonlit_screen_marea_push() snapshots the pointer/count
+ * once, at push time. */
+const metro_music_item_t *metro_screen_hub_albums(int *out_count);
+
+/* moonlit (D-029, M8): pushes the shared "songs of one album" subpage
+ * -- the same one Quickplay/Álbumes/un artista ya usan -- for Marea's
+ * SELECT action. Thin wrapper: open_album_songs() stays static, this
+ * is its only cross-module door. */
+void metro_screen_hub_open_album_songs(int32_t album_seek, const char *album_label);
 
 #endif /* METRO_SCREEN_HUB_H */

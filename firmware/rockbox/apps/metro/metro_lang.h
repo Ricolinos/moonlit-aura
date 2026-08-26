@@ -176,6 +176,7 @@ enum metro_lang_id {
     LANG_ABOUT_CREDITS_BODY,  /* '\n'-separated lines, one About row each */
     LANG_MAREA_TITLE,         /* vertical cover flow (D-014), wired in H6 */
     LANG_MAREA_EMPTY,         /* library without albums (plan D.5) */
+    LANG_MAREA_SONGS_FMT,     /* moonlit (D-030, M8): "%d canciones" panel label */
 
     LANG_COUNT
 };

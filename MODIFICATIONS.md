@@ -394,3 +394,16 @@ Ver `DECISIONS.md` D-042 para el resto de M7 (`apps/metro/moonlit_art.{c,h}`,
 `apps/metro/metro_music.c`, `apps/metro/test/test_art.c`,
 `apps/metro/test/file.h`, `apps/metro/test/lcd.h`,
 `apps/metro/test/Makefile`, todo dentro de `apps/metro/`).
+
+### moonlit M8 (2026-08-25, D-043)
+
+- `apps/SOURCES`: se agrega la entrada `metro/moonlit_screen_marea.c`
+  — pantalla Marea (Cover Flow vertical, D-029/D-030), portadas de
+  `moonlit_art`/`moonlit_art_cache` (M7) y motor de proyección de
+  `moonlit_flow` (M6). Comentario inline
+  `moonlit (D-029, D-030, M8): pantalla Marea, portadas izquierda/info derecha`.
+
+Ver `DECISIONS.md` D-043 para el resto de M8 (`apps/metro/moonlit_screen_marea.{c,h}`,
+`apps/metro/metro_screen_hub.{c,h}`, `apps/metro/metro_music.{c,h}`,
+`apps/metro/metro_lang.{c,h}`, `apps/metro/metro_main.c`, todo dentro
+de `apps/metro/`).

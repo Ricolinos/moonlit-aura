@@ -738,3 +738,72 @@ Implementada en M7: `apps/metro/moonlit_art.{c,h}`,
 (enganche en `metro_music_db_ready()`), `apps/SOURCES` (fuera de
 `apps/metro/`, ver `MODIFICATIONS.md`). Sin pantalla ni consumidor
 todavía (M8 la usa desde Marea).
+
+# Hito M8 — Pantalla Marea (D-043)
+
+**D-043 — Marea es funcionalidad experimental hasta la medición en hardware real de
+M12: `MOONLIT_FLOW_CAM_DIST` (D-041) sigue sin retunear, y los tres
+desvíos de este hito lo confirman.**
+
+1. **Ángulo/separación lateral re-derivados de `aura_musicflow.c`,
+   escalados a 120px.** `MF_ITILT`/`MF_OFFSETX_R`/`MF_SLIDE_SPACING_R`
+   de Aura (`AF/aura_musicflow.c:581-583`) están calibrados contra
+   `MF_COVER_SIZE=130`; D-030 fija la tapa de Marea en 120px.
+   `MAREA_ITILT=199` se conserva sin cambio (documentado en Aura como
+   "no depende del tamaño del slide"); `MAREA_OFFSETX_R=84900` y
+   `MAREA_SLIDE_SPACING_R=26800` son `92000`/`29000` escalados por
+   `120/130` (`apps/metro/moonlit_screen_marea.c`). Sin medición en
+   dispositivo real que los confirme — HIPÓTESIS a retunear en M12
+   junto con `CAM_DIST`, mismo criterio que D-041.
+
+2. **Sin zoom-al-scrollear ni reflejo.** El zoom de Aura
+   (`MF_ZOOM_SCALE_SHRUNK`/D-245/D-246/D-247) fue un encargo específico
+   del dueño de *ese* producto, ausente de `05-plan-correctivo.md` §M8;
+   el reflejo ya quedó fuera desde D-020/M7 (`moonlit_art` no lo
+   genera). Ninguno de los dos se porta: `slide.distance` es siempre 0
+   en `moonlit_screen_marea.c`, y `draw_slide_perspective()` muestrea
+   solo la carátula, sin banda de reflejo.
+
+3. **Tapas laterales sin carátula: relleno liso proyectado, no un
+   segundo buffer de 120×120.** `05-plan-correctivo.md` no especifica
+   qué dibujar cuando una tapa lateral (no la central) carece de arte.
+   Reservar un `s_placeholder_cover[120*120]` (mismo patrón que
+   `moonlit_art_cache.c:s_precache_cover`) sumaría 28 800 B de `.bss`
+   extra — con el límite de hecho de M8 ya ajustado (`MAREA_CACHE_SLOTS`
+   × 28 800 B ≈ 1 065 600 B de los 1 100 000 B permitidos), esos 28 800 B
+   no caben. `draw_slide_flat()` reusa la misma proyección de fila
+   (`moonlit_flow_begin_projection`/`_cross_scale`) pero rellena con
+   `lcd_hline()` a un color plano (`primary_container` fundido hacia
+   `surface` con el mismo `fade` que la carátula real usaría) — cero
+   buffer adicional. La tapa CENTRAL sin arte sigue el camino que sí
+   especifica D-030 D.5: tarjeta plana + inicial, dibujada directo (sin
+   pasar por el motor), únicamente cuando `offset256==0` exacto.
+
+**`.bss`:** `arm-none-eabi-size` — base (M7, `moonlit-fork-base..HEAD`
+antes de M8) 7 474 076 B, con M8 8 569 948 B — crecimiento 1 095 872 B,
+bajo el límite de 1 100 000 B de `05-plan-correctivo.md` §M8 por 4 128 B.
+
+**Panel derecho, ancho 152 (no 160).** D-030 describe la región como
+`x ∈ [160,320)`; el propio `05-plan-correctivo.md` §M8 "Crea" da la
+llamada exacta `moonlit_draw_surface(160, 20, 152, 220, ...)`. Se
+implementa el ancho literal de esa llamada (152, hasta x=312) — deja un
+margen de 8px a la derecha simétrico al que separa la columna de
+portadas (`[0,152)`) del panel (`[160,...)`), lectura no contradictoria
+con el rango descriptivo de D-030.
+
+**Decode nunca dentro de `show()`.** `get_slot_for()` solo lee el
+`.pfraw` ya horneado por M7 (`moonlit_art_read_pfraw()`); un cache-miss
+(tema recién cambiado, álbum sin precachear) cae al monograma y encola
+el álbum. `moonlit_screen_marea_tick()` — llamada desde la rama ociosa
+de `metro_main.c`, nunca desde el bucle de animación — decodifica como
+mucho UNO por vuelta (mismo presupuesto que `metro_thumbs_tick()`,
+DD-9) vía `moonlit_art_load_for_album()`.
+
+Implementada en M8: `apps/metro/moonlit_screen_marea.{c,h}` (nuevo),
+`apps/metro/metro_screen_hub.{c,h}` (pivote Marea, D-029;
+`metro_screen_hub_albums()`/`metro_screen_hub_open_album_songs()`),
+`apps/metro/metro_music.{c,h}` (`metro_music_song_count_of_album()`),
+`apps/metro/metro_lang.{c,h}` (`LANG_MAREA_SONGS_FMT`),
+`apps/metro/metro_main.c` (cuarto centinela `at_marea`, mismos 4
+enganches que Now Playing/el visor de fotos), `apps/SOURCES` (fuera de
+`apps/metro/`, ver `MODIFICATIONS.md`).

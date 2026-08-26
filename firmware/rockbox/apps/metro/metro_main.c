@@ -53,6 +53,7 @@
 #include "metro_screen_photo_viewer.h"
 #include "metro_screen_lock.h"
 #include "metro_screen_specimen.h"
+#include "moonlit_screen_marea.h" /* moonlit (D-029, M8) */
 
 /* See metro_main.h for why this must be called from apps/main.c's
  * init(), not from here. None of these settings are exposed anywhere
@@ -98,6 +99,8 @@ static void redraw_current(void)
         metro_screen_nowplaying_show();
     else if (metro_screen_photo_viewer_is_current())
         metro_screen_photo_viewer_show();
+    else if (moonlit_screen_marea_is_current())
+        moonlit_screen_marea_show();
     else
         metro_screen_list_show();
 }
@@ -307,6 +310,7 @@ void metro_main(void)
         bool at_root;
         bool at_player;
         bool at_viewer;
+        bool at_marea;
 
         /* R3-F7/DD-8 (M-068): la interceptación, antes de CUALQUIER
          * despacho de pantalla -- eso es lo que hace que el candado
@@ -324,6 +328,12 @@ void metro_main(void)
         /* R2-F3: mutually exclusive with at_player -- only one sentinel
          * page can be current at a time (metro_screen_photo_viewer.h). */
         at_viewer = !at_root && metro_screen_photo_viewer_is_current();
+        /* moonlit (D-029, M8): tercer centinela, mutuamente excluyente
+         * con los otros dos por la misma razón. Marea reusa MCTX_LIST
+         * -- MACT_PREV/NEXT/SELECT/BACK/HOME/PLAYPAUSE ya cubren todo
+         * lo que moonlit_screen_marea_handle() necesita, sin tocar
+         * metro_keymap.c. */
+        at_marea = !at_root && moonlit_screen_marea_is_current();
         enum metro_context ctx = at_root ? MCTX_HUB
                                           : (at_player ? MCTX_PLAYER
                                                         : (at_viewer ? MCTX_VIEWER : MCTX_LIST));
@@ -420,7 +430,7 @@ void metro_main(void)
                 metro_screen_hub_tick();
             }
 
-            if (!at_root && !at_player && !at_viewer)
+            if (!at_root && !at_player && !at_viewer && !at_marea)
             {
                 bool pending = metro_screen_list_has_pending_redraw();
                 if (pending || index_letter_was_pending)
@@ -439,6 +449,14 @@ void metro_main(void)
                 if (metro_thumbs_tick())
                     redraw_current();
             }
+
+            /* moonlit (D-029, D-030, M8): mismo presupuesto de un
+             * decode por vuelta ociosa que metro_thumbs_tick() arriba
+             * -- moonlit_screen_marea.c nunca decodifica un JPEG
+             * dentro de show()/draw_slide() (regla dura de D-030),
+             * solo aquí, fuera de cualquier bucle de animación. */
+            if (at_marea && moonlit_screen_marea_tick())
+                redraw_current();
 
             continue;
         }
@@ -465,8 +483,9 @@ void metro_main(void)
             int pivot_before = metro_nav_pivot(nav);
             bool player_before = at_player;
             bool viewer_before = at_viewer;
+            bool marea_before = at_marea;
             int depth_after, pivot_after;
-            bool root_after, player_after, viewer_after;
+            bool root_after, player_after, viewer_after, marea_after;
 
             if (at_root)
                 metro_screen_hub_handle(action, steps);
@@ -474,6 +493,8 @@ void metro_main(void)
                 metro_screen_nowplaying_handle(action, steps);
             else if (at_viewer)
                 metro_screen_photo_viewer_handle(action, steps);
+            else if (at_marea)
+                moonlit_screen_marea_handle(action, steps);
             else
                 metro_screen_list_handle(action, steps);
 
@@ -482,8 +503,11 @@ void metro_main(void)
             root_after = metro_nav_is_root(nav);
             player_after = !root_after && metro_screen_nowplaying_is_current();
             viewer_after = !root_after && metro_screen_photo_viewer_is_current();
+            /* moonlit (D-029, M8): tercer centinela -- misma regla de
+             * FADE al entrar/salir que Now Playing/el visor de fotos. */
+            marea_after = !root_after && moonlit_screen_marea_is_current();
 
-            if (depth_after > depth_before && (player_after || viewer_after))
+            if (depth_after > depth_before && (player_after || viewer_after || marea_after))
                 metro_transitions_fade(redraw_current);
             else if (depth_after > depth_before)
             {
@@ -492,11 +516,11 @@ void metro_main(void)
                  * push landed on, never the hub (no rows, its own
                  * *_show()) or a sentinel (handled by the fade branch
                  * above, never reaches here). */
-                if (!root_after && !player_after && !viewer_after)
+                if (!root_after && !player_after && !viewer_after && !marea_after)
                     metro_screen_list_run_feather_if_pending();
             }
-            else if (depth_after < depth_before && (player_before || viewer_before) &&
-                     !player_after && !viewer_after)
+            else if (depth_after < depth_before && (player_before || viewer_before || marea_before) &&
+                     !player_after && !viewer_after && !marea_after)
                 metro_transitions_fade(redraw_current);
             else if (depth_after < depth_before)
                 metro_transitions_push(redraw_current, -1);

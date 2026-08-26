@@ -137,6 +137,13 @@ int metro_music_songs_of_album(int32_t album_seek,
 int metro_music_songs_of_genre(int32_t genre_seek,
                                 metro_music_item_t *out, int max);
 
+/* moonlit (D-029, M8): count only, no metro_music_item_t buffer --
+ * Marea's info panel needs "N canciones" for whichever album is
+ * focused, and metro_music_songs_of_album() would need a
+ * METRO_MUSIC_MAX_GROUPS-sized scratch array (~216KB) just to throw
+ * away everything but the count. */
+int metro_music_song_count_of_album(int32_t album_seek);
+
 /* Same order as the matching list above (alphabetical, or by track
  * number for an album) -- the row index the user selected on screen is
  * always the same track that starts playing. */

@@ -176,6 +176,7 @@ static const char *const strings_es[LANG_COUNT] = {
         "moonlit no está afiliado a apple",
     [LANG_MAREA_TITLE]        = "marea",
     [LANG_MAREA_EMPTY]        = "no hay álbumes en la biblioteca",
+    [LANG_MAREA_SONGS_FMT]    = "%d canciones",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -327,6 +328,7 @@ static const char *const strings_en[LANG_COUNT] = {
         "moonlit is not affiliated with apple",
     [LANG_MAREA_TITLE]        = "tide",
     [LANG_MAREA_EMPTY]        = "no albums in the library",
+    [LANG_MAREA_SONGS_FMT]    = "%d songs",
 };
 
 void metro_lang_set(enum metro_language lang)

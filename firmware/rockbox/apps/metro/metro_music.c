@@ -539,6 +539,30 @@ int metro_music_songs_of_album(int32_t album_seek, metro_music_item_t *out, int 
     return run_search(tag_title, tag_album, album_seek, out, max);
 }
 
+/* moonlit (D-029, M8): same filter as run_search(tag_title, tag_album,
+ * ...) but only counts tagcache_get_next() hits -- no metro_music_item_t
+ * writes, no METRO_MUSIC_MAX_GROUPS scratch array. uniqbuf is skipped:
+ * run_search() itself only sets it for tags with a small unique-value
+ * space (comment on s_uniqbuf above), and ignores it for tag_title. */
+int metro_music_song_count_of_album(int32_t album_seek)
+{
+    struct tagcache_search tcs;
+    char buf[TAGCACHE_BUFSZ];
+    int n = 0;
+
+    if (!tagcache_is_usable())
+        return 0;
+    if (!tagcache_search(&tcs, tag_title))
+        return 0;
+
+    tagcache_search_add_filter(&tcs, tag_album, album_seek);
+    while (tagcache_get_next(&tcs, buf, sizeof(buf)))
+        n++;
+
+    tagcache_search_finish(&tcs);
+    return n;
+}
+
 bool metro_music_track_path(int32_t idx_id, char *out, size_t outsz)
 {
     struct tagcache_search tcs;

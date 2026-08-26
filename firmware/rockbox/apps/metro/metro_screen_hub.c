@@ -44,6 +44,7 @@
 #include "metro_lang.h"
 #include "metro_keymap.h"
 #include "moonlit_elevation.h" /* moonlit (D-011, M4): tarjeta de fila seleccionada */
+#include "moonlit_screen_marea.h" /* moonlit (D-029, M8): pivote Marea */
 
 #define METRO_HUB_FIRST_Y 32
 #define METRO_HUB_PITCH   52
@@ -604,6 +605,28 @@ static void playlists_on_select(void *ctx, int index)
         metro_screen_nowplaying_push();
 }
 
+/* pivot: marea -> D-029 ("Marea convive con Álbumes", la rejilla se
+ * conserva): un solo renglón de acción, no una lista/cuadrícula --
+ * seleccionarlo empuja la pantalla completa de Marea (D-030), que trae
+ * su propia navegación por rueda. */
+static int marea_count(void *ctx) { (void)ctx; return 1; }
+
+static void marea_get_row(void *ctx, int index, struct metro_row *out)
+{
+    (void)ctx;
+    (void)index;
+    out->title = metro_lang_str(LANG_MAREA_TITLE);
+    out->subtitle = NULL;
+    out->kind = METRO_ROW_ACTION;
+}
+
+static void marea_on_select(void *ctx, int index)
+{
+    (void)ctx;
+    (void)index;
+    moonlit_screen_marea_push();
+}
+
 static const struct metro_pivot music_pivots[] = {
     /* R3-F4/DD-5 (M-065), DA-1: first pivot -- the plan's recommended
      * default (open for the owner to flip at this phase's PARADA). */
@@ -620,8 +643,22 @@ static const struct metro_pivot music_pivots[] = {
     { LANG_PIVOT_SONGS,     songs_count,     songs_get_row,     songs_on_select,     NULL },
     { LANG_PIVOT_GENRES,    genres_count,    genres_get_row,    genres_on_select,    NULL },
     { LANG_PIVOT_PLAYLISTS, playlists_count, playlists_get_row, playlists_on_select, NULL },
+    { LANG_MAREA_TITLE,     marea_count,     marea_get_row,     marea_on_select,     NULL },
 };
-static const struct metro_page music_page = { LANG_HUB_MUSIC, music_pivots, 6, NULL };
+static const struct metro_page music_page = { LANG_HUB_MUSIC, music_pivots, 7, NULL };
+
+/* moonlit (D-029, M8): ver metro_screen_hub.h -- Marea lee el mismo
+ * snapshot de álbumes que este pivote ya tiene listo. */
+const metro_music_item_t *metro_screen_hub_albums(int *out_count)
+{
+    *out_count = s_albums_n;
+    return s_albums;
+}
+
+void metro_screen_hub_open_album_songs(int32_t album_seek, const char *album_label)
+{
+    open_album_songs(album_seek, album_label);
+}
 
 /* Shared "songs of one album" subpage -- reached from either the
  * top-level albums pivot or an artist's albums (only one such page can
