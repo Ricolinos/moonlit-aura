@@ -108,7 +108,8 @@ static struct thumb_slot *find_slot(const char *key)
 
 static void cache_dir_for(const struct metro_thumb_source *source, char *out, size_t outsz)
 {
-    metro_settings_metro_cache_dir(source->cache_subdir, out, outsz);
+    /* moonlit (D-055): shared with Metro under /.aura/thumbs/<subdir>/. */
+    metro_settings_shared_thumbs_dir(source->cache_subdir, out, outsz);
 }
 
 static void cache_path(const struct metro_thumb_source *source, const char *key,
@@ -125,16 +126,17 @@ static void ensure_cache_dir(const struct metro_thumb_source *source)
     char *slash;
 
     cache_dir_for(source, dir, sizeof(dir));
-    strlcpy(parent, dir, sizeof(parent));
-    slash = strrchr(parent, '/');
-    if (slash)
-        *slash = '\0';
 
-    /* .../aura already exists (metro_settings_save() creates it on
-     * first boot) -- only "moonlitcache" (parent) and
-     * "moonlitcache/<subdir>" (dir) are ever missing here. */
-    if (!dir_exists(parent))
-        mkdir(parent);
+    /* moonlit (D-055): /.aura/thumbs/<subdir> -- every ancestor may be
+     * missing on a fresh volume, so walk the path creating each one. */
+    strlcpy(parent, dir, sizeof(parent));
+    for (slash = strchr(parent + 1, '/'); slash; slash = strchr(slash + 1, '/'))
+    {
+        *slash = '\0';
+        if (!dir_exists(parent))
+            mkdir(parent);
+        *slash = '/';
+    }
     if (!dir_exists(dir))
         mkdir(dir);
 }

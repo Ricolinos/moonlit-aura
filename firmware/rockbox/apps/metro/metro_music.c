@@ -37,6 +37,7 @@
 #include "misc.h" /* read_line() */
 #include "string-extra.h"
 #include "kernel.h" /* current_tick, for playlist_randomise()'s seed */
+#include "crc32.h"  /* crc_32() -- moonlit (D-055) art keys */
 
 #include "metro_music.h"
 #include "metro_lang.h"
@@ -566,6 +567,91 @@ int metro_music_song_count_of_album(int32_t album_seek)
 
     tagcache_search_finish(&tcs);
     return n;
+}
+
+/* --- moonlit (D-055): stable album-art keys ------------------------- */
+
+#define ART_KEY_MEMO_N 48
+
+static struct {
+    int32_t seek;
+    char key[METRO_MUSIC_ART_KEY_LEN];
+} s_art_key_memo[ART_KEY_MEMO_N];
+static int s_art_key_memo_ring;
+static int s_art_key_memo_n;
+static int s_art_key_memo_entries = -1; /* tagcache total_entries the memo was built against */
+
+void metro_music_album_art_key_reset(void)
+{
+    s_art_key_memo_n = 0;
+    s_art_key_memo_ring = 0;
+    s_art_key_memo_entries = -1;
+}
+
+static bool compute_album_art_key(int32_t album_seek, char *out, size_t outsz)
+{
+    struct tagcache_search tcs;
+    metro_music_item_t track;
+    char path[MAX_PATH];
+    long mtime;
+    uint32_t crc;
+
+    if (metro_music_songs_of_album(album_seek, &track, 1) < 1)
+        return false;
+    if (!tagcache_search(&tcs, tag_filename))
+        return false;
+    if (!tagcache_retrieve(&tcs, track.seek, tag_filename, path, sizeof(path)) || !path[0])
+    {
+        tagcache_search_finish(&tcs);
+        return false;
+    }
+    tcs.idx_id = track.seek; /* tagcache_get_numeric() reads tcs->idx_id */
+    mtime = tagcache_get_numeric(&tcs, tag_mtime);
+    tagcache_search_finish(&tcs);
+    if (mtime < 0)
+        mtime = 0;
+
+    crc = crc_32(path, strlen(path), 0xffffffff);
+    snprintf(out, outsz, "a-%08lx.%ld", (unsigned long)crc, mtime);
+    return true;
+}
+
+bool metro_music_album_art_key(int32_t album_seek, char *out, size_t outsz)
+{
+    int entries, i;
+
+    if (!tagcache_is_usable())
+        return false;
+
+    /* Same change indicator metro_screen_hub.c uses for its lists: a
+     * (re)build renumbers seeks, so a memo built against another
+     * database would hand back another album's key. */
+    entries = tagcache_get_stat()->total_entries;
+    if (entries != s_art_key_memo_entries)
+    {
+        metro_music_album_art_key_reset();
+        s_art_key_memo_entries = entries;
+    }
+
+    for (i = 0; i < s_art_key_memo_n; i++)
+    {
+        if (s_art_key_memo[i].seek == album_seek)
+        {
+            strlcpy(out, s_art_key_memo[i].key, outsz);
+            return true;
+        }
+    }
+
+    if (!compute_album_art_key(album_seek, out, outsz))
+        return false;
+
+    i = s_art_key_memo_ring;
+    s_art_key_memo[i].seek = album_seek;
+    strlcpy(s_art_key_memo[i].key, out, sizeof(s_art_key_memo[i].key));
+    s_art_key_memo_ring = (i + 1) % ART_KEY_MEMO_N;
+    if (s_art_key_memo_n < ART_KEY_MEMO_N)
+        s_art_key_memo_n++;
+    return true;
 }
 
 bool metro_music_track_path(int32_t idx_id, char *out, size_t outsz)

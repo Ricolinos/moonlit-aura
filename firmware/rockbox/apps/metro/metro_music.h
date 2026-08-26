@@ -144,6 +144,22 @@ int metro_music_songs_of_genre(int32_t genre_seek,
  * away everything but the count. */
 int metro_music_song_count_of_album(int32_t album_seek);
 
+/* moonlit (D-055): stable album-art cache key, "a-<crc32 hex8>.<mtime>"
+ * of the album's representative track (the first
+ * metro_music_songs_of_album() hit): crc_32() of its tagcache path +
+ * its tag_mtime. Unlike the album seek (which tagcache renumbers on
+ * every rebuild -- 4 more minutes of cover decoding after each sync),
+ * this survives rebuilds; it only changes when that track is replaced,
+ * which is exactly when the cover may have changed. "<stable>.<mtime>"
+ * shape on purpose: metro_thumbs.c's remove_stale() drops the old
+ * mtime variant for free. Memoized (48 entries, invalidated when
+ * tagcache's total_entries changes or via _reset()) so the hub grid's
+ * per-tile lookups never hit tagcache twice for the same album. false
+ * if the album has no resolvable track (caller: no cache file). */
+#define METRO_MUSIC_ART_KEY_LEN 24
+bool metro_music_album_art_key(int32_t album_seek, char *out, size_t outsz);
+void metro_music_album_art_key_reset(void);
+
 /* Same order as the matching list above (alphabetical, or by track
  * number for an album) -- the row index the user selected on screen is
  * always the same track that starts playing. */

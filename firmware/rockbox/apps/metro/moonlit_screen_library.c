@@ -188,5 +188,15 @@ bool moonlit_screen_library_prepare(void)
 {
     if (!run_phase_db())
         return false;
-    return run_phase_art();
+    if (!run_phase_art())
+        return false;
+    /* D-055: orphan sweep requested by the last music sync -- one
+     * bounded pass (key table + two directory scans), with the phase-2
+     * screen up so the wait is visible, never inside a frame. */
+    if (moonlit_art_gc_pending())
+    {
+        draw_screen(LANG_LIBRARY_PHASE_ART, 0, 0);
+        moonlit_art_gc();
+    }
+    return true;
 }

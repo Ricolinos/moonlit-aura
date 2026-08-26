@@ -228,10 +228,12 @@ static void migrate_tree_db_files(bool move)
         if (len < 5 || (strcmp(name + len - 4, ".tcd") != 0 &&
                         strcmp(name + len - 4, ".txt") != 0))
             continue;
-        snprintf(from, sizeof(from), "%s/%s", ROCKBOX_DIR, name);
+        strlcpy(from, ROCKBOX_DIR "/", sizeof(from));
+        strlcat(from, name, sizeof(from));
         if (move)
         {
-            snprintf(to, sizeof(to), "%s/%s", AURA_SHARED_DB_DIR, name);
+            strlcpy(to, AURA_SHARED_DB_DIR "/", sizeof(to));
+            strlcat(to, name, sizeof(to));
             rename(from, to);
         }
         else
@@ -294,6 +296,40 @@ void metro_settings_metro_cache_dir(const char *subdir, char *out, size_t outsz)
     /* moonlit (D-001/D-023): own cache tree, never the Metro one --
      * both families may coexist on one device (COMPAT C23). */
     snprintf(out, outsz, "%s/moonlitcache/%s", METRO_DIR, subdir);
+}
+
+/* moonlit (D-055): shared 80 px thumbs, see metro_settings.h. Only
+ * this file spells the path (CLAUDE.md path rule). */
+#define AURA_SHARED_THUMBS_DIR "/.aura/thumbs"
+
+void metro_settings_shared_thumbs_dir(const char *subdir, char *out, size_t outsz)
+{
+    snprintf(out, outsz, "%s/%s", AURA_SHARED_THUMBS_DIR, subdir);
+}
+
+bool metro_settings_migrate_shared_thumbs(void)
+{
+    static const char *const subdirs[] = { "albums", "artists", "photos" };
+    char from[MAX_PATH], to[MAX_PATH];
+    unsigned i;
+    bool moved = false;
+
+    for (i = 0; i < sizeof(subdirs) / sizeof(subdirs[0]); i++)
+    {
+        metro_settings_metro_cache_dir(subdirs[i], from, sizeof(from));
+        if (!dir_exists(from))
+            continue;
+        metro_settings_shared_thumbs_dir(subdirs[i], to, sizeof(to));
+        if (dir_exists(to))
+            continue;
+        if (!dir_exists("/.aura"))
+            mkdir("/.aura");
+        if (!dir_exists(AURA_SHARED_THUMBS_DIR))
+            mkdir(AURA_SHARED_THUMBS_DIR);
+        if (rename(from, to) == 0) /* same FAT partition: atomic, no copy */
+            moved = true;
+    }
+    return moved;
 }
 
 /* R3-F3/DD-6 (M-064): Studio's own index + photo cache -- distinct

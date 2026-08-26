@@ -31,6 +31,7 @@
 #include "metro_sync.h"
 #include "metro_sync_marker.h"
 #include "metro_settings.h"
+#include "moonlit_art_cache.h" /* moonlit_art_request_gc() -- D-055 */
 
 /* Contract S4: the marker lives at the disk ROOT, not under
  * /.rockbox/aura -- it's the one thing Studio leaves for the firmware
@@ -299,6 +300,11 @@ static void finish_ok(void)
      * biblioteca vigente -- se anota el sello, y con eso el proximo
      * cambio de firmware de ida y vuelta sin sync no reconstruye. */
     metro_sync_record_db_stamp();
+    /* moonlit (D-055): the library changed -- some album-art cache files
+     * may now be orphans. Only a request (disk flag): the sweep runs
+     * under the "preparando biblioteca" screen, never here. */
+    if (s_marker.music)
+        moonlit_art_request_gc();
     remove_marker();
     go_idle();
 }

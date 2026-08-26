@@ -41,12 +41,31 @@
 #define MOONLIT_ART_CACHE_SIZE   120
 #define MOONLIT_ART_CACHE_RADIUS 8
 
-/* Ruta del .pfraw de `seek` a `size` px bajo
+/* Ruta del .pfraw del álbum `seek` a `size` px bajo
  * metro_settings_metro_cache_dir("art", ...) (= .../aura/moonlitcache/art/,
- * D-023) -- expuesta (no `static`) porque 05-plan-correctivo.md §M7 la
- * pide como función propia, no solo un detalle interno de
- * moonlit_art_load_for_album(). */
-void moonlit_art_pfraw_path(int32_t seek, int size, char *out, size_t outsz);
+ * D-023): "<clave>-<size>.pfraw" con la clave estable de
+ * metro_music_album_art_key() (D-055: "a-<crc32 ruta>.<mtime>", no el
+ * seek, que tagcache renumera en cada rebuild). false si el álbum no
+ * tiene pista resoluble (sin archivo de caché posible). Expuesta (no
+ * `static`) porque 05-plan-correctivo.md §M7 la pide como función
+ * propia. Toca tagcache (búsqueda + retrieve, memoizada): nunca desde
+ * un cuadro de animación -- Marea ya no la llama (D-053). */
+bool moonlit_art_pfraw_path(int32_t seek, int size, char *out, size_t outsz);
+
+/* D-055: limpieza de huérfanos. Las claves son estables, así que un
+ * huérfano solo aparece cuando un álbum desaparece o cambia de pista
+ * representativa -- y cuando cambió el ESQUEMA de clave (los
+ * "<seek>-120.pfraw"/"album-<seek>.mth" anteriores a D-055). No corre
+ * sola: metro_sync.c la PIDE al terminar bien un sync con música
+ * (bandera en disco, sobrevive reinicios) y la pantalla "preparando
+ * biblioteca" la EJECUTA tras la precarga, con la pantalla puesta.
+ * moonlit_art_gc(): una pasada -- tabla de crc32 de las claves de
+ * todos los álbumes (en el scratch estático de la precarga, cero .bss
+ * nuevo) y un barrido de moonlitcache/art/ (.pfraw) y
+ * /.aura/thumbs/albums/ (.mth) borrando lo que no esté en la tabla. */
+void moonlit_art_request_gc(void);
+bool moonlit_art_gc_pending(void);
+void moonlit_art_gc(void);
 
 /* Resuelve la carátula de `album_seek` a `out` (MOONLIT_ART_CACHE_SIZE
  * x MOONLIT_ART_CACHE_SIZE, reservado por el llamador): cache-hit ->

@@ -138,6 +138,17 @@ void metro_ensure_media_dirs(void);
  * mkdir() if missing, before writing inside it). */
 void metro_settings_metro_cache_dir(const char *subdir, char *out, size_t outsz);
 
+/* moonlit (D-055, contrato v15): /.aura/thumbs/<subdir>/ -- the 80x80
+ * .mth tiles (raw fb_data, METRO_TILE_SIZE, byte-identical format in
+ * Metro and moonlit) are SHARED between both families so a switch
+ * never re-decodes them. moonlitcache/art (120 px .pfraw, moonlit's
+ * own format) stays in the tree. Studio ignores the directory except
+ * to delete it when forcing a rebuild. Migration (rename of
+ * moonlitcache/{albums,artists,photos} on first boot):
+ * metro_settings_migrate_shared_thumbs(), called from metro_main(). */
+void metro_settings_shared_thumbs_dir(const char *subdir, char *out, size_t outsz);
+bool metro_settings_migrate_shared_thumbs(void); /* true if anything was renamed */
+
 /* R3-F3/DD-6 (M-064): .../aura/artist_images.cfg (Studio's index) and
  * .../aura/artists/ (Studio's own source photo cache, the directory
  * artist_images.cfg's filenames resolve into) -- CONTRATO-firmware-studio.md

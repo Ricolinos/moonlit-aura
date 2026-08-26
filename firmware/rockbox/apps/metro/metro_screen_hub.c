@@ -398,14 +398,13 @@ static bool album_thumb_cache_key(void *ctx, int index, char *out, size_t out_le
     if (!g || index < 0 || index >= *g->count)
         return false;
 
-    /* Sólo el seek del álbum, no una ruta de track -- estable mientras
-     * el álbum no cambie, así que un re-decode no se fuerza sólo
-     * porque el ORDEN de la cuadrícula se movió (otro álbum cayendo en
-     * la misma casilla). Y como la clave es el álbum y no la
-     * cuadrícula, Quickplay y Álbumes COMPARTEN la caché en disco: una
-     * carátula ya decodificada por uno la reusa el otro. */
-    snprintf(out, out_len, "album-%ld", (long)g->items[index].seek);
-    return true;
+    /* moonlit (D-055): clave estable "a-<crc32 ruta>.<mtime>" de la
+     * pista representativa (metro_music_album_art_key()), no el seek
+     * del álbum -- tagcache renumera los seeks en cada rebuild y eso
+     * huerfanaba toda la caché tras cada sync. Sigue siendo la misma
+     * clave para Quickplay y Álbumes (comparten la caché en disco) y
+     * para el .pfraw de Marea (moonlit_art_cache.c). */
+    return metro_music_album_art_key(g->items[index].seek, out, out_len);
 }
 
 static bool album_thumb_decode(void *ctx, int index, fb_data *dst)

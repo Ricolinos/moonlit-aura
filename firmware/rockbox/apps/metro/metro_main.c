@@ -54,6 +54,7 @@
 #include "metro_screen_lock.h"
 #include "metro_screen_specimen.h"
 #include "moonlit_screen_marea.h" /* moonlit (D-029, M8) */
+#include "moonlit_art_cache.h"    /* moonlit (D-055): moonlit_art_request_gc() */
 
 /* See metro_main.h for why this must be called from apps/main.c's
  * init(), not from here. None of these settings are exposed anywhere
@@ -247,6 +248,10 @@ void metro_main(void)
     /* metro_apply_hygiene() already ran inside init() (apps/main.c) --
      * see metro_main.h for why it can't run here, after init() returns. */
     metro_settings_load();
+    /* moonlit (D-055): moonlitcache/{albums,artists,photos} ->
+     * /.aura/thumbs/ by rename, once. Disk is up (settings just loaded). */
+    if (metro_settings_migrate_shared_thumbs())
+        moonlit_art_request_gc(); /* pre-D-055 key scheme: sweep the old names once */
     metro_fonts_init();
     /* R2-F1/DD-1 (M-051): DRMODE_FG is the drawmode every apps/metro/
      * text draw expects -- metro_draw_text()/metro_draw_text_cut_right()
