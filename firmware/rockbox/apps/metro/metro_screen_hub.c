@@ -43,6 +43,9 @@
 #include "metro_theme.h"
 #include "metro_lang.h"
 #include "metro_keymap.h"
+#include "metro_motion.h" /* moonlit (D-052 C4): metro_ease() de "Marea que sube" */
+#include "metro_transitions.h" /* moonlit (D-052 C4): METRO_SELECTION_* + trace */
+#include "kernel.h" /* moonlit (D-052 C4): sleep() entre cuadros */
 #include "moonlit_elevation.h" /* moonlit (D-011, M4): tarjeta de fila seleccionada */
 #include "moonlit_screen_marea.h" /* moonlit (D-029, M8): pivote Marea */
 #include "moonlit_logo.h" /* moonlit (D-016, D-044, M9): cabecera de marca del hub */
@@ -930,17 +933,18 @@ static int breath_alpha(long t)
     return 256 - (int)(t * 256 / METRO_HUB_BREATH_FADE);
 }
 
-/* moonlit (D-011, M4): misma capa de estado MD3 que metro_draw_rows_ex()
- * (metro_draw.c) -- surface_container_high detras de la fila elegida,
- * marcador de 3px en primary a la izquierda (arrancando en x=1 para no
- * tapar el borde de luz de moonlit_draw_surface(), D-012). El hub tiene
- * su propio bucle de dibujo (no pasa por metro_draw_rows_ex()), asi que
- * necesita su propia llamada. */
-static void draw_hub_row_card(int y)
+/* moonlit (D-011, M4; D-052 C4): misma capa de estado MD3 que
+ * metro_draw_rows_ex() (metro_draw.c) -- surface_container_high detras
+ * de la fila elegida, marcador de 3px en primary a la izquierda. El
+ * hub tiene su propio bucle de dibujo (no pasa por
+ * metro_draw_rows_ex()), asi que necesita su propia llamada; la
+ * primitiva es la misma (moonlit_draw_selection_card()) con la
+ * geometria del hub (METRO_HUB_PITCH, 8px sobre la linea base).
+ * card_alpha 256 / marker_h METRO_HUB_PITCH / edges true = la tarjeta
+ * asentada; lo demas son cuadros de "Marea que sube". */
+static void draw_hub_row_card(int y, int card_alpha, int marker_h, bool edges)
 {
-    moonlit_draw_surface(0, y - 8, LCD_WIDTH, METRO_HUB_PITCH, MSURFACE_HIGH, 0);
-    lcd_set_foreground(moonlit_color(MROLE_PRIMARY));
-    lcd_fillrect(1, y - 8, 3, METRO_HUB_PITCH);
+    moonlit_draw_selection_card(y - 8, METRO_HUB_PITCH, card_alpha, marker_h, edges);
 }
 
 static void draw_now_playing_row(int y, bool selected)
@@ -984,14 +988,77 @@ static void draw_now_playing_row(int y, bool selected)
     }
 }
 
+/* moonlit (D-052 C4): one hub row in place -- clears its band
+ * (y-8, METRO_HUB_PITCH tall), the card when card_alpha >= 0, then the
+ * text (the marquee/breath row when it is the now-playing one). The
+ * only place a hub row is drawn: show(), tick() and the selection
+ * animation all come here. Returns the band's top y for
+ * lcd_update_rect(). */
+static int draw_hub_row(int index, bool selected, int card_alpha, int marker_h, bool edges)
+{
+    int y = METRO_HUB_FIRST_Y +
+            (index - metro_nav_first_visible(metro_screen_nav())) * METRO_HUB_PITCH;
+    int top = y - 8;
+
+    lcd_set_foreground(metro_color_bg());
+    lcd_fillrect(0, top, LCD_WIDTH, METRO_HUB_PITCH);
+
+    if (card_alpha >= 0)
+        draw_hub_row_card(y, card_alpha, marker_h, edges);
+
+    if (metro_music_is_playing() && index == 0)
+        draw_now_playing_row(y, selected);
+    else
+    {
+        struct metro_row row;
+
+        hub_get_row(NULL, index, &row);
+        metro_draw_text(MFONT_DISPLAY, METRO_HUB_TEXT_X, y, row.title,
+                         selected ? metro_color_fg() : metro_color_secondary());
+    }
+    return top;
+}
+
+/* moonlit (D-052 C4, "Marea que sube"): same animation as
+ * metro_screen_list.c run_selection_rise(), same gates (see there),
+ * on the hub's own rows. */
+static void run_selection_rise(int prev_first, int prev_sel)
+{
+    metro_nav_t *nav = metro_screen_nav();
+    int first = metro_nav_first_visible(nav);
+    int sel = metro_nav_sel(nav);
+    int top, frame;
+    long start_tick = current_tick;
+
+    if (!hub_row_animates())
+        return;
+    if (sel == prev_sel || first != prev_first)
+        return;
+
+    top = draw_hub_row(prev_sel, false, -1, 0, false);
+    lcd_update_rect(0, top, LCD_WIDTH, METRO_HUB_PITCH);
+
+    for (frame = 1; frame <= METRO_SELECTION_FRAMES; frame++)
+    {
+        int p = metro_ease(METRO_EASE_OUT_QUAD, frame, METRO_SELECTION_FRAMES);
+        bool last = (frame == METRO_SELECTION_FRAMES);
+
+        top = draw_hub_row(sel, true, p, (METRO_HUB_PITCH * p) / 256, last);
+        lcd_update_rect(0, top, LCD_WIDTH, METRO_HUB_PITCH);
+        metro_transitions_trace("select", frame, METRO_SELECTION_FRAMES, start_tick);
+
+        if (!last)
+            sleep(METRO_SELECTION_FRAME_TICKS);
+    }
+}
+
 void metro_screen_hub_show(void)
 {
     metro_nav_t *nav = metro_screen_nav();
     int first = metro_nav_first_visible(nav);
     int sel = metro_nav_sel(nav);
     int count = hub_count(NULL);
-    bool playing = metro_music_is_playing();
-    int i, y = METRO_HUB_FIRST_Y;
+    int i;
 
     metro_draw_clear();
     /* moonlit (D-016, D-044, M9): NULL, no "" -- el hub ya dibuja su
@@ -1003,23 +1070,9 @@ void metro_screen_hub_show(void)
 
     for (i = first; i < count && i < first + METRO_HUB_VISIBLE + 1; i++)
     {
-        struct metro_row row;
         bool selected = (i == sel);
 
-        if (selected)
-            draw_hub_row_card(y);
-
-        if (playing && i == 0)
-        {
-            draw_now_playing_row(y, selected);
-        }
-        else
-        {
-            hub_get_row(NULL, i, &row);
-            metro_draw_text(MFONT_DISPLAY, METRO_HUB_TEXT_X, y, row.title,
-                             selected ? metro_color_fg() : metro_color_secondary());
-        }
-        y += METRO_HUB_PITCH;
+        draw_hub_row(i, selected, selected ? 256 : -1, METRO_HUB_PITCH, true);
     }
 
     lcd_update();
@@ -1041,12 +1094,12 @@ bool metro_screen_hub_tick(void)
     /* Solo esa fila: limpiar su franja y volverla a pintar. Más barato
      * que un show() completo a 20 Hz (que redibuja cuatro textos de
      * 48 px y sube 150 KB al LCD por cuadro). */
-    lcd_set_foreground(metro_color_bg());
-    lcd_fillrect(0, METRO_HUB_FIRST_Y, LCD_WIDTH, METRO_HUB_PITCH);
-    if (metro_nav_sel(nav) == 0)
-        draw_hub_row_card(METRO_HUB_FIRST_Y);
-    draw_now_playing_row(METRO_HUB_FIRST_Y, metro_nav_sel(nav) == 0);
-    lcd_update_rect(0, METRO_HUB_FIRST_Y, LCD_WIDTH, METRO_HUB_PITCH);
+    {
+        bool selected = (metro_nav_sel(nav) == 0);
+        int top = draw_hub_row(0, selected, selected ? 256 : -1, METRO_HUB_PITCH, true);
+
+        lcd_update_rect(0, top, LCD_WIDTH, METRO_HUB_PITCH);
+    }
     return true;
 }
 
@@ -1058,11 +1111,17 @@ void metro_screen_hub_handle(int action, int steps)
     switch (action)
     {
         case MACT_PREV:
-            metro_nav_move_sel(nav, -steps, count, METRO_HUB_VISIBLE);
-            break;
         case MACT_NEXT:
-            metro_nav_move_sel(nav, steps, count, METRO_HUB_VISIBLE);
+        {
+            int prev_first = metro_nav_first_visible(nav);
+            int prev_sel = metro_nav_sel(nav);
+
+            metro_nav_move_sel(nav, action == MACT_PREV ? -steps : steps,
+                                count, METRO_HUB_VISIBLE);
+            if (steps == 1)
+                run_selection_rise(prev_first, prev_sel);
             break;
+        }
         case MACT_SELECT:
             hub_on_select(NULL, metro_nav_sel(nav));
             break;

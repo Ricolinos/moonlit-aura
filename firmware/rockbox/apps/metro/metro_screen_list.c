@@ -29,6 +29,7 @@
 #include "metro_lang.h"
 #include "metro_widgets.h"
 #include "metro_motion.h"
+#include "metro_settings.h" /* moonlit (D-052 C4): puerta metro_settings.animations */
 #include "metro_transitions.h"
 #include "metro_music.h" /* R4/FA-8: metro_music_playpause() */
 #include "moonlit_palette.h" /* moonlit (D-011, M4): divisores outline_variant */
@@ -77,11 +78,8 @@ static void draw_about_rows(const struct metro_pivot *pivot, int first, int sel)
         pivot->get_row(pivot->ctx, i, &row);
 
         if (selected)
-        {
-            moonlit_draw_surface(0, y - 4, LCD_WIDTH, METRO_ABOUT_ROW_PITCH, MSURFACE_HIGH, 0);
-            lcd_set_foreground(moonlit_color(MROLE_PRIMARY));
-            lcd_fillrect(1, y - 4, 3, METRO_ABOUT_ROW_PITCH);
-        }
+            moonlit_draw_selection_card(y - 4, METRO_ABOUT_ROW_PITCH, 256,
+                                        METRO_ABOUT_ROW_PITCH, true);
 
         metro_draw_text_cut_right(selected ? MFONT_LIST_SEL : MFONT_LIST, METRO_DRAW_LEFT_X, y,
                                   row.title, selected ? metro_color_fg() : metro_color_secondary(),
@@ -240,6 +238,55 @@ void metro_screen_list_show(void)
     lcd_update();
 }
 
+/* moonlit (D-052 C4, "Marea que sube"): the row the selection just
+ * moved to lights up instead of snapping -- METRO_SELECTION_FRAMES
+ * frames, METRO_SELECTION_FRAME_TICKS apart (metro_transitions.h: 80
+ * ms, tokens.json motion.selection_ms), METRO_EASE_OUT_QUAD: the card
+ * tone rises from surface to surface_container_high, the primary
+ * marker grows from the top of the row, and the D-012 edges land on
+ * the last frame only. Only the two rows involved are repainted
+ * (metro_draw_row_slot()) and pushed with lcd_update_rect(), ~18k px
+ * per frame, no framebuffer capture -- so it also runs under
+ * `minimal`, unlike FEATHER. Never on a wheel jump (steps > 1: the
+ * eye is on the index letter, not on one row), never when the window
+ * scrolled (every row moved, a partial update would tear), never in
+ * grids, "Acerca de" (its own geometry) or empty lists. The caller's
+ * redraw_current() (metro_main.c) paints the settled screen right
+ * after, as it always did. */
+static void run_selection_rise(const struct metro_pivot *pivot, int prev_first, int prev_sel)
+{
+    int first = metro_nav_first_visible(&s_nav);
+    int sel = metro_nav_sel(&s_nav);
+    int top, frame;
+    long start_tick = current_tick;
+
+    if (!lcd_active() || metro_settings.animations == METRO_ANIM_OFF)
+        return;
+    if (pivot->tile_cols > 0 || pivot->name == LANG_PIVOT_ABOUT)
+        return;
+    if (pivot->count(pivot->ctx) == 0 || sel == prev_sel || first != prev_first)
+        return;
+    if (current_tick < s_index_letter_until)
+        return; /* the F10 letter still floats over the rows: a band update would cut it */
+
+    top = metro_draw_row_slot(pivot, prev_sel, prev_sel - first, false, -1, 0, false);
+    lcd_update_rect(0, top, LCD_WIDTH, METRO_DRAW_ROW_PITCH);
+
+    for (frame = 1; frame <= METRO_SELECTION_FRAMES; frame++)
+    {
+        int p = metro_ease(METRO_EASE_OUT_QUAD, frame, METRO_SELECTION_FRAMES);
+        bool last = (frame == METRO_SELECTION_FRAMES);
+
+        top = metro_draw_row_slot(pivot, sel, sel - first, true, p,
+                                  (METRO_DRAW_ROW_PITCH * p) / 256, last);
+        lcd_update_rect(0, top, LCD_WIDTH, METRO_DRAW_ROW_PITCH);
+        metro_transitions_trace("select", frame, METRO_SELECTION_FRAMES, start_tick);
+
+        if (!last)
+            sleep(METRO_SELECTION_FRAME_TICKS);
+    }
+}
+
 void metro_screen_list_handle(int action, int steps)
 {
     const struct metro_page *page = current_page();
@@ -267,8 +314,15 @@ void metro_screen_list_handle(int action, int steps)
                                          count, pivot->tile_cols, METRO_TILE_ROWS_VISIBLE);
                 break;
             }
+            {
+            int prev_first = metro_nav_first_visible(&s_nav);
+            int prev_sel = metro_nav_sel(&s_nav);
+
             metro_nav_move_sel(&s_nav, action == MACT_PREV ? -steps : steps,
                                 count, METRO_DRAW_ROWS_VISIBLE);
+            if (steps == 1)
+                run_selection_rise(pivot, prev_first, prev_sel);
+            }
             if (steps >= METRO_INDEX_LETTER_MIN_STEPS && count > 0)
             {
                 struct metro_row row;

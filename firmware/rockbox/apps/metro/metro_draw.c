@@ -242,6 +242,48 @@ void metro_draw_clear_rows_area(void)
     lcd_fillrect(0, METRO_ROWS_FIRST_Y, LCD_WIDTH, LCD_HEIGHT - METRO_ROWS_FIRST_Y);
 }
 
+/* moonlit (D-052 C4): one row's text -- title clipped before the
+ * right-aligned subtitle -- shared by metro_draw_rows_ex() and
+ * metro_draw_row_slot() so the selection animation never draws a row
+ * differently from the static list. */
+static void draw_row_text(const struct metro_row *row, int x, int row_y, bool selected)
+{
+    /* F10: clip the title so it can never run into the
+     * right-aligned subtitle (long filenames especially --
+     * videos/photos, up to METRO_FSUTIL_NAME_LEN bytes). Subtitle
+     * width has to be measured first to know where the title's
+     * clip boundary is. */
+    int title_clip_w = LCD_WIDTH - x;
+
+    if (row->subtitle)
+    {
+        int sub_w, sub_h;
+        lcd_setfont(metro_font_id(MFONT_LABEL));
+        lcd_getstringsize((const unsigned char *)row->subtitle, &sub_w, &sub_h);
+        metro_draw_text(MFONT_LABEL, LCD_WIDTH - 12 - sub_w, row_y + 4,
+                         row->subtitle, metro_color_tertiary());
+        title_clip_w = LCD_WIDTH - 12 - sub_w - x - 8;
+    }
+
+    metro_draw_text_cut_right(selected ? MFONT_LIST_SEL : MFONT_LIST, x, row_y,
+                               row->title,
+                               selected ? metro_color_fg() : metro_color_secondary(),
+                               title_clip_w);
+}
+
+/* moonlit (D-011, M4; D-052 C4): capa de estado MD3 -- la fila
+ * seleccionada se eleva sobre una tarjeta surface_container_high
+ * (D-028) con un marcador de 3px en primary a la izquierda, en vez de
+ * solo cambiar el color del texto (WP7). El texto se dibuja despues,
+ * encima (metro_draw_text* ya usa DRMODE_FG). Sin radio -- la tarjeta
+ * llega de borde a borde (x=0..320, como el resaltado de fila de
+ * siempre); un radio aqui dejaria una esquina flotando en el borde de
+ * pantalla. card_alpha/marker_h/edges: ver metro_draw_row_slot(). */
+static void draw_row_card(int row_y, int card_alpha, int marker_h, bool edges)
+{
+    moonlit_draw_selection_card(row_y - 4, METRO_ROW_PITCH, card_alpha, marker_h, edges);
+}
+
 /* F12: y_offsets[] (one entry per VISIBLE row slot, same indexing as
  * the loop below -- NULL for the plain, un-offset draw
  * metro_draw_rows() still does) is metro_screen_list.c's FEATHER
@@ -270,48 +312,38 @@ void metro_draw_rows_ex(const struct metro_pivot *pivot, int first, int sel,
 
         pivot->get_row(pivot->ctx, i, &row);
 
-        /* moonlit (D-011, M4): capa de estado MD3 -- la fila
-         * seleccionada se eleva sobre una tarjeta surface_container_high
-         * (D-028) con un marcador de 3px en primary a la izquierda, en
-         * vez de solo cambiar el color del texto (WP7). El texto se
-         * dibuja despues, encima (metro_draw_text* ya usa DRMODE_FG). */
         if (selected)
-        {
-            /* Sin radio -- la tarjeta llega de borde a borde (x=0..320,
-             * como el resaltado de fila de siempre); un radio aqui
-             * dejaria una esquina flotando en el borde de pantalla. El
-             * marcador arranca en x=1, no x=0, para no tapar el propio
-             * borde de luz de moonlit_draw_surface() (D-012). */
-            moonlit_draw_surface(0, row_y - 4, LCD_WIDTH, METRO_ROW_PITCH,
-                                  MSURFACE_HIGH, 0);
-            lcd_set_foreground(moonlit_color(MROLE_PRIMARY));
-            lcd_fillrect(1, row_y - 4, 3, METRO_ROW_PITCH);
-        }
+            draw_row_card(row_y, 256, METRO_ROW_PITCH, true);
 
-        /* F10: clip the title so it can never run into the
-         * right-aligned subtitle (long filenames especially --
-         * videos/photos, up to METRO_FSUTIL_NAME_LEN bytes). Subtitle
-         * width has to be measured first to know where the title's
-         * clip boundary is. */
-        int title_clip_w = LCD_WIDTH - x;
-
-        if (row.subtitle)
-        {
-            int sub_w, sub_h;
-            lcd_setfont(metro_font_id(MFONT_LABEL));
-            lcd_getstringsize((const unsigned char *)row.subtitle, &sub_w, &sub_h);
-            metro_draw_text(MFONT_LABEL, LCD_WIDTH - 12 - sub_w, row_y + 4,
-                             row.subtitle, metro_color_tertiary());
-            title_clip_w = LCD_WIDTH - 12 - sub_w - x - 8;
-        }
-
-        metro_draw_text_cut_right(selected ? MFONT_LIST_SEL : MFONT_LIST, x, row_y,
-                                   row.title,
-                                   selected ? metro_color_fg() : metro_color_secondary(),
-                                   title_clip_w);
+        draw_row_text(&row, x, row_y, selected);
 
         y += METRO_ROW_PITCH;
     }
+}
+
+int metro_draw_row_slot(const struct metro_pivot *pivot, int index, int slot,
+                        bool selected, int card_alpha, int marker_h, bool edges)
+{
+    struct metro_row row;
+    int row_y = METRO_ROWS_FIRST_Y + slot * METRO_ROW_PITCH;
+    int top = row_y - 4;
+
+    lcd_set_foreground(metro_color_bg());
+    lcd_fillrect(0, top, LCD_WIDTH, METRO_ROW_PITCH);
+
+    if (slot > 0)
+    {
+        lcd_set_foreground(moonlit_color(MROLE_OUTLINE_VARIANT));
+        lcd_hline(METRO_ROWS_LEFT_X, LCD_WIDTH - METRO_ROWS_LEFT_X, top);
+    }
+
+    if (card_alpha >= 0)
+        draw_row_card(row_y, card_alpha, marker_h, edges);
+
+    pivot->get_row(pivot->ctx, index, &row);
+    draw_row_text(&row, METRO_ROWS_LEFT_X, row_y, selected);
+
+    return top;
 }
 
 void metro_draw_rows(const struct metro_pivot *pivot, int first, int sel,

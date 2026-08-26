@@ -20,6 +20,7 @@
 #ifndef METRO_DRAW_H
 #define METRO_DRAW_H
 
+#include <stdbool.h>
 #include "moonlit_fonts.h"
 #include "metro_page.h"
 
@@ -117,6 +118,22 @@ void metro_draw_rows(const struct metro_pivot *pivot, int first, int sel,
  * of duplicating metro_draw_rows()'s own loop. */
 void metro_draw_rows_ex(const struct metro_pivot *pivot, int first, int sel,
                          int x_offset, const int *y_offsets);
+
+/* moonlit (D-052 C4): redraws ONE visible row slot -- `slot` = index
+ * - first, 0..METRO_DRAW_ROWS_VISIBLE -- in place, without
+ * lcd_update(): clears the slot to metro_color_bg(), repaints the
+ * outline_variant divider at its top (slot > 0, the convention of
+ * metro_screen_list.c's draw_row_dividers()), then the card and the
+ * text. card_alpha < 0: no card (an unselected row); 0..256: the card
+ * tone blended from surface to surface_container_high by that much
+ * (metro_fb_blend_color()), with a primary marker of `marker_h` px
+ * growing from the top and the D-012 edges only when `edges`. The
+ * fully selected row of metro_draw_rows_ex() is card_alpha 256,
+ * marker_h METRO_DRAW_ROW_PITCH, edges true. Returns the slot's top y
+ * so the caller can lcd_update_rect() exactly that band
+ * (METRO_DRAW_ROW_PITCH tall). */
+int metro_draw_row_slot(const struct metro_pivot *pivot, int index, int slot,
+                        bool selected, int card_alpha, int marker_h, bool edges);
 
 /* Clears just the row area (y >= METRO_ROWS_FIRST_Y) with
  * metro_color_bg() -- FEATHER's per-frame redraw needs this between

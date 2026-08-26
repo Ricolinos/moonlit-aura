@@ -82,6 +82,19 @@ void metro_transitions_fade(metro_transitions_draw_fn draw_to);
 #define METRO_CONTINUUM_TITLE_MAX 64
 void metro_transitions_arm_continuum(const char *text, int from_y);
 
+/* moonlit (D-052 C4, "Marea que sube"): the selection animation's
+ * timing, shared by metro_screen_list.c and metro_screen_hub.c --
+ * design-system/tokens.json motion.selection_ms (80) over 4 frames =
+ * 20 ms = 2 ticks per frame (HZ=100), motion.ease_selection =
+ * out_quad. Literal here for the same reason as METRO_TRANSITION_MS
+ * (D-037): nothing outside moonlit_palette.c includes
+ * moonlit_tokens.h (D-035). Gate: lcd_active() &&
+ * metro_settings.animations != METRO_ANIM_OFF (runs under `minimal`
+ * too: ~18k px/frame, no framebuffer capture); never on a wheel
+ * jump (steps > 1), never in grids, never when the window scrolled. */
+#define METRO_SELECTION_FRAMES      4
+#define METRO_SELECTION_FRAME_TICKS 2
+
 /* moonlit (D-052): one METRO_TRACE line ("<name> frame i/n at +t
  * ticks") for an animation loop that lives OUTSIDE this module (the
  * selection "Marea que sube", C4, in metro_screen_list.c/_hub.c) so

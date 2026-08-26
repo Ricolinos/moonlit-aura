@@ -20,6 +20,7 @@
 #ifndef MOONLIT_ELEVATION_H
 #define MOONLIT_ELEVATION_H
 
+#include <stdbool.h>
 #include "moonlit_palette.h"
 
 /* Elevacion tonal MD3 (D-012, M4): dibuja una tarjeta de (w x h) en
@@ -37,5 +38,18 @@
  * que metro_draw_clear() ya pinto detras de cualquier tarjeta. */
 void moonlit_draw_surface(int x, int y, int w, int h,
                            enum moonlit_surface_level level, int radius);
+
+/* moonlit (D-052 C4, "Marea que sube"): the selected-row card every
+ * list (metro_draw.c), the hub and "Acerca de" draw -- full screen
+ * width, y..y+h, filled with surface blended towards
+ * surface_container_high by `card_alpha` (0..256, metro_fb_blend_color();
+ * 256 = the settled card, anything less an intermediate frame of the
+ * selection animation), a 3px MROLE_PRIMARY marker at x=1 growing FROM
+ * THE TOP to `marker_h` px (0 = none), and the D-012 light/shadow 1px
+ * edges of MSURFACE_HIGH only when `edges` (the animation's last
+ * frame). The marker starts at x=1 so it never covers the light edge.
+ * No corner radius: the card runs edge to edge like the row highlight
+ * always did. */
+void moonlit_draw_selection_card(int y, int h, int card_alpha, int marker_h, bool edges);
 
 #endif /* MOONLIT_ELEVATION_H */

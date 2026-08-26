@@ -115,3 +115,32 @@ void moonlit_draw_surface(int x, int y, int w, int h,
     lcd_hline(x + r, x + w - 1 - r, y + h - 1);
     lcd_vline(x + w - 1, y + r, y + h - 1 - r);
 }
+
+void moonlit_draw_selection_card(int y, int h, int card_alpha, int marker_h, bool edges)
+{
+    if (h <= 0)
+        return;
+
+    lcd_set_foreground(metro_fb_blend_color(moonlit_color(MROLE_SURFACE),
+                                            moonlit_surface(MSURFACE_HIGH, MEDGE_NONE),
+                                            card_alpha));
+    lcd_fillrect(0, y, LCD_WIDTH, h);
+
+    if (edges)
+    {
+        lcd_set_foreground(moonlit_surface(MSURFACE_HIGH, MEDGE_LIGHT));
+        lcd_hline(0, LCD_WIDTH - 1, y);
+        lcd_vline(0, y, y + h - 1);
+        lcd_set_foreground(moonlit_surface(MSURFACE_HIGH, MEDGE_SHADOW));
+        lcd_hline(0, LCD_WIDTH - 1, y + h - 1);
+        lcd_vline(LCD_WIDTH - 1, y, y + h - 1);
+    }
+
+    if (marker_h > h)
+        marker_h = h;
+    if (marker_h > 0)
+    {
+        lcd_set_foreground(moonlit_color(MROLE_PRIMARY));
+        lcd_fillrect(1, y, 3, marker_h);
+    }
+}

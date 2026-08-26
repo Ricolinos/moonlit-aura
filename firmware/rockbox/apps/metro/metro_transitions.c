@@ -263,8 +263,7 @@ static void run_slide(int direction, struct level_spec spec, enum metro_ease_kin
         if (continuum)
             draw_continuum_frame(i, spec.frames);
         lcd_update();
-        METRO_TRACE("%s frame %d/%d at +%ld ticks", name, i, spec.frames,
-                    current_tick - start_tick);
+        metro_transitions_trace(name, i, spec.frames, start_tick);
 
         drain_button_queue_if_full();
         if (i < spec.frames)
