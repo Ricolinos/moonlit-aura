@@ -295,3 +295,21 @@ Ver `DECISIONS.md` M-061.
   de una sola línea "moonlit.aura" (misma tipografía Selawik Light hasta
   H2, mismas dimensiones 320×98; `bitmaps.make` sin cambios). H5 lo
   sustituye por el logotipo Waning Crescent.
+
+### moonlit M2 (2026-08-25, D-032)
+
+- `apps/SOURCES`: la entrada `metro/metro_fonts.c` pasa a
+  `metro/moonlit_fonts.c` (7 roles MD3, Libre Baskerville + Montserrat,
+  reemplaza los 5 roles Selawik). Comentario inline `moonlit (D-032)`.
+
+Nota (no bloqueante, sin comentario inline por no tocarse en este
+hito): `firmware/tools/gen_logo.py:18` sigue apuntando a
+`firmware/assets/fonts-src/Selawik-Light.ttf`, que este hito elimina
+(M-020, "cero Microsoft" ya no aplicaba a esa ruta pero el archivo
+seguía existiendo). `gen_logo.py` no se invoca desde ningún script de
+build (`build_sim.sh`/`build_target.sh`/`package_dist.sh`) -- solo se
+corre a mano, y ya está agendado para eliminarse por completo en M9
+(plan `05-plan-correctivo.md` §M9) cuando el logotipo Waning Crescent
+sustituye al wordmark provisional (D-026). Si alguien lo corre a mano
+antes de M9, fallará con "archivo no encontrado"; no se parchea aquí
+porque tocar el pipeline del logotipo está fuera del alcance de M2.

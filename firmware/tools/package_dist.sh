@@ -151,8 +151,8 @@ SENTINELS=(
   ".rockbox/codecs/aac.codec"
   ".rockbox/codecs/alac.codec"
   ".rockbox/viewers.config"
-  ".rockbox/fonts/metro-display-48.fnt"
-  ".rockbox/fonts/metro-list-20.fnt"
+  ".rockbox/fonts/moonlit-body-18.fnt"
+  ".rockbox/fonts/moonlit-list-20.fnt"
   ".rockbox/rockbox.ipod"
 )
 for sentinel in "${SENTINELS[@]}"; do

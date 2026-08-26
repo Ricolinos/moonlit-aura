@@ -21,6 +21,7 @@
  *
  ****************************************************************************/
 #include <stdbool.h>
+#include <stdlib.h> /* getenv(), M2: gancho de captura del especimen */
 /* config.h before tagcache.h -- see DECISIONS.md M-030. */
 #include "config.h"
 #include "tagcache.h"
@@ -34,7 +35,7 @@
 #include "metro_main.h"
 #include "metro_screen_splash.h"
 #include "metro_screen_usb.h"
-#include "metro_fonts.h"
+#include "moonlit_fonts.h"
 #include "metro_theme.h"
 #include "metro_lang.h"
 #include "metro_draw.h"
@@ -51,6 +52,7 @@
 #include "metro_thumbs.h"
 #include "metro_screen_photo_viewer.h"
 #include "metro_screen_lock.h"
+#include "metro_screen_specimen.h"
 
 /* See metro_main.h for why this must be called from apps/main.c's
  * init(), not from here. None of these settings are exposed anywhere
@@ -283,6 +285,21 @@ void metro_main(void)
      * specimen as the running UI (metro_screen_specimen.c stays in
      * the tree as a visual regression reference, just unused here --
      * see docs/DESVIACIONES.md F2-1). */
+#ifdef SIMULATOR
+    /* M2: unico gancho para que firmware/tools/sim_shot.sh pueda
+     * capturar metro_screen_specimen.c -- sin esto es inalcanzable
+     * desde la navegacion real (comentario de arriba). SIMULATOR solo
+     * lo define tools/configure para el build del simulador
+     * (tools/configure:1165,4345), asi que este bloque no existe en
+     * el target real. */
+    if (getenv("METRO_SIM_SPECIMEN") != NULL)
+    {
+        int specimen_steps;
+        metro_screen_specimen_show();
+        while (1)
+            metro_input_next(MCTX_HUB, HZ, &specimen_steps);
+    }
+#endif
     redraw_current();
 
     while (1)

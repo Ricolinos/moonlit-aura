@@ -311,7 +311,7 @@ keymaps/keymap-hibyr3proii.c
  * settings still reference it, but it is never invoked. */
 metro/metro_main.c
 metro/metro_screen_splash.c
-metro/metro_fonts.c
+metro/moonlit_fonts.c /* moonlit (D-032): reemplaza metro/metro_fonts.c, 7 roles MD3 */
 metro/metro_theme.c
 metro/metro_draw.c
 metro/metro_screen_specimen.c

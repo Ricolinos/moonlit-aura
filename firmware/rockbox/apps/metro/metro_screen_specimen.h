@@ -20,11 +20,11 @@
 #ifndef METRO_SCREEN_SPECIMEN_H
 #define METRO_SCREEN_SPECIMEN_H
 
-/* F2 only: temporary boot screen exercising the 5 font roles, the
- * right-edge clip primitives, the 10 accent colors, and the header
- * (hour + battery) -- see PLAN_MAESTRO.md F2. Superseded by the real
- * hub screen (metro_screen_hub) once F3 lands; the file stays until
- * then as a visual regression reference. */
+/* Visual regression reference for the 7 MD3 type roles (M2,
+ * design-system/tokens.json:type_scale) and the header (hour +
+ * battery). One line per role, same pangram-ish string, so
+ * firmware/tools/check_fonts.py --capheight can measure cap-height
+ * per row mechanically (D-006). */
 void metro_screen_specimen_show(void);
 
 #endif /* METRO_SCREEN_SPECIMEN_H */

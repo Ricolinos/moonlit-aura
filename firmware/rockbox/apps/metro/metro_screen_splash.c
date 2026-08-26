@@ -20,7 +20,7 @@
 #include "lcd.h"
 
 #include "metro_screen_splash.h"
-#include "metro_fonts.h"
+#include "moonlit_fonts.h"
 #include "metro_theme.h"
 #include "metro_draw.h"
 #include "metro_lang.h"
