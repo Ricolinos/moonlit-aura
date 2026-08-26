@@ -345,8 +345,11 @@ void metro_main(void)
         /* R5-F5 (M-085): espera más corta mientras la fila
          * "reproduciendo" del hub se anima, para que el tick llegue a
          * ~20 Hz; el resto del tiempo, la de siempre. */
+        /* moonlit (D-053): misma cadencia de ~20 Hz mientras Marea
+         * anima su scroll por reloj (moonlit_screen_marea_animating()). */
         int action = metro_input_next(ctx,
-                                      (at_root && metro_screen_hub_wants_ticks())
+                                      ((at_root && metro_screen_hub_wants_ticks()) ||
+                                       (at_marea && moonlit_screen_marea_animating()))
                                           ? HZ / 20 : HZ / 10,
                                       &steps);
 
@@ -459,8 +462,19 @@ void metro_main(void)
              * -- moonlit_screen_marea.c nunca decodifica un JPEG
              * dentro de show()/draw_slide() (regla dura de D-030),
              * solo aquí, fuera de cualquier bucle de animación. */
-            if (at_marea && moonlit_screen_marea_tick())
-                redraw_current();
+            /* moonlit (D-053): mientras el scroll anima, cada vuelta
+             * ociosa (HZ/20) es un cuadro -- solo la banda izquierda;
+             * el asentamiento repinta la pantalla completa una vez. El
+             * tick de disco NO corre durante la animacion (ninguna
+             * lectura dentro del bucle de animacion, regla del repo);
+             * al asentar, carga una tapa por vuelta y repinta la banda. */
+            if (at_marea)
+            {
+                if (moonlit_screen_marea_animating())
+                    moonlit_screen_marea_show_carousel();
+                else if (moonlit_screen_marea_tick())
+                    moonlit_screen_marea_show_carousel();
+            }
 
             continue;
         }
@@ -530,6 +544,12 @@ void metro_main(void)
                 metro_transitions_push(redraw_current, -1);
             else if (!root_after && pivot_after != pivot_before)
                 metro_transitions_slide(redraw_current, pivot_after > pivot_before ? 1 : -1);
+            /* moonlit (D-053): un paso de rueda en Marea no repinta la
+             * pantalla completa -- dibuja el primer cuadro de la banda
+             * ahora mismo (latencia cero) y deja el resto a la rama
+             * ociosa de arriba. */
+            else if (marea_after && moonlit_screen_marea_animating())
+                moonlit_screen_marea_show_carousel();
             else
                 redraw_current();
         }

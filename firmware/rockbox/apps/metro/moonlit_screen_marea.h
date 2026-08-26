@@ -51,16 +51,42 @@ bool moonlit_screen_marea_push(void);
  * metro_screen_nowplaying_is_current()/metro_screen_photo_viewer_is_current(). */
 bool moonlit_screen_marea_is_current(void);
 
+/* Pantalla completa (clear + cabecera + banda + panel + lcd_update()).
+ * La llama redraw_current() al entrar y al cambiar tema/idioma, y
+ * moonlit_screen_marea_show_carousel() en el cuadro de asentamiento. */
 void moonlit_screen_marea_show(void);
 void moonlit_screen_marea_handle(int action, int steps);
 
-/* Presupuesto de UN decode por llamada (mismo patrón que
- * metro_thumbs_tick(), DD-9): get_slot_for() nunca decodifica un JPEG
- * dentro de show() (regla dura de D-030/M8) -- un cache-miss cae al
- * monograma y encola el álbum; metro_main.c llama esto desde su rama
- * ociosa (MACT_NONE) mientras Marea es la pantalla actual, igual que
- * ya hace con el motor de miniaturas. Devuelve true si decodificó algo
- * (el llamador debe redibujar), false si no había nada pendiente. */
+/* D-053 (modelo Music Flow de Aura-Firmware, aura_musicflow.c): el
+ * scroll no bloquea. moonlit_screen_marea_handle(MACT_NEXT/PREV) solo
+ * fija un destino y regresa; la posición visual es una función del
+ * reloj (220 ms, out_expo, retarget desde la posición actual).
+ *
+ * animating(): true desde que se pidió un destino hasta que se dibujó
+ * el cuadro de asentamiento -- metro_main.c sondea a HZ/20 mientras
+ * tanto (patrón metro_screen_hub_wants_ticks()) y llama
+ * show_carousel() en cada vuelta ociosa.
+ *
+ * show_carousel(): un cuadro -- repinta SOLO la banda izquierda
+ * (0,20,152,220) con lcd_update_rect() bajo cpu_boost(); cuando la
+ * posición alcanza el destino por primera vez cae a
+ * moonlit_screen_marea_show() completa (panel + cabecera + conteo de
+ * canciones). Ya asentada, repinta la banda sola (tapa recién cargada
+ * por tick()). Nunca lee disco. */
+bool moonlit_screen_marea_animating(void);
+void moonlit_screen_marea_show_carousel(void);
+
+/* Presupuesto de UNA carga por llamada (mismo patrón que
+ * metro_thumbs_tick(), DD-9): get_slot_for() nunca abre archivos
+ * dentro de show()/show_carousel() (regla dura de D-030/M8, D-053) --
+ * un cache-miss reclama el slot con el monograma y lo deja pendiente;
+ * esto lee el .pfraw (o decodifica la carátula si falta) del slot
+ * pendiente más cercano al destino, o precarga el álbum más cercano sin
+ * slot dentro del radio de precarga. metro_main.c lo llama desde su
+ * rama ociosa (MACT_NONE) mientras Marea es la pantalla actual y NO
+ * está animando (ninguna lectura de disco dentro de la animación).
+ * Devuelve true si gastó el presupuesto (el llamador repinta la
+ * banda), false si no había nada pendiente. */
 bool moonlit_screen_marea_tick(void);
 
 #endif /* MOONLIT_SCREEN_MAREA_H */
