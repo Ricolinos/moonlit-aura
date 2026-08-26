@@ -13,18 +13,20 @@ fuera de `lcd_active()`; ningún color fuera de `design-system/tokens.json`.
 
 ## Estado
 
-**En construcción, con el lenguaje visual Waning Crescent ya en pie.**
-Este repositorio se forkeó de Metro-Aura en el tag `moonlit-fork-base`
-(`2f1bd28a`). Hitos M1–M9 de `docs/plan/05-plan-correctivo.md`
-ejecutados: tokens MD3 de dos esquemas (`night`/`dawn`), tipografía
-Libre Baskerville + Montserrat, iconos Material Symbols compilados,
-paleta y elevación tonal en hub/lista/ajustes/Ahora suena/candado/USB,
-pantalla "Marea" (Cover Flow vertical) y el logotipo Waning Crescent.
-Pendientes: M10 (esta sincronización de documentación), M11 (revisión
-adversarial) y M12 (medición en hardware real + empaquetado). Las
-decisiones cerradas viven en `DECISIONS.md` (D-001 en adelante); la
-bitácora heredada de Metro se conserva de solo lectura en
-`DECISIONS-METRO-ARCHIVE.md`.
+**Camino al primer release `v0.1.0`, con el lenguaje visual Waning
+Crescent en pie.** Repositorio: <https://github.com/Ricolinos/moonlit-aura>,
+forkeado de Metro-Aura en el tag `moonlit-fork-base` (`2f1bd28a`).
+Hitos M1–M11 de `docs/plan/05-plan-correctivo.md` hechos: tokens MD3
+de dos esquemas (`night`/`dawn`), tipografía Libre Baskerville +
+Montserrat, iconos Material Symbols compilados, paleta y elevación
+tonal en hub/lista/ajustes/Ahora suena/candado/USB, el logotipo Waning
+Crescent, la sincronización de documentación y la revisión adversarial.
+"Cambiar sistema" ofrece una fila por familia hermana (Aura, Metro;
+D-047). Pendiente: M12 (medición en hardware real + empaquetado,
+requiere el iPod). La pantalla "Marea" (Cover Flow vertical) es
+**experimental** hasta esa medición (D-043). Las decisiones cerradas
+viven en `DECISIONS.md` (D-001 en adelante); la bitácora heredada de
+Metro se conserva de solo lectura en `DECISIONS-METRO-ARCHIVE.md`.
 
 ## Hardware
 
@@ -59,8 +61,8 @@ en Studio para reconocer esta familia son trabajo del repo hermano
 (D-017), no de este.
 
 Lo que moonlit.aura garantiza y requiere de Studio está cerrado en
-`CONTRATO-moonlit-studio.md` (v1), que referencia —no copia— los
-contratos canónicos de `Aura-Firmware` (v13, v2, v1.3).
+`CONTRATO-moonlit-studio.md` (v2), que referencia —no copia— los
+contratos canónicos de `Aura-Firmware` (v14, v2, v1.3).
 
 **Advertencia**: una versión de Aura Studio que no conozca la familia
 `moonlit` puede ofrecer "actualizar" el iPod de vuelta a Aura o Metro

@@ -1,5 +1,13 @@
 # Contrato entre `moonlit-aura` y Aura Studio
 
+**Versión 2 — 2026-08-26 (release v0.1.0, D-046/D-047/D-048).**
+Cambios respecto a v1: referencia al contrato canónico **v14** (tres
+familias, §A bis "registro de familias"); §A.3 "una fila por hermana";
+§A.7 fija el primer tag `v0.1.0`; §B deja el marcador del SHA-256 del
+release; §C declara el prefijo `moonlit.` de `FIRMWARE_VERSION`, unifica
+el owner como `Ricolinos/moonlit-aura` y fija el centinela sin barra
+inicial (tal como lo consume Studio).
+
 **Versión 1 — 2026-08-25 (hito H1, D-001/D-002/D-017/D-021/D-023).**
 
 Este archivo **no copia** los contratos canónicos de `Aura-Firmware`; los
@@ -12,7 +20,7 @@ Contratos referenciados (fuente canónica, se leen desde el repo hermano):
 
 | Contrato | Versión referenciada | Ruta |
 |---|---|---|
-| Firmware ↔ Studio | **v13** (2026-08-23) | `Aura-Firmware/CONTRATO-firmware-studio.md` |
+| Firmware ↔ Studio | **v14** (2026-08-26; tres familias, §A bis registro de familias) | `Aura-Firmware/CONTRATO-firmware-studio.md` |
 | Nombre del dispositivo | **v2** (2026-08-17) | `Aura-Firmware/CONTRATO-dispositivo.md` |
 | Estructura de biblioteca | **v1.3** (2026-08-18) | `Aura-Firmware/docs/contracts/library-layout-v1.md` |
 
@@ -35,11 +43,18 @@ en Studio que aquí se requieren (§C) **no** se ejecutan desde este repo
    al terminar bien; una `version` no soportada se deja intacta
    (`metro_sync.c`, `metro_sync_marker.c`, tests host).
 3. **Árbol dormido `/.firmware-moonlit/`** (contrato v10, D-326;
-   `metro_settings.c:246`). El cambio de familia por renombre (M-090)
-   se conserva: `/.rockbox` → `/.firmware-moonlit`, `/.firmware-aura` →
-   `/.rockbox`, respaldo `/rockbox.ipod`, marcador con `music: true`,
-   reinicio en seco. En Studio corresponde a
-   `FirmwareFamily.dormantTreeName = ".firmware-moonlit"`.
+   `METRO_FW_OWN_DORMANT` en `metro_firmware_families.h:40`). El cambio
+   de familia por renombre (M-090) se conserva y se generaliza a las
+   **tres familias** del contrato v14 §A bis (D-047): Ajustes › General
+   › "cambiar sistema" muestra **una fila por hermana** (Aura
+   `/.firmware-aura`, Metro `/.firmware-metro`; tabla en
+   `metro_firmware_families.c`), inerte con "no instalado" si falta el
+   dormido; al confirmar: `/.rockbox` → `/.firmware-moonlit`,
+   `/.firmware-<hermana>` → `/.rockbox`, respaldo `/rockbox.ipod`,
+   marcador con `music: true` solo si la biblioteca cambió (M-091),
+   reinicio en seco (`metro_settings.c`, `metro_firmware_switch_to()`).
+   En Studio corresponde a `FirmwareFamily.dormantTreeName =
+   ".firmware-moonlit"`.
 4. **Caché privada `/.rockbox/aura/moonlitcache/<fuente>/`**
    (`metro_settings.c:216`, D-023). Árbol interno de moonlit, ajeno al
    contrato: Studio no lo lee ni lo escribe (C23) y la limpieza de
@@ -48,15 +63,20 @@ en Studio que aquí se requieren (§C) **no** se ejecutan desde este repo
 5. **`install_manifest.cfg`** se ignora (C28). `version.txt` dentro de
    `rockbox.zip` solo se escribe con `--release-tag` (C22, M-056).
 6. **Build reproducible**: nada que viaje en `rockbox.zip` usa
-   `__DATE__`/`__TIME__`, marcas de tiempo ni aleatoriedad (C28).
-7. **Release en GitHub `ricolinos/moonlit-aura`** con exactamente los
-   assets de la tabla §A del contrato v13 que aplican a una familia sin
-   sistema de temas: `rockbox.ipod`, `rockbox.zip`,
+   `__DATE__`/`__TIME__`, marcas de tiempo ni aleatoriedad (C28; los
+   plugins SDL Quake/Duke3D dejaron de embeber la hora de build en
+   D-048).
+7. **Release en GitHub `Ricolinos/moonlit-aura`**, primer tag
+   **`v0.1.0`** (D-046: los tags heredados de Metro no se publican), con
+   exactamente los assets de la tabla §A del contrato v14 que aplican a
+   una familia sin sistema de temas: `rockbox.ipod`, `rockbox.zip`,
    `bootloader-ipod6g.ipod`, `mks5lboot`, `checksums.txt`,
    `MODIFICATIONS.md`, `THIRD-PARTY-NOTICES.txt`. Sin `AuraPalette.swift`,
    `theme-format-v1.json` ni `aura-theme-default.zip` (D-009).
    Productor: `firmware/tools/package_dist.sh`.
-8. **Centinela de árbol instalado**: `/.rockbox/fonts/moonlit-body-18.fnt`
+8. **Centinela de árbol instalado**: `.rockbox/fonts/moonlit-body-18.fnt`
+   (ruta relativa a la raíz del volumen, **sin barra inicial**, que es
+   como la consume Studio)
    — archivo que solo moonlit escribe (PA-7; el nombre quedó fijado
    aquí y M2 lo materializó: `design-system/generate.py --fonts` genera
    `firmware/assets/fonts/moonlit-body-18.fnt`, que
@@ -92,12 +112,17 @@ mks5lboot
 fuentes. El SHA-256 cambia con cada recompilación (RBVERSION embebido),
 por eso no sirve como versión de fuente (PA-4). Los SHA-256 reales de
 cada release se anotan aquí en M12 de `docs/plan/05-plan-correctivo.md`
-(= H7 del plan 03, ver `DECISIONS.md` D-NNN del primer release; ningún
-binario de este par cambió en M1…M9, `BOOT-1` sigue vigente).
+(= H7 del plan 03; ningún binario de este par cambió en M1…M11,
+`BOOT-1` sigue vigente):
+
+```
+checksums.txt del release v0.1.0:
+  <SHA-256 de checksums.txt del release v0.1.0 — se rellena tras publicar>
+```
 
 Los cuatro binarios (`mks5lboot`, `bootloader-ipod6g.ipod`,
 `rockbox.ipod`, `rockbox.zip`) son derivados de Rockbox, GPL v2 (§B del
-contrato v13). `rockbox.zip` contiene además Libre Baskerville y
+contrato v14). `rockbox.zip` contiene además Libre Baskerville y
 Montserrat (SIL OFL 1.1) y Material Symbols rasterizados (Apache 2.0);
 sus avisos van en `THIRD-PARTY-NOTICES.txt` (D-002).
 
@@ -105,12 +130,17 @@ sus avisos van en `THIRD-PARTY-NOTICES.txt` (D-002).
 
 - Reconocer `firmware_family: moonlit` como familia **instalable y
   actualizable**: `FirmwareFamily` con `configValue "moonlit"`,
-  `displayName "moonlit.aura"`, `releaseRepository "ricolinos/moonlit-aura"`,
+  `displayName "moonlit.aura"`, `releaseRepository "Ricolinos/moonlit-aura"`,
   `bundleSubdirectory "moonlit"`, `installedTreeSentinel
-  "/.rockbox/fonts/moonlit-body-18.fnt"`, `dormantTreeName
-  ".firmware-moonlit"`. Detalle línea a línea en
+  ".rockbox/fonts/moonlit-body-18.fnt"` (sin barra inicial),
+  `dormantTreeName ".firmware-moonlit"`. Detalle línea a línea en
   `docs/plans/PROMPT-aura-studio.md`.
-- Pantalla Extras › Licencias (§B del contrato v13): URL del repo, tag
+- Pin de versión en `FIRMWARE_VERSION` con el prefijo **`moonlit.`**
+  (`moonlit.tag=v0.1.0` + cuatro hashes `moonlit.*` de `rockbox.ipod`,
+  `rockbox.zip`, `bootloader-ipod6g.ipod`, `mks5lboot`), mismo formato
+  que `metro.*`; el bundle vive en `bundleSubdirectory "moonlit"`. Lo
+  actualiza Aura-Studio, nunca este repo.
+- Pantalla Extras › Licencias (§B del contrato v14): URL del repo, tag
   de `FIRMWARE_VERSION`, enlaces a `MODIFICATIONS.md` y
   `THIRD-PARTY-NOTICES.txt` del release de moonlit.
 - **Hasta entonces** Studio degrada de forma segura

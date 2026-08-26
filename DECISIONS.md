@@ -1079,3 +1079,26 @@ cada sitio lleva el comentario `moonlit (D-048)` y queda registrado en
 firmware/rockbox/apps/plugins/sdl/progs/{quake,duke3d}` devuelve solo
 esos comentarios. Los mensajes son de consola interna del juego, sin
 efecto en jugabilidad ni en la UI de moonlit.
+
+**D-046 — Versión inicial `v0.1.0`; los tags heredados de Metro no se
+publican.** El clon local arrastra desde el fork los 31 tags de
+Metro-Aura (`git tag`: `v0.1.0`, `v0.1.0-beta`, `v0.2.0`…`v0.5.6`, más
+`moonlit-fork-base`); apuntan a commits de Metro (p. ej. `v0.5.6` =
+`69d93dd3` "M-092: wordmark becomes 'metro / aura'") y sus assets
+(`rockbox.ipod`, `rockbox.zip`…) existen solo en los releases de
+`Ricolinos/Metro-Aura`, nunca en este repo. El remoto
+`https://github.com/Ricolinos/moonlit-aura.git` solo tiene
+`moonlit-fork-base` (`git ls-remote --tags origin`). **Decisión**: el
+primer release de moonlit.aura es **`v0.1.0`** (`CONTRATO-moonlit-studio.md`
+v2 §A.7; `firmware/tools/package_dist.sh --release-tag v0.1.0`);
+ningún tag `v*` heredado se empuja (`git push --tags` queda prohibido;
+solo `git push origin v0.1.0`). Como el nombre `v0.1.0` ya existe
+localmente apuntando a `a3693675` (Metro F13), antes de etiquetar el
+release hay que **borrar el tag local heredado** (`git tag -d v0.1.0`)
+— y, para no repetir la colisión con `v0.2.x`…`v0.5.x` en releases
+futuros, borrar en bloque los 30 `v*` heredados del clon local. Esto
+no se hace en la pasada que cierra esta decisión (regla de la corrida:
+sin crear ni tocar tags); queda como paso 0 del checklist de release
+de `CLAUDE.md` §Releases. `docs/COMPAT_STUDIO.md` C22 (`version.txt`
+en el zip, camino feliz de `--release-tag`) se verifica con este mismo
+release.
