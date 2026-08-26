@@ -355,3 +355,14 @@ de todos modos se elimina por completo en M9 (plan
 
 Ver `DECISIONS.md` D-034…D-038 para el resto de M4 (íntegro dentro de
 `apps/metro/`, sin más archivos fuera de ese árbol).
+
+### moonlit M5 (2026-08-25, D-040)
+
+- `apps/SOURCES`: se retira la entrada `metro/metro_glyphs_table.c` —
+  M5 elimina ese archivo y `metro/metro_glyphs.h` por completo (el
+  glifo USB Fluent de M-089 pasa a `moonlit_icon_draw(MOONLIT_ICON_USB,
+  ...)`, D-040). Sin comentario inline por ser una eliminación, no una
+  sustitución de ruta.
+
+Ver `DECISIONS.md` D-039…D-040 para el resto de M5 (íntegro dentro de
+`apps/metro/`, sin más archivos fuera de ese árbol).

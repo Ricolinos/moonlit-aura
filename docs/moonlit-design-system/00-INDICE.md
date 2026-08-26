@@ -27,7 +27,11 @@ Se documentan a medida que cada hito los construye — ver
 - Hub, lista, ajustes, barra de estado: **M4** (implementado; sin nota
   de componente propia todavía — los cinco pilares de arriba cubren su
   vocabulario completo).
-- Ahora suena, candado, USB, splash: **M5**.
+- Ahora suena, candado, USB, splash: **M5** (implementado) —
+  [`componentes/ahora-suena.md`](componentes/ahora-suena.md),
+  [`componentes/candado.md`](componentes/candado.md),
+  [`componentes/usb.md`](componentes/usb.md) (splash documentado ahí
+  mismo, sin cambio de código propio).
 - Marea (Cover Flow vertical): **M8**.
 - Logotipo Waning Crescent: **M9**.
 

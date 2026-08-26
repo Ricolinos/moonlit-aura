@@ -174,15 +174,3 @@ void metro_widgets_draw_icon_in_circle(enum moonlit_icon_id id, int x, int y,
                             glyph_color);
 }
 
-void metro_widgets_draw_glyph(const struct metro_glyph *g, int x, int y, unsigned color)
-{
-    int row, col;
-
-    for (row = 0; row < g->height; row++)
-        for (col = 0; col < g->width; col++)
-        {
-            int a = g->alpha[row * g->width + col];
-            if (a)
-                metro_fb_plot_alpha(x + col, y + row, color, a * 256 / 255);
-        }
-}

@@ -353,5 +353,4 @@ metro/metro_transitions.c
 metro/metro_turnstile_table.c
 metro/moonlit_icons.c /* moonlit (D-033): reemplaza metro/metro_icons_table.c, mascaras 8-bit Material Symbols */
 metro/moonlit_icons_table.c
-metro/metro_glyphs_table.c
 metro/metro_volume.c

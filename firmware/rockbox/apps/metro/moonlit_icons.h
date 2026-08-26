@@ -21,9 +21,9 @@
  * (Google, Apache 2.0) como mascaras de cobertura de 8 bits (una por
  * icono x tamano), generadas offline por design-system/generate.py
  * --icons y COMMITEADAS en moonlit_icons_table.c -- mismo patron que
- * metro_glyphs_table.c (M-089): cero lecturas de disco en tiempo de
- * ejecucion, verificacion mecanica de tonos >= 4 en generacion, nunca
- * "a ojo".
+ * la tabla de glifos grandes de M-089 (retirada en M5, D-040): cero
+ * lecturas de disco en tiempo de ejecucion, verificacion mecanica de
+ * tonos >= 4 en generacion, nunca "a ojo".
  *
  * Sustituye a la tabla anterior de mascaras monocromas de 1 bit: el
  * antialiasing real de 8 bits evita los bordes en escalera que un

@@ -35,10 +35,12 @@
  * theme). INITDATA_ATTR on that bitmap is a no-op on the S5L8702
  * (verified by Aura-Firmware, D-223), so it stays valid all session.
  *
- * Composition: the sync glyph (Fluent arrow_sync rasterised at 40px
- * with anti-aliasing, embedded as an 8-bit coverage mask -- M-089;
- * the first cut scaled the 16px mask 2x and looked blocky), the wordmark,
- * and WP7's indeterminate progress: five accent dots that cross the
+ * Composition: the "usb" Material Symbol at 40px (moonlit_icons.h,
+ * D-033/D-040 -- 8-bit coverage mask compiled into
+ * moonlit_icons_table.c, same drawing primitive as the rest of the
+ * app's icons; replaces the M-089 Fluent arrow_sync glyph table
+ * retired in M5), the wordmark, and WP7's
+ * indeterminate progress: five accent dots that cross the
  * screen, fast at the edges and slow through the middle, staggered,
  * with a pause between sweeps. No text at all -- the only font left
  * would be Rockbox's 8px sysfont, which has nothing to do with Metro.
@@ -54,10 +56,10 @@
 #include "metro_screen_usb.h"
 #include "metro_theme.h"
 #include "metro_fb.h"
-#include "metro_widgets.h"
+#include "moonlit_icons.h"
 #include "metro_settings.h"
 
-#define USB_ICON_Y       56   /* 40px anti-aliased glyph, M-089 */
+#define USB_ICON_Y       56   /* icono "usb" Material Symbols a 40px, D-040 */
 #define USB_WORDMARK_Y   84   /* ink rows 28..70 of the bitmap -> 112..154 on screen */
 #define USB_DOTS_Y       184
 #define USB_DOT          4
@@ -125,12 +127,12 @@ void metro_screen_usb_show(void)
     lcd_set_foreground(metro_color_bg());
     lcd_fillrect(0, 0, LCD_WIDTH, LCD_HEIGHT);
 
-    /* M-089: the 16px mask scaled 2x read as blocks on the real panel
-     * ("se ve pixeleado") -- the same Fluent glyph, rasterised at 40px
-     * with anti-aliasing and embedded as a coverage mask, drawn blended. */
-    metro_widgets_draw_glyph(&metro_glyph_sync_large,
-                             (LCD_WIDTH - metro_glyph_sync_large.width) / 2, USB_ICON_Y,
-                             metro_color_accent());
+    /* D-040: icono "usb" de Material Symbols, mascara de cobertura de
+     * 8 bits ya compilada (moonlit_icons_table.c) -- ningun disco ni
+     * fuente involucrados, igual que exige la cabecera de este archivo. */
+    moonlit_icon_draw(MOONLIT_ICON_USB, MOONLIT_ICON_SIZE_40,
+                      (LCD_WIDTH - MOONLIT_ICON_SIZE_40) / 2, USB_ICON_Y,
+                      metro_color_accent());
     draw_wordmark((LCD_WIDTH - bm_rockboxlogo.width) / 2, USB_WORDMARK_Y);
     draw_dots(current_tick);
     lcd_update();
