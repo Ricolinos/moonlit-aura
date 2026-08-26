@@ -62,6 +62,16 @@ ICONS_VENDOR_DIR = ROOT / "vendor" / "material-symbols"
 ICONS_OUT = ROOT.parent / "firmware" / "rockbox" / "apps" / "metro" / "moonlit_icons_table.c"
 LOGO_VENDOR_DIR = ROOT / "logo"
 LOGO_OUT = ROOT.parent / "firmware" / "rockbox" / "apps" / "metro" / "moonlit_logo_table.c"
+# D-050: bitmap de arranque de Rockbox (apps/main.c show_logo_boot()) --
+# mismo nombre/dimensiones que el original para que la regla de
+# apps/bitmaps/bitmaps.make (bmp2rb -> bm_rockboxlogo) no cambie. El
+# "x16" del nombre es la profundidad NATIVA que bmp2rb produce para el
+# LCD; el archivo en disco es un BMP Windows 3.x de 24 bpp sin
+# compresion, igual que el original de Rockbox (`file`: "320 x 98 x 24").
+BOOTLOGO_OUT = ROOT.parent / "firmware" / "rockbox" / "apps" / "bitmaps" / "native" / "rockboxlogo.320x98x16.bmp"
+BOOTLOGO_TONES_OUT = ROOT.parent / "docs" / "screenshots" / "v0.1.1-bootlogo-tones.txt"
+BOOTLOGO_W, BOOTLOGO_H = 320, 98
+BOOTLOGO_CRESCENT_PX = 72
 
 SCHEMES = ("night", "dawn")
 
@@ -623,6 +633,58 @@ def generate_logo(tokens):
     print(f"==> {LOGO_OUT.relative_to(ROOT.parent)} ({len(crescent_entries)} tamanos de creciente + wordmark)")
 
 
+def generate_bootlogo(tokens):
+    """D-050: creciente Waning Crescent sobre `surface` del esquema night,
+    tinta `on_surface` (no `primary`: el preset de acento del usuario
+    aun no se ha leido cuando apps/main.c dibuja esto, y el splash de
+    metro_screen_splash.c que sigue dibuja el mismo creciente con
+    metro_color_fg() == on_surface -- asi el primer cuadro y el splash
+    son la misma figura del mismo color, sin salto). Sin texto."""
+    print("==> Generando apps/bitmaps/native/rockboxlogo.320x98x16.bmp")
+    if Image is None:
+        die("falta el modulo Pillow -- crea el venv del design system")
+
+    crescent_svg = LOGO_VENDOR_DIR / "moonlit-crescent.svg"
+    if not crescent_svg.exists():
+        die(f"falta {crescent_svg}")
+
+    bg = hex_to_rgb(tokens["color"]["night"]["surface"])
+    ink = hex_to_rgb(tokens["color"]["night"]["on_surface"])
+    size = BOOTLOGO_CRESCENT_PX
+    alpha = _rasterize_alpha(crescent_svg, size, size)
+
+    tones = {v for v in alpha if v > 0}
+    ok = len(tones) >= MIN_INK_TONES
+    report = [
+        f"design-system/generate.py --bootlogo (D-050)",
+        f"fuente: {crescent_svg.relative_to(ROOT.parent)} @ {size}px, supersampleo {ICON_SUPERSAMPLE}x + filtro de caja",
+        f"salida: {BOOTLOGO_OUT.relative_to(ROOT.parent)} ({BOOTLOGO_W}x{BOOTLOGO_H}, BMP 24 bpp)",
+        f"fondo: night.surface {tokens['color']['night']['surface']}  tinta: night.on_surface {tokens['color']['night']['on_surface']}",
+        f"tonos de tinta: {len(tones)} (minimo {MIN_INK_TONES})  {'tones>=4 OK' if ok else 'FAIL'}",
+    ]
+    for line in report:
+        print(line)
+    if not ok:
+        die(f"verificacion de tonos fallo -- {len(tones)} < {MIN_INK_TONES}")
+
+    img = Image.new("RGB", (BOOTLOGO_W, BOOTLOGO_H), bg)
+    px = img.load()
+    x0 = (BOOTLOGO_W - size) // 2
+    y0 = (BOOTLOGO_H - size) // 2
+    for y in range(size):
+        for x in range(size):
+            a = alpha[y * size + x]
+            if a == 0:
+                continue
+            px[x0 + x, y0 + y] = tuple(bg[c] + ((ink[c] - bg[c]) * a) // 255 for c in range(3))
+
+    BOOTLOGO_OUT.parent.mkdir(parents=True, exist_ok=True)
+    img.save(BOOTLOGO_OUT, format="BMP")
+    BOOTLOGO_TONES_OUT.parent.mkdir(parents=True, exist_ok=True)
+    BOOTLOGO_TONES_OUT.write_text("\n".join(report) + "\n")
+    print(f"==> {BOOTLOGO_OUT.relative_to(ROOT.parent)}; reporte en {BOOTLOGO_TONES_OUT.relative_to(ROOT.parent)}")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--header", action="store_true", help="genera apps/metro/moonlit_tokens.h")
@@ -630,10 +692,11 @@ def main():
     parser.add_argument("--fonts", action="store_true", help="genera firmware/assets/fonts/moonlit-*.fnt")
     parser.add_argument("--icons", action="store_true", help="genera apps/metro/moonlit_icons_table.c")
     parser.add_argument("--logo", action="store_true", help="genera apps/metro/moonlit_logo_table.c")
+    parser.add_argument("--bootlogo", action="store_true", help="genera apps/bitmaps/native/rockboxlogo.320x98x16.bmp (D-050)")
     args = parser.parse_args()
 
-    if not (args.header or args.contrast or args.fonts or args.icons or args.logo):
-        parser.error("nada que hacer: pasa --header, --contrast, --fonts, --icons y/o --logo")
+    if not (args.header or args.contrast or args.fonts or args.icons or args.logo or args.bootlogo):
+        parser.error("nada que hacer: pasa --header, --contrast, --fonts, --icons, --logo y/o --bootlogo")
 
     tokens = json.loads(TOKENS_PATH.read_text())
 
@@ -647,6 +710,8 @@ def main():
         generate_icons(tokens)
     if args.logo:
         generate_logo(tokens)
+    if args.bootlogo:
+        generate_bootlogo(tokens)
 
     print("==> listo")
 

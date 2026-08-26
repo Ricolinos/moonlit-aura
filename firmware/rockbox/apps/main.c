@@ -256,6 +256,25 @@ int main(void)
 int show_logo_boot( void ) INIT_ATTR;
 int show_logo_boot( void )
 {
+#if defined(IPOD_6G)
+    /* moonlit (D-050): the Waning Crescent from the very first frame.
+     * bm_rockboxlogo is now the crescent on the night `surface` tone
+     * (design-system/generate.py --bootlogo); no version text (a real
+     * iPod never shows a build number while booting, same as
+     * Aura-Firmware D-051/D-210), centred on both axes. The background
+     * is an RGB literal on purpose: apps/main.c cannot include
+     * apps/metro/moonlit_palette.h (only moonlit_palette.c includes
+     * moonlit_tokens.h -- D-035's "single includer" rule is scoped to
+     * apps/metro/, and this file runs before metro_main() owns the
+     * screen), so the value is design-system/tokens.json
+     * color.night.surface (#14161F) written out, kept in sync by hand
+     * with the bitmap's own background. */
+    lcd_set_background(LCD_RGBPACK(0x14, 0x16, 0x1F));
+    lcd_clear_display();
+    lcd_bmp(&bm_rockboxlogo, (LCD_WIDTH - BMPWIDTH_rockboxlogo) / 2,
+                              (LCD_HEIGHT - BMPHEIGHT_rockboxlogo) / 2);
+    lcd_update();
+#else
     unsigned char version[32];
     int font_h, ver_w;
     snprintf(version, sizeof(version), "Ver. %s", rbversion);
@@ -278,6 +297,7 @@ int show_logo_boot( void )
 #endif
     lcd_setfont(FONT_UI);
     lcd_update();
+#endif /* IPOD_6G -- moonlit (D-050) */
 #ifdef HAVE_REMOTE_LCD
     lcd_remote_clear_display();
     lcd_remote_bmp(&bm_remote_rockboxlogo, 0, 10);

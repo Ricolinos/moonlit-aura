@@ -7,14 +7,14 @@ Firmware para iPod Classic 6G (S5L8702, 320×240 @ LCD_DPI 160, 64 MB, sin GPU/F
 - Simulador: `firmware/tools/build_sim.sh [--reconfigure] [--run]` → `firmware/build-sim/rockboxui` (brew: sdl2 gcc).
   Captura: `firmware/tools/sim_shot.sh <out.png> [ticks] "SELECT,RIGHT,SCROLL_FWD,WAIT,…"` (320×240, headless); matriz `firmware/tools/sim_matrix.sh [dir]`
 - Target: `firmware/tools/build_target.sh [--firmware|--bootloader]` → `firmware/build-ipod6g/rockbox.ipod` (`RBDEV_TOOLCHAIN=<bin/>` = toolchain externo)
-- Tokens/fuentes/iconos/logo: `design-system/.venv/bin/python3 design-system/generate.py --header|--fonts|--icons|--logo|--contrast`
+- Tokens/fuentes/iconos/logo: `design-system/.venv/bin/python3 design-system/generate.py --header|--fonts|--icons|--logo|--bootlogo|--contrast`
   (venv: `python3 -m venv design-system/.venv && design-system/.venv/bin/pip install pillow`)
 - Verificación mecánica: `firmware/tools/check_fonts.py <fnt|--capheight png>`, `firmware/tools/check_tones.py <png> [--region x,y,w,h] [--edge]`;
   tests host `make -C firmware/rockbox/apps/metro/test test`
 
 ## Reglas que no se deducen del código
 - Idiomas: Markdown en español de México sin voseo; código, comentarios y commits en inglés; UI en español (`firmware/rockbox/apps/metro/metro_lang.c`).
-- Toda decisión se cierra en `DECISIONS.md` (D-NNN) antes de codificar. D-001…D-048 vinculantes. Metro histórico: `DECISIONS-METRO-ARCHIVE.md` (solo lectura).
+- Toda decisión se cierra en `DECISIONS.md` (D-NNN) antes de codificar. D-001…D-051 vinculantes. Metro histórico: `DECISIONS-METRO-ARCHIVE.md` (solo lectura).
 - Plan vigente: `docs/plan/05-plan-correctivo.md` (hitos M1–M12). `docs/plans/archivo/` es histórico, nunca trabajo pendiente.
 - Colores: solo `design-system/tokens.json` (roles MD3, esquemas night/dawn). En C solo `firmware/rockbox/apps/metro/moonlit_palette.c`
   incluye `firmware/rockbox/apps/metro/moonlit_tokens.h`; todo el mundo llama `moonlit_color(rol)`/`moonlit_surface(nivel, borde)`. Cero literales RGB en `apps/metro/`.

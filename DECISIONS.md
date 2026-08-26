@@ -1220,3 +1220,55 @@ sync hoy), solo devuelve al hub; (c) el tiempo por álbum en fase 2
 sigue siendo el del decode JPEG (~264 ms medidos), la ganancia real es
 que solo se paga una vez por álbum y con pantalla/botones — pendiente
 de medir en el iPod con la biblioteca completa.
+
+**D-050 — Creciente Waning Crescent desde el primer cuadro de arranque.**
+Hasta aquí `apps/main.c:256-294 show_logo_boot()` (stock, llamado en
+`:332,:398,:421,:544`) dibujaba `apps/bitmaps/native/rockboxlogo.320x98x16.bmp`
+— restaurado al original de Rockbox en M9/D-044 (md5 `5bc5004b…`) — más
+"Ver. …" en `FONT_SYSFIXED` durante los segundos de `init()`, antes de
+que `metro_main.c:268` mostrara el creciente: el primer cuadro visible
+del aparato era el logo amarillo de Rockbox. Patrón Aura:
+`../Aura-Firmware/firmware/rockbox/apps/main.c:256-299` (D-051/D-210:
+bitmap propio, sin texto de versión, centrado bajo `#elif
+defined(IPOD_6G)`). **Decisión:**
+1. `design-system/generate.py --bootlogo` (`generate_bootlogo`):
+   rasteriza `design-system/logo/moonlit-crescent.svg` a 72 px con el
+   mismo pipeline de `--logo` (`_rasterize_alpha`: rsvg-convert,
+   supersampleo 16× + filtro de caja) y lo compone centrado sobre un
+   lienzo 320×98 con fondo `color.night.surface` (#14161F) y tinta
+   `color.night.on_surface` (#E7E5EA). **Tinta `on_surface` y no
+   `primary`:** cuando `apps/main.c` dibuja esto aún no se ha leído el
+   preset de acento del usuario (`metro_settings_load()` corre dentro de
+   `metro_main()`), así que `primary` de moonstone sería una suposición
+   que falla para tide/ember/moss; además el splash que sigue
+   (`metro_screen_splash.c:50`) dibuja el mismo creciente con
+   `metro_color_fg()` == `on_surface`, con lo que primer cuadro y splash
+   son la misma figura del mismo color — sin salto. Sin texto.
+   Verificación de tonos ≥ 4 con la misma `MIN_INK_TONES` (104 tonos),
+   reporte en `docs/screenshots/v0.1.1-bootlogo-tones.txt`. Formato de
+   salida: BMP Windows 3.x 24 bpp sin compresión, idéntico al original
+   (`file` del original: "320 x 98 x 24"; el "x16" del nombre es la
+   profundidad nativa que `bmp2rb` produce para el LCD, no la del
+   archivo), así la regla de `apps/bitmaps/bitmaps.make` no cambia.
+   md5 nuevo `d03480c5a8c73b4639ad0b581ebed6e4`. `MODIFICATIONS.md`:
+   entrada del bmp reescrita.
+2. `apps/main.c show_logo_boot()`: bloque `#if defined(IPOD_6G)`
+   (comentario `moonlit (D-050)`): `lcd_set_background(LCD_RGBPACK(0x14,
+   0x16, 0x1F))` — literal RGB documentado como excepción: `main.c` no
+   puede incluir `moonlit_palette.h` (la regla de único includer de
+   `moonlit_tokens.h` está acotada a `apps/metro/`, D-035, y este código
+   corre antes de que `metro_main()` tenga la pantalla), el valor es
+   `tokens.json color.night.surface` copiado a mano y anotado —,
+   `lcd_clear_display()`, `lcd_bmp` centrado en ambos ejes, sin
+   `lcd_putsxy` de versión, `lcd_update()`. El `#else` conserva el
+   código stock para cualquier otro target. `MODIFICATIONS.md`:
+   entrada nueva. Nada en `bootloader/` (BOOT-1 intacto, D-045 punto 3
+   de las refutaciones de M11).
+Verificación: `md5` ≠ `5bc5004b8be813dddad1c88d5735bfb6`; Pillow
+confirma 320×98 y 103 colores distintos del fondo; `build_target.sh
+--firmware` produce `rockbox.ipod`; `build_sim.sh` sin warnings en
+`main.c`; `docs/screenshots/v0.1.1-boot-logo.png` con `sim_shot.sh … 5`
+(sin botones) muestra el creciente sobre `surface` night — el
+simulador pasa por `apps/main.c:421` (variante hosted) y `IPOD_6G` está
+definido en el build `--target=ipod6g --type=s`, así que ese camino
+también toma la rama nueva. `CLAUDE.md` §Comandos gana `--bootlogo`.

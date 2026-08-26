@@ -414,15 +414,19 @@ de `apps/metro/`).
   `metro/moonlit_logo_table.c` — logotipo Waning Crescent (creciente +
   wordmark, D-016/D-044). Comentario inline
   `moonlit (D-016, D-044, M9): logotipo Waning Crescent, mascaras 8-bit`.
-- `apps/bitmaps/native/rockboxlogo.320x98x16.bmp`: restaurado al
-  bitmap oficial de Rockbox (`git show
-  5c6da72d:firmware/rockbox/apps/bitmaps/native/rockboxlogo.320x98x16.bmp`,
-  el import sin modificar de F0). `firmware/tools/gen_logo.py` (que lo
-  sobrescribía con el wordmark de texto provisional de D-026) se
-  elimina en este mismo hito. Este bitmap solo lo dibuja
-  `apps/main.c:271` (`show_logo_boot()`, código stock de Rockbox) antes
-  de que `metro_main()` tenga el control de la pantalla — ajeno al
-  sistema de diseño de moonlit, ver D-044 punto 3 en `DECISIONS.md`.
+- `apps/bitmaps/native/rockboxlogo.320x98x16.bmp`: en M9 (D-044) se
+  restauró al bitmap oficial de Rockbox (md5 `5bc5004b…`) y
+  `firmware/tools/gen_logo.py` se eliminó. **Reescrito en v0.1.1
+  (D-050):** ahora es el creciente Waning Crescent (72 px, tinta
+  `night.on_surface`) sobre `night.surface`, sin texto, generado por
+  `design-system/generate.py --bootlogo` desde
+  `design-system/logo/moonlit-crescent.svg` (mismo supersampleo 16× y
+  verificación de tonos ≥ 4 que `--logo`; reporte en
+  `docs/screenshots/v0.1.1-bootlogo-tones.txt`). Mismo nombre y
+  dimensiones (320×98, BMP 24 bpp — el "x16" es la profundidad nativa
+  que `bmp2rb` produce), la regla de `apps/bitmaps/bitmaps.make` no
+  cambia. Lo dibuja `apps/main.c show_logo_boot()` antes de que
+  `metro_main()` tenga la pantalla.
 
 Ver `DECISIONS.md` D-044 para el resto de M9 (`apps/metro/moonlit_logo.{c,h}`,
 `apps/metro/metro_screen_splash.c`, `apps/metro/metro_screen_list.c`,
@@ -458,3 +462,17 @@ cambio de fuente. Cada sitio lleva el comentario `moonlit (D-048)`:
   existía para esa línea.
 
 (Rutas relativas a `firmware/rockbox/`. Ver `DECISIONS.md` D-048.)
+
+### moonlit v0.1.1 (2026-08-26, D-050)
+
+- `apps/main.c` `show_logo_boot()`: bloque `#if defined(IPOD_6G)` marcado
+  `moonlit (D-050)` — `lcd_set_background(LCD_RGBPACK(0x14, 0x16, 0x1F))`
+  (= `tokens.json color.night.surface`, literal documentado: este
+  archivo no puede incluir `moonlit_palette.h`, D-035),
+  `lcd_clear_display()`, `lcd_bmp` centrado en ambos ejes y
+  `lcd_update()`; sin el `lcd_putsxy` de "Ver. …". El resto de targets
+  conserva el código stock intacto (`#else`). Las cuatro llamadas
+  (`:332,:398,:421,:544`) no cambian; el simulador (variante hosted,
+  `init()` de `PLATFORM_HOSTED`) pasa por el mismo bloque porque
+  `IPOD_6G` está definido en el build `--target=ipod6g --type=s`.
+  Nada en `bootloader/` (BOOT-1 intacto).

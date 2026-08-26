@@ -1,0 +1,5 @@
+design-system/generate.py --bootlogo (D-050)
+fuente: design-system/logo/moonlit-crescent.svg @ 72px, supersampleo 16x + filtro de caja
+salida: firmware/rockbox/apps/bitmaps/native/rockboxlogo.320x98x16.bmp (320x98, BMP 24 bpp)
+fondo: night.surface #14161F  tinta: night.on_surface #E7E5EA
+tonos de tinta: 104 (minimo 4)  tones>=4 OK
