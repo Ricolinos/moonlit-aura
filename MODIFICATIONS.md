@@ -333,3 +333,25 @@ funcionando -- `gen_logo.py` no se invoca desde ningún script de build
 (`build_sim.sh`/`build_target.sh`/`package_dist.sh`), solo a mano, y
 de todos modos se elimina por completo en M9 (plan
 `05-plan-correctivo.md` §M9) junto con el wordmark provisional.
+
+### moonlit M4 (2026-08-25, D-035)
+
+- `apps/plugins/mpegplayer/mpegplayer.c`: el `#include "../../metro/metro_palette.h"`
+  de D-025 pasa a `#include "../../metro/moonlit_tokens.h"` -- M4 retira
+  `metro_palette.h` (sustituido por `moonlit_palette.c/.h`, que tiene
+  un `.c` y por lo tanto no se puede enlazar desde un plugin, ver
+  `DECISIONS.md` D-035). `metro_load_personalization()` reescrita: los
+  10 acentos WP7 planos (`metro_accent_colors[10]`) pasan a los 4
+  presets MD3 por esquema (`metro_accent_colors_night/dawn[4]`,
+  D-028) y las 4 tinturas WP7 (`METRO_DARK_BG` etc.) a los roles de
+  superficie `MOONLIT_NIGHT_*`/`MOONLIT_DAWN_*`. Comentario inline
+  `moonlit (D-025, D-035)`.
+- `apps/plugins/mpegplayer/mpeg_settings.c`: un comentario (línea ~23)
+  actualizado para no citar `metro_palette.h` (eliminado) ni "10
+  acentos" (ahora 4) -- sin cambio de código.
+- `apps/plugins/mpegplayer/mpegplayer.make`: comentario junto a
+  `-I$(APPSDIR)/metro` actualizado (`metro_palette.h` → `moonlit_tokens.h`,
+  mismo razonamiento de header puro). El flag en sí no cambia.
+
+Ver `DECISIONS.md` D-034…D-038 para el resto de M4 (íntegro dentro de
+`apps/metro/`, sin más archivos fuera de ese árbol).

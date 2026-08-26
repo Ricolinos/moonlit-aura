@@ -400,3 +400,90 @@ Implementada en M3: `design-system/tokens.json` (`icon`),
 `firmware/tools/check_tones.py`. Elimina: `firmware/assets/icons/`,
 `firmware/tools/gen_icons.py`, `apps/metro/metro_icons.h`,
 `apps/metro/metro_icons_table.c`.
+
+# Hito M4 — Paleta MD3, elevación tonal y pantallas base (D-034…D-038)
+
+**D-034 — Los 4 tonos WP7 heredados se resuelven por rol MD3, no se retiran.**
+`metro_color_bg()`/`metro_color_fg()`/`metro_color_secondary()`/`metro_color_tertiary()`
+(`metro_theme.c`) siguen existiendo con el mismo nombre — los llaman
+`metro_screen_nowplaying.c`, `metro_screen_lock.c` y `metro_screen_usb.c`
+(M5, fuera de alcance de M4) sin cambios — pero ya no leen
+`metro_palette.h`: delegan en `moonlit_color()` (`moonlit_palette.c`)
+con el mapeo `bg→surface`, `fg→on_surface`, `secondary→on_surface_variant`,
+`tertiary→outline`. `metro_color_accent()` (que sí tenía cero razón de
+sobrevivir como función propia, D-028 ya lo resuelve como
+`moonlit_color(MROLE_PRIMARY)`) se retira como función y queda como
+`#define metro_color_accent moonlit_color_accent` en `moonlit_palette.h`
+— mismo patrón de alias que `moonlit_fonts.h` usó con `MFONT_CAPTION`
+en M2 — hasta que M11 lo retire. `metro_accent_color(enum metro_accent)`
+(cero llamadores, verificado por grep) se elimina sin reemplazo.
+
+**D-035 — Excepción de "único includer" para plugins de Rockbox
+(discrepancia consultada con el dueño).** El plan (`05-plan-correctivo.md`
+§M4) fija dos cosas en tensión: "`apps/metro/moonlit_palette.c/.h` —
+único includer de `moonlit_tokens.h`" y, dos párrafos después, "el
+include de `mpegplayer.c:113` [metro_palette.h] → `moonlit_palette.h`".
+`moonlit_palette.h` no es un header puro (declara funciones
+implementadas en `moonlit_palette.c`) y un plugin de Rockbox
+(`mpegplayer.rock`) no enlaza objetos de `apps/metro/` — solo su propio
+código más la tabla `rb->` (`mpegplayer.make:27-31`, comentario
+preexistente de M-059/D-025) — así que seguir la instrucción al pie de
+la letra rompe el link del plugin. **Resolución (consultada con el
+dueño, tres opciones ofrecidas):** `mpegplayer.c` incluye
+`../../metro/moonlit_tokens.h` directo — sigue siendo un header puro de
+`#define` (ningún `.c`), igual que `metro_palette.h` antes — y la regla
+de "único includer" se entiende acotada a `apps/metro/`: dentro de ese
+árbol solo `moonlit_palette.c` lo incluye (`grep -rln 'moonlit_tokens.h'
+apps/metro/` → únicamente `moonlit_palette.c` cuenta como `#include`;
+`metro_theme.h`, `moonlit_palette.h`, `moonlit_elevation.h`,
+`metro_transitions.c`, `test/test_tokens.c` y `test/Makefile` solo
+*mencionan* el nombre del archivo en un comentario o regla de Make, no
+lo incluyen). `test/test_tokens.c` ya incluía `moonlit_tokens.h` desde
+M1 (host test, excepción ya vigente). Colores de `mpegplayer.c`
+reescritos a los 4 presets MD3 (`metro_accent_colors_night/dawn[4]`,
+D-028) y a los roles de superficie noche/dawn — antes leía los 10
+acentos WP7 planos de `metro_palette.h`.
+
+**D-036 — Cierre de D-011 (listas con divisores): primitiva de blit
+citada.** `metro_screen_list.c:56` (`draw_row_dividers()`),
+`lcd_hline(METRO_DRAW_LEFT_X, LCD_WIDTH - METRO_DRAW_LEFT_X, y)` en
+`outline_variant` (D-028), un borde por cada límite entre filas
+visibles salvo el que cae dentro de la tarjeta de la fila seleccionada
+(la tapa moonlit_draw_surface() de esa fila, D-012, ya la delimita).
+D-011 pasa de condicionada a **aprobada**.
+
+**D-037 — Duración de PUSH/POP desde `motion.transition_ms`.**
+`metro_transitions.c` no puede incluir `moonlit_tokens.h` (D-035); la
+constante `METRO_TRANSITION_MS 220` se repite ahí como literal
+documentado. Con `HZ=100` fijo (`firmware/kernel/include/tick.h`) y
+`frame_delay=3` ticks (30 ms/cuadro) sin cambiar, `animations=all` pasa
+de 8 a 7 cuadros (240 ms → 210 ms, más cerca de los 220 ms del token
+que el valor anterior, que no venía de ningún token). `animations=minimal`
+no cambia (4 cuadros).
+
+**D-038 — Identidad en español de los esquemas y presets; retiro de
+`MFONT_CAPTION`.** `LANG_VALUE_DARK/LIGHT` pasan de "oscuro"/"claro" a
+**"noche"/"amanecer"** (`metro_lang.c`) — los dos esquemas MD3 llevan la
+identidad Waning Crescent, no solo una polaridad de contraste; en
+inglés, "night"/"dawn". Los 4 presets de acento (D-028) se nombran
+**piedra lunar / marea / ascua / musgo** (`LANG_ACCENT_MOONSTONE/TIDE/
+EMBER/MOSS`); en inglés, moonstone/tide/ember/moss. `MFONT_CAPTION`
+(compat temporal de M2) se retira de `moonlit_fonts.h`; los 22 sitios
+que lo usaban pasan a `MFONT_LABEL` (header, subtítulos, valores,
+tiempos, cejas volando en CONTINUUM) salvo el mensaje de lista vacía de
+`metro_widgets_draw_empty_state()`, que pasa a `MFONT_BODY` (es una
+oración completa, no un valor corto).
+
+Implementada en M4: `apps/metro/moonlit_palette.{c,h}` (roles MD3,
+presets, único includer de `moonlit_tokens.h` dentro de `apps/metro/`),
+`apps/metro/moonlit_elevation.{c,h}` (tarjetas de elevación tonal con
+esquinas por cobertura y borde luz/sombra de 1px), `metro_theme.{c,h}`
+(D-034), `metro_draw.c` (barra de estado 20px sobre
+`surface_container_lowest`; capa de estado de foco/selección en
+`metro_draw_rows_ex()`), `metro_screen_list.c` (D-036),
+`metro_screen_hub.c` (misma capa de estado en su propio bucle de
+dibujo), `metro_screen_settings.c` (4 presets), `metro_lang.{c,h}`
+(D-038), `metro_transitions.c` (D-037), `moonlit_fonts.h` (retiro de
+`MFONT_CAPTION`), `firmware/tools/check_tones.py` (`--edge`),
+`firmware/tools/sim_matrix.sh` (2 esquemas × 4 presets × 3 pantallas),
+`apps/plugins/mpegplayer/*` (D-035). Elimina: `apps/metro/metro_palette.h`.
