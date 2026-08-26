@@ -194,12 +194,12 @@ static void request_decode(int album_index, int32_t seek)
 /* D-045 (cerrada): true solo dentro del `for` de run_scroll_animation().
  * Mientras esta puesto, get_slot_for() NUNCA abre un archivo: un miss
  * (que no deberia ocurrir -- preload_range() ya cargo la ventana que el
- * scroll va a mostrar) cae a un slot de paso con monograma, sin tocar
- * la LRU, y deja s_scroll_missed para que el cuadro final se repinte
- * con disco permitido. */
+ * scroll va a mostrar) cae al slot LRU que tocaba, dejado LIBRE
+ * (album_index = -1) con solo el monograma, y deja s_scroll_missed
+ * para que el cuadro final se repinte con disco permitido. Sin buffer
+ * aparte: un slot mas serian 28 816 B de .bss, y D-043 fija el techo. */
 static bool s_in_scroll_loop;
 static bool s_scroll_missed;
-static marea_slot_t s_miss_slot;
 
 static marea_slot_t *get_slot_for(int album_index)
 {
@@ -212,16 +212,6 @@ static marea_slot_t *get_slot_for(int album_index)
     for (i = 0; i < MAREA_CACHE_SLOTS; i++)
         if (s_slots[i].album_index == album_index)
             return &s_slots[i];
-
-    if (s_in_scroll_loop)
-    {
-        s_scroll_missed = true;
-        s_miss_slot.album_index = -1;
-        s_miss_slot.has_art = false;
-        metro_lang_initial(s_albums[album_index].label, s_miss_slot.initial,
-                            sizeof(s_miss_slot.initial));
-        return &s_miss_slot;
-    }
 
     for (i = 0; i < MAREA_CACHE_SLOTS; i++)
     {
@@ -240,6 +230,16 @@ static marea_slot_t *get_slot_for(int album_index)
         }
     }
     i = (free_slot >= 0) ? free_slot : farthest;
+
+    if (s_in_scroll_loop)
+    {
+        s_scroll_missed = true;
+        s_slots[i].album_index = -1; /* stays free: loaded for real after the loop */
+        s_slots[i].has_art = false;
+        metro_lang_initial(s_albums[album_index].label, s_slots[i].initial,
+                            sizeof(s_slots[i].initial));
+        return &s_slots[i];
+    }
 
     s_slots[i].album_index = album_index;
     theme = (int32_t)metro_theme_get();

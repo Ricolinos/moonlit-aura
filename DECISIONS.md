@@ -980,9 +980,14 @@ cuadro dibuja centro ± `MAREA_VISIBLE_RADIUS+1`; con
 desaloja por distancia a `s_target_index`, que ya apunta al destino).
 Dentro del bucle, `s_in_scroll_loop` (`:200`) veda a `get_slot_for()`
 cualquier `moonlit_art_read_pfraw()`: un miss (que la precarga hace
-imposible salvo tema cambiado a mitad de scroll) cae a un slot de paso
-con monograma sin tocar la LRU, marca `s_scroll_missed` y el cuadro
-final se repinta una vez fuera del bucle con disco permitido. La
+imposible salvo tema cambiado a mitad de scroll) cae al slot LRU que
+tocaba, dejado libre (`album_index = -1`) solo con el monograma — sin
+buffer aparte: un `marea_slot_t` más son 28 816 B de `.bss` y D-043
+fija el techo: `arm-elf-eabi-size` M11 = 8 569 948, v0.1.1 completa =
+8 570 044 (+96 B de banderas, bajo el límite de 7 474 076 + 1 100 000 =
+8 574 076; un primer intento con slot propio dio 8 598 844 y se
+descartó) —, marca `s_scroll_missed` y el cuadro final se
+repinta una vez fuera del bucle con disco permitido. La
 lectura de `.pfraw` sigue existiendo en un solo sitio (`:248`,
 `get_slot_for`), fuera de `run_scroll_animation()`
 (`grep -n 'read_pfraw\|open(' moonlit_screen_marea.c` → solo `:248`).
