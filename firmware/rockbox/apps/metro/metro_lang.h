@@ -66,16 +66,12 @@ enum metro_lang_id {
     LANG_VALUE_DARK,
     LANG_VALUE_LIGHT,
 
-    LANG_ACCENT_BLUE,
-    LANG_ACCENT_BROWN,
-    LANG_ACCENT_GREEN,
-    LANG_ACCENT_LIME,
-    LANG_ACCENT_MAGENTA,
-    LANG_ACCENT_MANGO,
-    LANG_ACCENT_PINK,
-    LANG_ACCENT_PURPLE,
-    LANG_ACCENT_RED,
-    LANG_ACCENT_TEAL,
+    /* moonlit (D-028, M4): 4 presets MD3 (moonstone/tide/ember/moss)
+     * en vez de los 10 acentos WP7. */
+    LANG_ACCENT_MOONSTONE,
+    LANG_ACCENT_TIDE,
+    LANG_ACCENT_EMBER,
+    LANG_ACCENT_MOSS,
 
     LANG_ABOUT_BASED_ON_ROCKBOX,
 

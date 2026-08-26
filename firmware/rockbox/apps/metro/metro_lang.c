@@ -54,19 +54,17 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_SETTING_RESET]    = "restablecer ajustes",
     [LANG_VALUE_SPANISH]    = "español",
     [LANG_VALUE_ENGLISH]    = "inglés",
-    [LANG_VALUE_DARK]       = "oscuro",
-    [LANG_VALUE_LIGHT]      = "claro",
+    /* moonlit (D-027, M4): "noche"/"amanecer" en vez de "oscuro"/"claro"
+     * -- los dos esquemas MD3 llevan la identidad Waning Crescent, no
+     * solo una polaridad de contraste. */
+    [LANG_VALUE_DARK]       = "noche",
+    [LANG_VALUE_LIGHT]      = "amanecer",
 
-    [LANG_ACCENT_BLUE]    = "azul",
-    [LANG_ACCENT_BROWN]   = "café",
-    [LANG_ACCENT_GREEN]   = "verde",
-    [LANG_ACCENT_LIME]    = "lima",
-    [LANG_ACCENT_MAGENTA] = "magenta",
-    [LANG_ACCENT_MANGO]   = "mango",
-    [LANG_ACCENT_PINK]    = "rosa",
-    [LANG_ACCENT_PURPLE]  = "púrpura",
-    [LANG_ACCENT_RED]     = "rojo",
-    [LANG_ACCENT_TEAL]    = "verde azulado",
+    /* moonlit (D-028, M4): 4 presets de acento MD3. */
+    [LANG_ACCENT_MOONSTONE] = "piedra lunar",
+    [LANG_ACCENT_TIDE]      = "marea",
+    [LANG_ACCENT_EMBER]     = "ascua",
+    [LANG_ACCENT_MOSS]      = "musgo",
 
     [LANG_ABOUT_BASED_ON_ROCKBOX] = "basado en rockbox",
 
@@ -211,19 +209,13 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_SETTING_RESET]    = "reset settings",
     [LANG_VALUE_SPANISH]    = "spanish",
     [LANG_VALUE_ENGLISH]    = "english",
-    [LANG_VALUE_DARK]       = "dark",
-    [LANG_VALUE_LIGHT]      = "light",
+    [LANG_VALUE_DARK]       = "night",
+    [LANG_VALUE_LIGHT]      = "dawn",
 
-    [LANG_ACCENT_BLUE]    = "blue",
-    [LANG_ACCENT_BROWN]   = "brown",
-    [LANG_ACCENT_GREEN]   = "green",
-    [LANG_ACCENT_LIME]    = "lime",
-    [LANG_ACCENT_MAGENTA] = "magenta",
-    [LANG_ACCENT_MANGO]   = "mango",
-    [LANG_ACCENT_PINK]    = "pink",
-    [LANG_ACCENT_PURPLE]  = "purple",
-    [LANG_ACCENT_RED]     = "red",
-    [LANG_ACCENT_TEAL]    = "teal",
+    [LANG_ACCENT_MOONSTONE] = "moonstone",
+    [LANG_ACCENT_TIDE]      = "tide",
+    [LANG_ACCENT_EMBER]     = "ember",
+    [LANG_ACCENT_MOSS]      = "moss",
 
     [LANG_ABOUT_BASED_ON_ROCKBOX] = "based on rockbox",
 

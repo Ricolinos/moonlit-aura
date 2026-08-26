@@ -18,20 +18,6 @@
  *
  ****************************************************************************/
 #include "metro_theme.h"
-#include "metro_palette.h"
-
-static const unsigned accent_colors[METRO_ACCENT_COUNT] = {
-    METRO_ACCENT_COLOR_BLUE,
-    METRO_ACCENT_COLOR_BROWN,
-    METRO_ACCENT_COLOR_GREEN,
-    METRO_ACCENT_COLOR_LIME,
-    METRO_ACCENT_COLOR_MAGENTA,
-    METRO_ACCENT_COLOR_MANGO,
-    METRO_ACCENT_COLOR_PINK,
-    METRO_ACCENT_COLOR_PURPLE,
-    METRO_ACCENT_COLOR_RED,
-    METRO_ACCENT_COLOR_TEAL,
-};
 
 static enum metro_theme_kind current_theme = METRO_THEME_DEFAULT;
 static enum metro_accent current_accent = METRO_ACCENT_DEFAULT;
@@ -64,36 +50,27 @@ void metro_accent_set(enum metro_accent accent)
         current_accent = accent;
 }
 
+/* moonlit (D-028, M4): las 4 tinturas WP7 (bg/fg/secondary/tertiary)
+ * ceden su lugar a los roles MD3 -- surface/on_surface/on_surface_variant/
+ * outline (D-034, DECISIONS.md). Los nombres de funcion se conservan
+ * porque metro_screen_nowplaying.c, metro_screen_lock.c y
+ * metro_screen_usb.c (M5) siguen llamandolos sin cambios. */
 unsigned metro_color_bg(void)
 {
-    return current_theme == METRO_THEME_LIGHT ? METRO_LIGHT_BG : METRO_DARK_BG;
+    return moonlit_color(MROLE_SURFACE);
 }
 
 unsigned metro_color_fg(void)
 {
-    return current_theme == METRO_THEME_LIGHT ? METRO_LIGHT_FG : METRO_DARK_FG;
+    return moonlit_color(MROLE_ON_SURFACE);
 }
 
 unsigned metro_color_secondary(void)
 {
-    return current_theme == METRO_THEME_LIGHT
-               ? METRO_LIGHT_SECONDARY : METRO_DARK_SECONDARY;
+    return moonlit_color(MROLE_ON_SURFACE_VARIANT);
 }
 
 unsigned metro_color_tertiary(void)
 {
-    return current_theme == METRO_THEME_LIGHT
-               ? METRO_LIGHT_TERTIARY : METRO_DARK_TERTIARY;
-}
-
-unsigned metro_color_accent(void)
-{
-    return accent_colors[current_accent];
-}
-
-unsigned metro_accent_color(enum metro_accent accent)
-{
-    if ((unsigned)accent >= METRO_ACCENT_COUNT)
-        return accent_colors[METRO_ACCENT_DEFAULT];
-    return accent_colors[accent];
+    return moonlit_color(MROLE_OUTLINE);
 }
