@@ -1,6 +1,8 @@
+ESTADO: SUPERADO por 05-plan-correctivo.md (H0–H1 ejecutados).
+
 # moonlit.aura — Plan de implementación (fase 3)
 
-**Fecha:** 2026-08-25 · **Estado:** ACTIVO (sin encabezado `ESTADO:` = pendiente de ejecución).
+**Fecha:** 2026-08-25 · **Estado histórico:** ACTIVO (sin encabezado `ESTADO:` = pendiente de ejecución) — texto original de cuando este documento aún gobernaba H2 en adelante; superado por `docs/plan/05-plan-correctivo.md` antes de ejecutar H2 (ver `docs/plan/04-auditoria-brecha.md`).
 **Entradas vinculantes:** `docs/plan/00-decisiones-moonlit.md` (DM-001…DM-017) y `docs/plan/02-investigacion.md`. Ante discrepancia entre este plan y `00-decisiones-moonlit.md`, mandan las decisiones.
 **Alcance:** este documento se ejecuta en sesiones nuevas **dentro del repositorio `moonlit-aura`** (que se crea en el hito H0). Ninguna sesión que ejecute este plan escribe en `Aura-Firmware/`, `Metro-Aura/` ni `Aura-Studio/`; esos repos se leen como referencia y se citan por ruta.
 

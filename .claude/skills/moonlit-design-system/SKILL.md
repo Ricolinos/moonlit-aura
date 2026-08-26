@@ -5,37 +5,77 @@ description: "Consulta esta skill antes de crear, modificar o revisar cualquier 
 
 # Sistema de diseño Waning Crescent — guía de consulta
 
-**Esqueleto (hito H0).** El cuerpo de esta skill se redacta en H2–H3 a
-partir de las secciones B–E de `docs/plan/03-plan-implementacion.md`.
-Hasta entonces, la fuente de verdad es ese plan más `DECISIONS.md`.
+Fuente viva y completa: [`docs/moonlit-design-system/00-INDICE.md`](/docs/moonlit-design-system/00-INDICE.md)
+(sistema + componentes, con rutas y referencias `D-NNN` exactas). Fuente
+de los *valores*: `design-system/tokens.json`. Fuente de las *decisiones*
+(por qué esos valores): `DECISIONS.md`. Ante discrepancia entre esta
+skill, el índice y esos dos archivos, mandan `DECISIONS.md` y
+`design-system/tokens.json`, en ese orden.
 
 Antes de escribir o modificar cualquier código que afecte a la interfaz:
+1. Lee la nota de `docs/moonlit-design-system/` que cubra la pieza que
+   vas a tocar (tabla de abajo).
+2. Si necesitas un color, tamaño, radio o duración nuevo: se agrega a
+   `design-system/tokens.json` y se regenera con `design-system/generate.py`
+   — nunca un literal a mano.
+3. Si el cambio no encaja en ninguna regla de abajo: para y cierra una
+   decisión nueva en `DECISIONS.md` (D-NNN) antes de codificar.
 
-1. **`docs/moonlit-design-system/00-INDICE.md` — fuente viva** (se crea
-   en H2–H3): `sistema/{01-color,02-tipografia,03-geometria,04-movimiento,05-elevacion}.md`
-   y `componentes/{lista,hub,ahora-suena,marea,acerca-de}.md`. Copias de
-   referencia en `reference/` junto a este archivo.
-2. **`design-system/tokens.json`** — único origen de color, escala
-   tipográfica, espaciado, radios, elevación e iconos (D-010). Genera
-   `apps/metro/moonlit_tokens.h` vía `design-system/generate.py`.
-3. **`DECISIONS.md` D-004…D-016** — tipografía, iconos, lenguaje visual,
-   Marea, logotipo. Ante conflicto con cualquier documento, manda
-   `DECISIONS.md`.
+## Los cinco pilares (MD3 adaptado a S5L8702, sin GPU/FPU)
 
-## Reglas duras (resumen; detalle en el plan §B–§E)
+| Pilar | Nota | Resumen |
+|---|---|---|
+| Color | [`docs/moonlit-design-system/sistema/01-color.md`](/docs/moonlit-design-system/sistema/01-color.md) | 16 roles MD3 × 2 esquemas (`night` predeterminado, `dawn`) × 4 presets de acento (`moonstone`, `tide`, `ember`, `moss`). API: `moonlit_color(rol)`. |
+| Tipografía | [`docs/moonlit-design-system/sistema/02-tipografia.md`](/docs/moonlit-design-system/sistema/02-tipografia.md) | 7 roles, Libre Baskerville (títulos) + Montserrat estática (texto), ninguno < 18 px. API: `metro_font_id(rol)`. |
+| Forma | [`docs/moonlit-design-system/sistema/03-forma.md`](/docs/moonlit-design-system/sistema/03-forma.md) | Escala de radios `corner_none/xs/s/m/full`. |
+| Elevación | [`docs/moonlit-design-system/sistema/04-elevacion.md`](/docs/moonlit-design-system/sistema/04-elevacion.md) | Tono (`surface_container_*`), nunca sombra proyectada; borde de 1px luz arriba/izquierda, sombra abajo/derecha ("Waning Crescent"). |
+| Movimiento | [`docs/moonlit-design-system/sistema/05-movimiento.md`](/docs/moonlit-design-system/sistema/05-movimiento.md) | 220 ms, `out_expo`, siempre bajo `lcd_active()` + `metro_settings.animations`. |
 
-- Paleta nocturna única ("night"); sin literal RGB en C (D-010).
+## Componentes documentados
+
+- Ahora suena — [`docs/moonlit-design-system/componentes/ahora-suena.md`](/docs/moonlit-design-system/componentes/ahora-suena.md)
+- Candado — [`docs/moonlit-design-system/componentes/candado.md`](/docs/moonlit-design-system/componentes/candado.md)
+- USB (splash incluido) — [`docs/moonlit-design-system/componentes/usb.md`](/docs/moonlit-design-system/componentes/usb.md)
+- Marea (Cover Flow vertical) — [`docs/moonlit-design-system/componentes/marea.md`](/docs/moonlit-design-system/componentes/marea.md)
+- Hub/lista/ajustes/barra de estado: cubiertos por los cinco pilares de
+  arriba, sin nota propia (así lo deja el índice).
+- Logotipo Waning Crescent: sin nota propia — especificación en
+  `DECISIONS.md` D-016/D-044.
+
+## Iconos y logo
+
+Material Symbols Rounded (Apache 2.0) e íconos propios, compilados en
+tabla C (`firmware/rockbox/apps/metro/moonlit_icons_table.c`,
+`firmware/rockbox/apps/metro/moonlit_logo_table.c`) — **nunca** leídos
+de disco en runtime. Generados por `design-system/generate.py --icons`/`--logo`
+(SVG → `rsvg-convert` → supersampleo 16× + filtro de caja → máscara de
+cobertura de 8 bits), verificación mecánica `MIN_INK_TONES ≥ 4` que
+rompe el build si falla (D-008, D-016). Nunca a ojo: usa
+`firmware/tools/check_tones.py`.
+
+## Reglas duras (detalle y cita exacta en `DECISIONS.md`)
+
+- Cero literales RGB en `apps/metro/`; solo `firmware/rockbox/apps/metro/moonlit_palette.c`
+  incluye `firmware/rockbox/apps/metro/moonlit_tokens.h` (D-010, D-035).
 - Elevación = dos tonos por nivel, luz izquierda/superior, sombra
   derecha/inferior, precalculados en tokens (D-012). Sin gradientes por
   píxel fuera de `lcd_active()`.
 - Prohibido: blur, ripple, sombras difusas, easing bezier en runtime,
   rasterización vectorial en runtime (D-011).
 - Tipografía: títulos Libre Baskerville, texto Montserrat estática;
-  ningún rol < 18 px; ≤ 12 roles (D-004, D-005, D-007).
-- Iconos Material Symbols compilados en tabla C con máscara de 8 bits;
-  ≥ 4 tonos por ícono verificados mecánicamente (D-008).
+  ningún rol < 18 px; 7 roles (D-004, D-005, D-007).
+- Iconos y logo: tabla C generada, ≥ 4 tonos verificados
+  mecánicamente, jamás "a ojo" (D-008, D-016).
 - Fondo del reproductor: plano tonal, nunca la portada (D-013).
 - Marea: vertical, sin reflejo, sin morphs, monograma sin portada;
-  experimental hasta medir en hardware (D-014).
-- Logotipo Waning Crescent: sustracción de dos círculos, acento
-  dinámico; wordmark solo ≥ 64 px (D-016).
+  experimental hasta medir en hardware real (M12) (D-014, D-043).
+- Logotipo: sustracción de dos círculos, acento dinámico, wordmark solo
+  ≥ 64 px (D-016).
+
+## Verificación mecánica (nunca visual)
+
+```
+design-system/.venv/bin/python3 design-system/generate.py --header|--fonts|--icons|--logo|--contrast
+firmware/tools/check_fonts.py <fnt|--capheight png>
+firmware/tools/check_tones.py <png> [--region x,y,w,h] [--edge]
+```

@@ -463,7 +463,7 @@ def generate_icons(tokens):
     print(f"==> {ICONS_OUT.relative_to(ROOT.parent)} ({len(entries)} iconos x {len(sizes)} tamanos)")
 
 
-# D-016/D-044: verificacion mecanica E.3 del logotipo (docs/plan/03-plan-implementacion.md:392-398),
+# D-016/D-044: verificacion mecanica E.3 del logotipo (docs/plans/archivo/03-plan-implementacion.md:392-398),
 # solo sobre el creciente a 16px -- el tamano mas chico, donde las
 # cuspides del creciente son ~1px y el cuerpo corre riesgo de
 # adelgazarse hasta desaparecer.

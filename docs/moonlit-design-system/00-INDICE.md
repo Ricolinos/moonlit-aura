@@ -8,15 +8,15 @@ ellos.
 
 ## Sistema (los cinco pilares MD3 adaptados al hardware)
 
-- [`sistema/01-color.md`](sistema/01-color.md) — los 16 roles MD3, dos
+- [`docs/moonlit-design-system/sistema/01-color.md`](sistema/01-color.md) — los 16 roles MD3, dos
   esquemas (night/dawn), 4 presets de acento.
-- [`sistema/02-tipografia.md`](sistema/02-tipografia.md) — 7 roles,
+- [`docs/moonlit-design-system/sistema/02-tipografia.md`](sistema/02-tipografia.md) — 7 roles,
   Libre Baskerville + Montserrat.
-- [`sistema/03-forma.md`](sistema/03-forma.md) — escala de radios de
+- [`docs/moonlit-design-system/sistema/03-forma.md`](sistema/03-forma.md) — escala de radios de
   esquina.
-- [`sistema/04-elevacion.md`](sistema/04-elevacion.md) — superficies
+- [`docs/moonlit-design-system/sistema/04-elevacion.md`](sistema/04-elevacion.md) — superficies
   tintadas, borde luz/sombra, sin sombra proyectada.
-- [`sistema/05-movimiento.md`](sistema/05-movimiento.md) — duración y
+- [`docs/moonlit-design-system/sistema/05-movimiento.md`](sistema/05-movimiento.md) — duración y
   easing, siempre bajo `lcd_active()`.
 
 ## Componentes
@@ -28,12 +28,19 @@ Se documentan a medida que cada hito los construye — ver
   de componente propia todavía — los cinco pilares de arriba cubren su
   vocabulario completo).
 - Ahora suena, candado, USB, splash: **M5** (implementado) —
-  [`componentes/ahora-suena.md`](componentes/ahora-suena.md),
-  [`componentes/candado.md`](componentes/candado.md),
-  [`componentes/usb.md`](componentes/usb.md) (splash documentado ahí
+  [`docs/moonlit-design-system/componentes/ahora-suena.md`](componentes/ahora-suena.md),
+  [`docs/moonlit-design-system/componentes/candado.md`](componentes/candado.md),
+  [`docs/moonlit-design-system/componentes/usb.md`](componentes/usb.md) (splash documentado ahí
   mismo, sin cambio de código propio).
-- Marea (Cover Flow vertical): **M8**.
-- Logotipo Waning Crescent: **M9**.
+- Marea (Cover Flow vertical): **M8** (implementado, experimental hasta
+  M12) — [`docs/moonlit-design-system/componentes/marea.md`](componentes/marea.md).
+- Logotipo Waning Crescent: **M9** (implementado) — sin nota de
+  componente propia: la especificación vectorial vive en `DECISIONS.md`
+  D-016/D-044 y el detalle de integración por pantalla en
+  [`docs/moonlit-design-system/componentes/usb.md`](componentes/usb.md) (pantalla USB) y las notas
+  de `firmware/rockbox/apps/metro/metro_screen_splash.c`,
+  `firmware/rockbox/apps/metro/metro_screen_list.c` y
+  `firmware/rockbox/apps/metro/metro_screen_hub.c` citadas ahí.
 
 ## Cómo se genera todo esto
 
@@ -42,6 +49,7 @@ design-system/.venv/bin/python3 design-system/generate.py --header    # apps/met
 design-system/.venv/bin/python3 design-system/generate.py --contrast  # WCAG on_surface/on_surface_variant vs surface
 design-system/.venv/bin/python3 design-system/generate.py --fonts     # firmware/assets/fonts/moonlit-*.fnt
 design-system/.venv/bin/python3 design-system/generate.py --icons     # apps/metro/moonlit_icons_table.c
+design-system/.venv/bin/python3 design-system/generate.py --logo      # apps/metro/moonlit_logo_table.c
 ```
 
 Verificación mecánica (nunca "a ojo"): `firmware/tools/check_fonts.py`,

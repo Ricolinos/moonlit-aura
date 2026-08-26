@@ -13,18 +13,24 @@ fuera de `lcd_active()`; ningún color fuera de `design-system/tokens.json`.
 
 ## Estado
 
-**En construcción.** Este repositorio acaba de forkearse de Metro-Aura
-en el tag `moonlit-fork-base` (`2f1bd28a`) y todavía se ve y se comporta
-como Metro. El plan de trabajo completo, hito por hito, está en
-`docs/plan/03-plan-implementacion.md`; las decisiones cerradas en
-`DECISIONS.md` (D-001 en adelante). La bitácora heredada de Metro se
-conserva de solo lectura en `DECISIONS-METRO-ARCHIVE.md`.
+**En construcción, con el lenguaje visual Waning Crescent ya en pie.**
+Este repositorio se forkeó de Metro-Aura en el tag `moonlit-fork-base`
+(`2f1bd28a`). Hitos M1–M9 de `docs/plan/05-plan-correctivo.md`
+ejecutados: tokens MD3 de dos esquemas (`night`/`dawn`), tipografía
+Libre Baskerville + Montserrat, iconos Material Symbols compilados,
+paleta y elevación tonal en hub/lista/ajustes/Ahora suena/candado/USB,
+pantalla "Marea" (Cover Flow vertical) y el logotipo Waning Crescent.
+Pendientes: M10 (esta sincronización de documentación), M11 (revisión
+adversarial) y M12 (medición en hardware real + empaquetado). Las
+decisiones cerradas viven en `DECISIONS.md` (D-001 en adelante); la
+bitácora heredada de Metro se conserva de solo lectura en
+`DECISIONS-METRO-ARCHIVE.md`.
 
 ## Hardware
 
 Solo iPod Classic 6G / 6.5G / 7G (S5L8702). Mismo bootloader y
-`mks5lboot` que Metro-Aura y Aura-Firmware (frontera GPL descrita en
-`docs/plan/03-plan-implementacion.md` §A.4).
+`mks5lboot` que Metro-Aura y Aura-Firmware (frontera GPL versionada en
+`CONTRATO-moonlit-studio.md` §B).
 
 ## Compilar
 

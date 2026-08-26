@@ -57,9 +57,12 @@ en Studio que aquí se requieren (§C) **no** se ejecutan desde este repo
    `theme-format-v1.json` ni `aura-theme-default.zip` (D-009).
    Productor: `firmware/tools/package_dist.sh`.
 8. **Centinela de árbol instalado**: `/.rockbox/fonts/moonlit-body-18.fnt`
-   — archivo que solo moonlit escribe (PA-7; el nombre queda fijado
-   aquí y H2 lo materializa). En Studio:
-   `FirmwareFamily.installedTreeSentinel`.
+   — archivo que solo moonlit escribe (PA-7; el nombre quedó fijado
+   aquí y M2 lo materializó: `design-system/generate.py --fonts` genera
+   `firmware/assets/fonts/moonlit-body-18.fnt`, que
+   `firmware/tools/package_dist.sh` copia a `.rockbox/fonts/` en cada
+   build — ya no es aspiracional, es un archivo real del árbol
+   instalado). En Studio: `FirmwareFamily.installedTreeSentinel`.
 
 Todo lo demás (C1–C28 de `docs/COMPAT_STUDIO.md`) se hereda de Metro-Aura
 sin cambios de formato.
@@ -88,8 +91,9 @@ mks5lboot
 `BOOT-1` sube a `BOOT-2` **solo** si cambia cualquiera de los dos
 fuentes. El SHA-256 cambia con cada recompilación (RBVERSION embebido),
 por eso no sirve como versión de fuente (PA-4). Los SHA-256 reales de
-cada release se anotan aquí en H7 (D-NNN del primer release; el plan
-lo cita como D-026, desplazado en uno por D-024).
+cada release se anotan aquí en M12 de `docs/plan/05-plan-correctivo.md`
+(= H7 del plan 03, ver `DECISIONS.md` D-NNN del primer release; ningún
+binario de este par cambió en M1…M9, `BOOT-1` sigue vigente).
 
 Los cuatro binarios (`mks5lboot`, `bootloader-ipod6g.ipod`,
 `rockbox.ipod`, `rockbox.zip`) son derivados de Rockbox, GPL v2 (§B del
