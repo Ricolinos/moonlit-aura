@@ -33,12 +33,20 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include "lcd.h"
 
 /* D-030: tapa central de Marea, 120 px; D-020/plan M7: mismo radio de
  * esquina que design-system/tokens.json shape.corner_s (8). */
 #define MOONLIT_ART_CACHE_SIZE   120
 #define MOONLIT_ART_CACHE_RADIUS 8
+
+/* Ruta del .pfraw de `seek` a `size` px bajo
+ * metro_settings_metro_cache_dir("art", ...) (= .../aura/moonlitcache/art/,
+ * D-023) -- expuesta (no `static`) porque 05-plan-correctivo.md §M7 la
+ * pide como función propia, no solo un detalle interno de
+ * moonlit_art_load_for_album(). */
+void moonlit_art_pfraw_path(int32_t seek, int size, char *out, size_t outsz);
 
 /* Resuelve la carátula de `album_seek` a `out` (MOONLIT_ART_CACHE_SIZE
  * x MOONLIT_ART_CACHE_SIZE, reservado por el llamador): cache-hit ->

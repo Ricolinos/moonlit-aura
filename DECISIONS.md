@@ -707,6 +707,21 @@ confirmarlas con el dueño (`AskUserQuestion`, sesión de este hito).**
    `moonlit_art_precache()` sí acepta un callback para cuando M8 (o una
    revisión posterior) decida mostrar progreso.
 
+**Dos cachés de portadas distintas, a propósito (§M7 "NO tocar:
+`metro_thumbs.c`").** `metro_thumbs.c` (`.mth`, 80 px, fila-contigua
+simple sin esquinas horneadas) sigue siendo la única caché de la
+rejilla de Álbumes/Quickplay (`metro_screen_hub.c`, `album_thumb_*`) —
+M7 no la toca ni la reemplaza. `moonlit_art`/`moonlit_art_cache`
+(`.pfraw`, 120 px, cabecera propia + esquinas horneadas al radio de
+Marea) es una caché nueva y separada, solo para Marea (M8). Coexisten
+bajo el mismo padre (`.../aura/moonlitcache/{albums,art}/`) porque
+sirven tamaños y formatos de archivo distintos (D-020 ya fijaba que
+`.pfraw` trae cabecera + esquinas horneadas, algo que `.mth` no
+necesita) — unificarlas forzaría a la rejilla de 80px a cargar con el
+costo de una cabecera y un horneado que no usa, o a Marea a decodificar
+sin esquinas. `metro_thumbs.c` no gana ningún cambio de código en M7,
+solo la constancia de por qué no se lo tocó.
+
 Verificado en `firmware/build-sim`: `METRO_INSTALL_MUSIC_FIXTURES=1`
 más `gen_test_media.sh` deja 8 álbumes con carátula resoluble
 (`find_albumart()` también encuentra `Music/cover.jpg` como ancestro

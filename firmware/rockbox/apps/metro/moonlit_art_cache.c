@@ -39,12 +39,12 @@
 #include "metro_settings.h"
 #include "metro_fsutil.h"
 
-static void pfraw_path(int32_t album_seek, char *out, size_t outsz)
+void moonlit_art_pfraw_path(int32_t seek, int size, char *out, size_t outsz)
 {
     char dir[MAX_PATH];
 
     metro_settings_metro_cache_dir("art", dir, sizeof(dir));
-    snprintf(out, outsz, "%s/%ld-%d.pfraw", dir, (long)album_seek, MOONLIT_ART_CACHE_SIZE);
+    snprintf(out, outsz, "%s/%ld-%d.pfraw", dir, (long)seek, size);
 }
 
 /* Mismo patrón que ensure_cache_dir() de metro_thumbs.c: solo
@@ -74,7 +74,7 @@ bool moonlit_art_load_for_album(int32_t album_seek, fb_data *out)
     char track_path[MAX_PATH];
     int32_t theme = (int32_t)metro_theme_get();
 
-    pfraw_path(album_seek, path, sizeof(path));
+    moonlit_art_pfraw_path(album_seek, MOONLIT_ART_CACHE_SIZE, path, sizeof(path));
 
     if (moonlit_art_read_pfraw(path, MOONLIT_ART_CACHE_SIZE, MOONLIT_ART_CACHE_RADIUS,
                                 theme, out))
