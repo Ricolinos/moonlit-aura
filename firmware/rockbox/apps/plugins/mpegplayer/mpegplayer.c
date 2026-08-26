@@ -1398,9 +1398,9 @@ static int s_metro_language; /* 0=ES, 1=EN -- METRO_LANG_ES/EN */
  * metro_load_personalization() itself (see the block comment above
  * metro_osd_colors()). */
 /* moonlit (D-032): metro-caption-14.fnt no existe mas (M2 retira los
- * 5 roles Selawik) -- MFONT_CAPTION es ahora #define MFONT_BODY en
- * apps/metro/moonlit_fonts.h, asi que el equivalente real es
- * moonlit-body-18.fnt, no un nombre "caption" nuevo. */
+ * 5 roles de la familia previa) -- MFONT_CAPTION es ahora #define
+ * MFONT_BODY en apps/metro/moonlit_fonts.h, asi que el equivalente
+ * real es moonlit-body-18.fnt, no un nombre "caption" nuevo. */
 #define METRO_OSD_FONT_PATH FONT_DIR "/moonlit-body-18.fnt"
 static int s_metro_font_id = -1;
 
