@@ -37,6 +37,10 @@
 /* Movimiento -- solo bajo lcd_active() (regla del repo) */
 #define MOONLIT_MOTION_TRANSITION_MS 220
 #define MOONLIT_MOTION_EASE "out_expo"
+/* D-052 "Marea que sube" (C4) y "Filo de luna" (C3) */
+#define MOONLIT_MOTION_SELECTION_MS 80
+#define MOONLIT_MOTION_EASE_SELECTION "out_quad"
+#define MOONLIT_MOTION_SEAM 1
 
 /* Esquema night -- 16 roles MD3 (D-028) */
 #define MOONLIT_NIGHT_PRIMARY LCD_RGBPACK(169, 199, 232)

@@ -445,6 +445,14 @@ Ver `DECISIONS.md` D-047 para el resto (`apps/metro/metro_firmware_families.{c,h
 `apps/metro/metro_settings.{c,h}`, `apps/metro/metro_screen_settings.c`,
 `apps/metro/metro_lang.{c,h}`, `apps/metro/test/`, todo dentro de `apps/metro/`).
 
+### moonlit Motion Waning (2026-08-26, D-052)
+
+- `apps/SOURCES`: se retira la entrada `metro/metro_turnstile_table.c`
+  — el giro *turnstile* heredado de Metro (F12) desaparece junto con
+  `apps/metro/metro_turnstile_table.{c,h}` y `tools/gen_turnstile_table.py`;
+  lo sustituye el deslizamiento desde la izquierda con filo de luz
+  (D-052 C1/C3), todo dentro de `apps/metro/`.
+
 ### moonlit release v0.1.0 (2026-08-26, D-048)
 
 Reproducibilidad de `rockbox.zip` (contrato v11, actualización

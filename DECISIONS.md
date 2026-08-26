@@ -1299,3 +1299,76 @@ secuencia nueva (`WAIT,SELECT,WAIT,SELECT,WAIT` para -0, `+SCROLL_FWD,WAIT`
 para -1, `+SCROLL_FWD×8,WAIT` para -mono: "Night Drive", monograma "N").
 Verificación: la captura de Música (`WAIT,SELECT`) muestra el
 encabezado del pivote "marea" primero.
+
+**D-052 — Motion Waning: el movimiento de moonlit tiene dirección y
+luz.** Metro heredaba el *turnstile* de F12 (giro por columnas,
+`metro_fb_draw_turnstile_layer()` + tabla `metro_turnstile_table.c/.h`
+generada por `tools/gen_turnstile_table.py`, ~230 k px/cuadro) y un
+FADE lineal de 6 cuadros; nada de eso respondía al lenguaje Waning
+Crescent (luz desde la izquierda, D-012; elevación por tono, no por
+sombra). **Decisión:** un paquete de cuatro piezas, todas en
+`apps/metro/`, ninguna con lectura de disco dentro del bucle:
+
+1. **C1 Luz de canto** (`8aabc8a2`): PUSH/POP = deslizamiento; la
+   página nueva **entra desde la izquierda**, la saliente se retira
+   hacia la izquierda al volver. `metro_transitions_push()` corre
+   `run_slide()` en todo nivel: 7 cuadros × 3 ticks bajo `all`, 4 bajo
+   `minimal`, `METRO_EASE_OUT_QUAD`. CONTINUUM monta sobre este bucle
+   (`all`+`full`, solo push). Primitiva
+   `metro_fb_compose_slide(from, to, dx, seam)` (blit sin `lcd_update()`,
+   para componer capas encima) y `metro_fb_present_slide()` (con
+   update). Costo: 76 800 px/cuadro.
+2. **C3 Filo de luna** (`8aabc8a2`): `lcd_vline` de 1 px en la
+   costura entre ambas páginas, color `moonlit_surface(MSURFACE_HIGH,
+   MEDGE_LIGHT)` — el mismo borde-luz de las tarjetas —, omitida en el
+   último cuadro. Costo: 240 px/cuadro. Token `motion.seam: true`.
+3. **C2 Menguante** (`8e036151`): FADE 7 × 3 ticks (210 ms, el mismo
+   presupuesto que PUSH, D-037) con `METRO_EASE_OUT_QUAD` en vez de
+   6 lineales. Sigue reservado a `all`+`graphics=full`; `minimal`/`lite`
+   caen al deslizamiento C1. Costo: 76 800 blends/cuadro.
+4. **C4 Marea que sube** (este commit): al mover la selección **una**
+   fila en listas (`metro_screen_list.c run_selection_rise()`) y en el
+   hub (`metro_screen_hub.c run_selection_rise()`), la tarjeta de la
+   fila nueva pasa de `surface` a `surface_container_high` en 4 cuadros
+   × 2 ticks (80 ms, `motion.selection_ms`), `METRO_EASE_OUT_QUAD`,
+   tono interpolado con `metro_fb_blend_color()`; el marcador `primary`
+   de 3 px crece de 0 a la altura completa desde arriba; los bordes
+   luz/sombra D-012 solo en el último cuadro. Solo se repintan las dos
+   filas afectadas (`metro_draw_row_slot()` / `draw_hub_row()`) con
+   `lcd_update_rect()`; `redraw_current()` asienta la pantalla después
+   como siempre. Primitiva única: `moonlit_draw_selection_card(y, h,
+   card_alpha, marker_h, edges)` en `moonlit_elevation.c`, que también
+   dibuja la tarjeta asentada de `metro_draw_rows_ex()`, del hub y de
+   "Acerca de" (una sola definición de la tarjeta de selección). Costo:
+   ~18 000 px/cuadro (2 bandas de 320×28; 320×52 en el hub). Puerta:
+   `lcd_active() && metro_settings.animations != METRO_ANIM_OFF`
+   (corre también bajo `minimal`); **nunca** con `steps > 1`
+   (aceleración de rueda), ni si la ventana desplazó, ni en rejillas,
+   ni en "Acerca de", ni en listas vacías, ni mientras flota la letra
+   de índice (F10). Marea no cambia.
+
+**Eliminado:** `run_turnstile()`, `metro_fb_draw_turnstile_layer()`,
+`metro_turnstile_table.c/.h`, `tools/gen_turnstile_table.py` y su
+entrada en `apps/SOURCES` (`grep -rn turnstile firmware/rockbox/apps/
+firmware/tools/` vacío).
+**Tokens:** `design-system/tokens.json motion` gana `selection_ms: 80`,
+`ease_selection: "out_quad"`, `seam: true` → `MOONLIT_MOTION_SELECTION_MS`,
+`MOONLIT_MOTION_EASE_SELECTION`, `MOONLIT_MOTION_SEAM`
+(`moonlit_tokens.h`); `metro_transitions.h` cita el literal
+`METRO_SELECTION_FRAMES 4` × `METRO_SELECTION_FRAME_TICKS 2` (patrón
+D-037, porque D-035 impide incluir el header fuera de
+`moonlit_palette.c`).
+**Trazas:** `metro_transitions_trace()` exportada; cada bucle (slide,
+fade, select) emite `METRO_TRACE("<nombre> frame i/n at +t ticks")`.
+**`.bss`:** `arm-elf-eabi-size` antes = 8 570 044 (v0.1.1, D-051),
+después = 8 570 044 — sin cambio (ninguna tabla nueva; la tabla del
+turnstile vivía en `.rodata`), bajo el techo D-043 de 8 574 076.
+**Sin medición real:** los costos son conteos de píxeles; la checklist
+H de hardware (32/32) sigue sin responder y M12 mide `present_slide`,
+`present_fade` y C4 en el iPod con las trazas por cuadro.
+Verificación: `make -C firmware/rockbox/apps/metro/test test` verde;
+`build_sim.sh` y `build_target.sh` sin warnings nuevos;
+`docs/screenshots/v0.1.1-motion-{push,fade,select}-mid.png` (secuencias
+en `docs/moonlit-design-system/sistema/05-movimiento.md` §Paquete
+Waning; la del push verificada con PIL: columna x=83 entera del color
+borde-luz; la de C4: marcador 48/52 px, tono intermedio, sin bordes).

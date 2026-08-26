@@ -164,6 +164,10 @@ def generate_header(tokens):
     lines.append("/* Movimiento -- solo bajo lcd_active() (regla del repo) */")
     lines.append(f"#define MOONLIT_MOTION_TRANSITION_MS {motion['transition_ms']}")
     lines.append(f'#define MOONLIT_MOTION_EASE "{motion["ease"]}"')
+    lines.append("/* D-052 \"Marea que sube\" (C4) y \"Filo de luna\" (C3) */")
+    lines.append(f"#define MOONLIT_MOTION_SELECTION_MS {motion['selection_ms']}")
+    lines.append(f'#define MOONLIT_MOTION_EASE_SELECTION "{motion["ease_selection"]}"')
+    lines.append(f"#define MOONLIT_MOTION_SEAM {1 if motion['seam'] else 0}")
     lines.append("")
 
     color = tokens["color"]
