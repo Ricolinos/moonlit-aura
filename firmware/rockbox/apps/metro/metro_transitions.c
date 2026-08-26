@@ -346,10 +346,12 @@ void metro_transitions_push(metro_transitions_draw_fn draw_to, int direction)
     note_transition_cost(direction > 0 ? "push" : "pop", spec, start_tick);
 }
 
-/* FADE's own timing (6x3 under `all`, PLAN_MAESTRO.md S3.3) rather
- * than anim_level_spec()'s SLIDE numbers -- only reached when the
- * graphics=full real-blend path below is taken. */
-static const struct level_spec fade_spec = { 6, 3 };
+/* moonlit (D-052 C2, "Menguante"): 7 frames x 3 ticks = 210 ms, the
+ * same budget as PUSH (METRO_TRANSITION_MS 220 rounded to whole
+ * 30 ms frames, D-037) instead of Metro's 6x3; OUT_QUAD instead of
+ * LINEAR, so the blend starts decisively and settles like the moon
+ * waning. Only reached on the graphics=full real-blend path below. */
+static const struct level_spec fade_spec = { 7, 3 };
 
 void metro_transitions_fade(metro_transitions_draw_fn draw_to)
 {
@@ -380,7 +382,7 @@ void metro_transitions_fade(metro_transitions_draw_fn draw_to)
     cpu_boost(true);
     for (i = 1; i <= fade_spec.frames; i++)
     {
-        int p = metro_ease(METRO_EASE_LINEAR, i, fade_spec.frames);
+        int p = metro_ease(METRO_EASE_OUT_QUAD, i, fade_spec.frames);
 
         metro_fb_present_fade(s_fb_from, s_fb_to, p);
         METRO_TRACE("fade frame %d/%d at +%ld ticks", i, fade_spec.frames,
