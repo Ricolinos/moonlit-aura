@@ -39,4 +39,10 @@
  * *out_steps). Untouched for any other return value. */
 int metro_input_next(enum metro_context ctx, int timeout_ticks, int *out_steps);
 
+/* moonlit (D-041): raw degrees/sec of the last MACT_PREV/MACT_NEXT
+ * wheel event, for moonlit_wheel_step() (Marea, M8). 0 if the last
+ * action wasn't a wheel scroll or the target lacks
+ * HAVE_WHEEL_ACCELERATION. */
+int metro_input_last_wheel_velocity(void);
+
 #endif /* METRO_INPUT_H */

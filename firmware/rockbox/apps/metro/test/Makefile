@@ -8,7 +8,7 @@ BUILD := build
 
 .PHONY: test clean
 
-test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/test_motion $(BUILD)/test_lrc $(BUILD)/test_artist_images $(BUILD)/test_fsutil $(BUILD)/test_lang $(BUILD)/test_volume $(BUILD)/test_tokens $(BUILD)/test_flow
+test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/test_motion $(BUILD)/test_lrc $(BUILD)/test_artist_images $(BUILD)/test_fsutil $(BUILD)/test_lang $(BUILD)/test_volume $(BUILD)/test_tokens $(BUILD)/test_flow $(BUILD)/test_wheel
 	@echo "== test_nav =="
 	@$(BUILD)/test_nav
 	@echo "== test_sync_marker =="
@@ -31,6 +31,8 @@ test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/
 	@$(BUILD)/test_tokens
 	@echo "== test_flow =="
 	@$(BUILD)/test_flow
+	@echo "== test_wheel =="
+	@$(BUILD)/test_wheel
 
 $(BUILD)/test_nav: test_nav.c ../metro_nav.c ../metro_nav.h | $(BUILD)
 	$(CC) $(CFLAGS) test_nav.c ../metro_nav.c -o $@
@@ -70,3 +72,6 @@ $(BUILD)/test_tokens: test_tokens.c ../moonlit_tokens.h | $(BUILD)
 
 $(BUILD)/test_flow: test_flow.c ../moonlit_flow.c ../moonlit_flow.h | $(BUILD)
 	$(CC) $(CFLAGS) test_flow.c ../moonlit_flow.c -o $@
+
+$(BUILD)/test_wheel: test_wheel.c ../moonlit_wheel.c ../moonlit_wheel.h | $(BUILD)
+	$(CC) $(CFLAGS) test_wheel.c ../moonlit_wheel.c -o $@
