@@ -1057,3 +1057,25 @@ un `LANG_FAMILY_*`. Capturas:
 `docs/screenshots/v0.1.0-cambiar-sistema-{vacio,instalados,confirmar}.png`
 (secuencia: `WAIT,SCROLL_FWD×3,SELECT,WAIT,SCROLL_FWD×8,SELECT,WAIT`
 desde el hub; `…,SCROLL_FWD,SELECT,WAIT` para el diálogo de Metro).
+
+**D-048 — `__TIME__`/`__DATE__` fuera de los plugins SDL (reproducibilidad
+de `rockbox.zip` para la actualización selectiva del contrato v11).**
+La actualización selectiva compara CRC32 por archivo del `rockbox.zip`
+nuevo contra el manifiesto de lo instalado; cualquier binario cuya
+salida cambie con la hora de compilación viaja entero en cada release.
+Los `.rock` de Quake y Duke3D embebían la hora/fecha de build:
+`firmware/rockbox/apps/plugins/sdl/progs/quake/host.c:884` y
+`quake/host_cmd.c:958` (`Con_Printf ("Exe: "__TIME__" "__DATE__"\n")`)
+y `duke3d/Engine/src/display.c:711` (`printf("Compiled %s …", __DATE__)`),
+más el guardia `#if (!defined __DATE__)` de `display.c:698-700` que
+solo existía para esa línea. Eso son ~2,2 MB de delta espurio por
+release (los dos plugins más grandes del árbol) aunque no cambie una
+línea de ellos. **Decisión**: ambos `Con_Printf` pasan a
+`"Exe: rockbox build\n"`, el `__DATE__` de Duke3D se sustituye por el
+literal `"rockbox build"` y el guardia se elimina con su único usuario;
+cada sitio lleva el comentario `moonlit (D-048)` y queda registrado en
+`MODIFICATIONS.md` (regla de `CLAUDE.md`: cambios fuera de
+`apps/metro/`). Verificación: `grep -rn '__TIME__\|__DATE__'
+firmware/rockbox/apps/plugins/sdl/progs/{quake,duke3d}` devuelve solo
+esos comentarios. Los mensajes son de consola interna del juego, sin
+efecto en jugabilidad ni en la UI de moonlit.

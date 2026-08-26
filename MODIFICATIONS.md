@@ -440,3 +440,21 @@ dentro de `apps/metro/`).
 Ver `DECISIONS.md` D-047 para el resto (`apps/metro/metro_firmware_families.{c,h}`,
 `apps/metro/metro_settings.{c,h}`, `apps/metro/metro_screen_settings.c`,
 `apps/metro/metro_lang.{c,h}`, `apps/metro/test/`, todo dentro de `apps/metro/`).
+
+### moonlit release v0.1.0 (2026-08-26, D-048)
+
+Reproducibilidad de `rockbox.zip` (contrato v11, actualización
+selectiva): se retiran las marcas de hora/fecha de compilación de los
+plugins SDL, que hacían cambiar ~2,2 MB de binarios entre releases sin
+cambio de fuente. Cada sitio lleva el comentario `moonlit (D-048)`:
+
+- `apps/plugins/sdl/progs/quake/host.c` (`Host_Init`) y
+  `apps/plugins/sdl/progs/quake/host_cmd.c` (`Host_Version_f`):
+  `Con_Printf ("Exe: "__TIME__" "__DATE__"\n")` →
+  `Con_Printf ("Exe: rockbox build\n")`.
+- `apps/plugins/sdl/progs/duke3d/Engine/src/display.c`
+  (`output_sdl_versions`): `__DATE__` → literal `"rockbox build"`; se
+  elimina el guardia `#if (!defined __DATE__) … #endif` que solo
+  existía para esa línea.
+
+(Rutas relativas a `firmware/rockbox/`. Ver `DECISIONS.md` D-048.)

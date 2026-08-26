@@ -695,9 +695,8 @@ uint8_t  _readlastkeyhit(void)
 
 
 
-#if (!defined __DATE__)
-#define __DATE__ "a long, int32_t time ago"
-#endif
+/* moonlit (D-048): the __DATE__ fallback guard that used to live here is
+ * gone with its only user (output_sdl_versions below). */
 
 static void output_sdl_versions(void)
 {
@@ -708,7 +707,8 @@ static void output_sdl_versions(void)
 
     printf("SDL display driver for the BUILD engine initializing.\n");
     printf("  sdl_driver.c by Ryan C. Gordon (icculus@clutteredmind.org).\n");
-    printf("Compiled %s against SDL version %d.%d.%d ...\n", __DATE__,
+    /* moonlit (D-048): no __DATE__ -- reproducible rockbox.zip */
+    printf("Compiled %s against SDL version %d.%d.%d ...\n", "rockbox build",
                 compiled_ver.major, compiled_ver.minor, compiled_ver.patch);
     printf("Linked SDL version is %d.%d.%d ...\n",
                 linked_ver->major, linked_ver->minor, linked_ver->patch);
