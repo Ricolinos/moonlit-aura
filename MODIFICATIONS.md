@@ -380,3 +380,17 @@ Ver `DECISIONS.md` D-041 para el resto de M6 (`apps/metro/moonlit_flow.{c,h}`,
 `apps/metro/moonlit_wheel.{c,h}`, `apps/metro/metro_input.{c,h}`,
 `apps/metro/test/test_flow.c`, `apps/metro/test/test_wheel.c`,
 `apps/metro/test/Makefile`, todo dentro de `apps/metro/`).
+
+### moonlit M7 (2026-08-25, D-042)
+
+- `apps/SOURCES`: se agregan las entradas `metro/moonlit_art.c` y
+  `metro/moonlit_art_cache.c` — formato de caché `.pfraw` fila-contigua
+  de portadas (de `aura_art.c`) y resolución álbum→píxeles + precarga
+  D-224 (D-042). Comentarios inline `moonlit (D-020, D-042, M7)` /
+  `moonlit (D-042, M7)`.
+
+Ver `DECISIONS.md` D-042 para el resto de M7 (`apps/metro/moonlit_art.{c,h}`,
+`apps/metro/moonlit_art_cache.{c,h}`, `apps/metro/metro_albumart.{c,h}`,
+`apps/metro/metro_music.c`, `apps/metro/test/test_art.c`,
+`apps/metro/test/file.h`, `apps/metro/test/lcd.h`,
+`apps/metro/test/Makefile`, todo dentro de `apps/metro/`).

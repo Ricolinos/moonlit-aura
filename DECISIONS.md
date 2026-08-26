@@ -630,3 +630,96 @@ Implementada en M6: `apps/metro/moonlit_flow.{c,h}`,
 `apps/metro/test/test_wheel.c`, `apps/metro/test/Makefile`,
 `apps/SOURCES` (fuera de `apps/metro/`, ver `MODIFICATIONS.md`). Sin
 pantalla ni consumidor todavía (M8).
+
+# Hito M7 — Caché de portadas `moonlit_art` (D-042)
+
+**D-042 — Cinco desviaciones acotadas de `05-plan-correctivo.md` §M7,
+todas necesarias para que `apps/metro/test/test_art.c` compile y
+enlace standalone con `cc` de host (mismo criterio que
+`test_flow.c`/`test_wheel.c`, M6), registradas antes de codificar tras
+confirmarlas con el dueño (`AskUserQuestion`, sesión de este hito).**
+
+1. **Split `moonlit_art.c/.h` (D-020) vs. `moonlit_art_cache.c/.h`
+   (nuevo).** `05-plan-correctivo.md:179-181` pone
+   `moonlit_art_load_for_album()`/`moonlit_art_precache()` en el mismo
+   archivo que las 5 funciones puras de D-020, pero esas dos llaman a
+   `metro_music_albums()`/`metro_albumart_decode_track_cover_sized()`/
+   `metro_settings_metro_cache_dir()` — módulos reales de Rockbox, no
+   compilables con `cc` de host — mientras que `:190` exige
+   `make -C apps/metro/test test → verde incl. test_art`, y el patrón
+   ya establecido en `test/Makefile` (`test_flow`, `test_wheel`,
+   `test_tokens`) enlaza solo el `.c` bajo prueba, sin mocks.
+   **Decisión**: `moonlit_art.c/.h` se queda exactamente con el alcance
+   de D-020 (formato `.pfraw` + horneado de esquinas, cero
+   dependencias más allá de `file.h`/`lcd.h`); `moonlit_art_cache.c/.h`
+   (nuevo, no host-testado, mismo criterio que `metro_thumbs.c`) recibe
+   la resolución álbum→pista→píxeles y la precarga D-224. El propio
+   `05-plan-correctivo.md:189` ("`grep -n 'moonlitcache'
+   apps/metro/moonlit_art.c → vacío`") ya asume que la ruta de caché no
+   vive en ese archivo — compatible con el split.
+
+2. **`isqrt256()`/`blend()` copiados localmente en `moonlit_art.c`,
+   no `metro_fb_blend_color()`.** D-020 decía "`a26_shell_blend` se
+   sustituye por `metro_fb_blend_color()`" — pero esa función vive en
+   `metro_fb.h`, que incluye `lcd.h` real (depende de `cpu.h`/
+   `config.h`/`events.h`, no compilable con `cc` de host). **Decisión**:
+   mismo criterio que D-020 ya aplicaba a la raíz entera ("copia local,
+   sin dependencia del shell Apple2026") extendido al blend de un
+   canal: `moonlit_art.c` trae su propia `isqrt256()`/`blend()`
+   (fórmula RGB565 idéntica a `_RGB_UNPACK_*`/`LCD_RGBPACK` de
+   `lcd.h:317-328`, ipod6g es `RGB565` plano, `config/ipod6g.h:85`, no
+   `RGB565SWAPPED`).
+
+3. **Cabecera `.pfraw`: campo 3 pasa de `theme` a `layout` (fijo en 1),
+   campo 4 (`extra`) pasa a llevar el tema.** Mismo tamaño (4×int32,
+   16 bytes) que `aura_art_pfraw_header`, sentido distinto: D-030 fija
+   Marea en fila-contigua para siempre (nunca se necesita un segundo
+   layout), así que el campo que en Aura discriminaba temas ahora
+   discrimina layout (`MOONLIT_ART_LAYOUT_ROW_MAJOR`), y el campo
+   `extra` (que en Aura era una segunda llave de invalidación de uso
+   libre, D-020) lleva el tema activo (`metro_theme_get()`, D-027) —
+   la única llave que Marea necesita. Cambiar de esquema invalida la
+   caché (las esquinas se hornean contra `moonlit_color(MROLE_SURFACE)`,
+   que sí varía night/dawn).
+
+4. **PC-2 resuelta: opción (a).** `metro_albumart_decode_track_cover()`
+   (`metro_albumart.c`) se generaliza a
+   `metro_albumart_decode_track_cover_sized(path, out, size)` —
+   decodifica siempre a `METRO_ALBUMART_SIZE` (136, el tamaño ya
+   probado) y remuestrea las píxeles YA decodificados a `size` en vez
+   de arriesgar un segundo decode de JPEG cerca de 120px (mismo riesgo
+   de `JPEG_DECODE_OVERHEAD` que R3-F4/DD-5 ya evitaba para 80px).
+   `metro_albumart_decode_track_cover()` original queda como
+   envoltorio con `size=METRO_TILE_SIZE`; sus 3 llamadores no cambian.
+
+5. **PC-3 resuelta: opción (a), enganchada en `metro_music.c`, no en
+   una pantalla.** `05-plan-correctivo.md` sugería enganchar la
+   precarga a la pantalla "Actualizando biblioteca…" o a la entrada a
+   Marea — pero M7 prohíbe tocar pantallas (`§M7 "NO tocar: ...
+   pantallas"`) y Marea no existe hasta M8. El propio "Parte de" de
+   §M7 cita `AF/aura_music.c:221-300` como el patrón D-224: ese
+   enganche vive en `aura_music_db_ready()` (capa de datos), no en una
+   pantalla. **Decisión**: `moonlit_art_cache_on_db_ready()` se llama
+   desde `metro_music_db_ready()` (`metro_music.c`, en el mismo bloque
+   `!s_update_triggered` que ya dispara `tagcache_start_scan()`), con
+   su propia bandera de una-vez-por-arranque. Sin pantalla de progreso
+   en M7 (`progress_cb` queda `NULL` desde este enganche) —
+   `moonlit_art_precache()` sí acepta un callback para cuando M8 (o una
+   revisión posterior) decida mostrar progreso.
+
+Verificado en `firmware/build-sim`: `METRO_INSTALL_MUSIC_FIXTURES=1`
+más `gen_test_media.sh` deja 8 álbumes con carátula resoluble
+(`find_albumart()` también encuentra `Music/cover.jpg` como ancestro
+de los álbumes sin `cover.jpg` propio) — primera corrida produce 8
+`.pfraw` de 28 816 B (`16 + 120*120*2`) con 8 líneas `DEBUGF
+"moonlit_art: decode"`; segunda corrida, mismo disco: 0 `decode`,
+8 `hit`, mismo conteo de archivos.
+
+Implementada en M7: `apps/metro/moonlit_art.{c,h}`,
+`apps/metro/moonlit_art_cache.{c,h}`, `apps/metro/test/test_art.c`,
+`apps/metro/test/file.h`, `apps/metro/test/lcd.h` (sustitutos de host),
+`apps/metro/test/Makefile`, `apps/metro/metro_albumart.{c,h}`
+(`metro_albumart_decode_track_cover_sized`), `apps/metro/metro_music.c`
+(enganche en `metro_music_db_ready()`), `apps/SOURCES` (fuera de
+`apps/metro/`, ver `MODIFICATIONS.md`). Sin pantalla ni consumidor
+todavía (M8 la usa desde Marea).
