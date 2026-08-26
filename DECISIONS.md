@@ -831,6 +831,17 @@ tocan geometría compartida con otras pantallas.**
    `metro_screen_*.c` toca `METRO_HUB_FIRST_Y`/`METRO_HUB_PITCH`/
    `METRO_HUB_VISIBLE` — el costo es local al hub raíz.
 
+   **Corrección tras revisión adversarial:** la primera versión de este
+   punto dejaba `metro_screen_hub_show()` con `metro_draw_header("")`
+   (la misma cadena vacía que candado/pantalla principal, que sí piden
+   el creciente de 16px en la barra de estado) — el hub terminaba
+   mostrando DOS crecientes apilados (16px arriba + 40px debajo,
+   visible en la primera versión de `docs/screenshots/M9-hub.png`).
+   Corregido distinguiendo `page_title == NULL` (sin texto NI marca —
+   el hub, que ya trae la suya) de `page_title == ""` (sin texto, con
+   marca de 16px — candado y pantalla principal) en
+   `metro_draw_header()` (`metro_draw.c`); el hub pasa `NULL`.
+
 2. **Creciente + wordmark de "Acerca de" (64px): bucle de filas propio,
    no `metro_draw_rows()`.** D-016 exige el wordmark en "Acerca de" a
    ≥ 64px; `metro_draw_rows()`/`metro_draw_rows_ex()` (`metro_draw.c`)

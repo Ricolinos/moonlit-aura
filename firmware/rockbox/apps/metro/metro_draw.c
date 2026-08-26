@@ -169,16 +169,19 @@ void metro_draw_header(const char *page_title)
      * pantalla (metro_color_bg()). Sin esquinas (toca el borde superior). */
     moonlit_draw_surface(0, 0, LCD_WIDTH, METRO_HEADER_HEIGHT, MSURFACE_LOWEST, 0);
 
-    /* moonlit (D-016, D-044, M9): sin titulo de pagina (hub raiz, candado,
-     * pantalla principal) la ceja izquierda queda vacia -- ahi va la
-     * marca Waning Crescent de 16px en vez de dejar el hueco en blanco.
-     * Con titulo, el texto ocupa el mismo lugar de siempre (sin tocar el
-     * eje METRO_DRAW_LEFT_X del que dependen pivots/filas/CONTINUUM). */
-    if (page_title[0] == '\0')
+    /* moonlit (D-016, D-044, M9): candado y pantalla principal no tienen
+     * titulo NI marca propia en otro lado -- ahi va la marca Waning
+     * Crescent de 16px en vez de dejar la ceja izquierda en blanco.
+     * page_title == NULL (distinto de "") es para el hub raiz, que ya
+     * dibuja su propia cabecera de marca de 40px (metro_screen_hub.c)
+     * y por eso NO quiere el creciente repetido aqui. Con titulo, el
+     * texto ocupa el mismo lugar de siempre (sin tocar el eje
+     * METRO_DRAW_LEFT_X del que dependen pivots/filas/CONTINUUM). */
+    if (page_title != NULL && page_title[0] == '\0')
         moonlit_logo_draw_crescent(MOONLIT_LOGO_CRESCENT_SIZE_16, METRO_DRAW_LEFT_X,
                                    (METRO_HEADER_HEIGHT - MOONLIT_LOGO_CRESCENT_SIZE_16) / 2,
                                    metro_color_accent());
-    else
+    else if (page_title != NULL)
         metro_draw_text(MFONT_LABEL, METRO_DRAW_LEFT_X, METRO_HEADER_TEXT_Y, page_title,
                          metro_color_secondary());
 

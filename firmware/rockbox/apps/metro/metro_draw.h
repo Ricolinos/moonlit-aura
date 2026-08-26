@@ -78,10 +78,12 @@ void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
 void metro_draw_text_clipped(enum metro_font_role role, int clip_x, int clip_w,
                               int x, int y, const char *str, unsigned color);
 
-/* Top line: page_title in caption/secondary at the left (or, if
- * page_title is "", the 16px Waning Crescent mark, D-016/D-044/M9),
- * current time (if the RTC has one) and battery percentage at the
- * right. */
+/* Top line: page_title in caption/secondary at the left, current time
+ * (if the RTC has one) and battery percentage at the right. page_title
+ * == "" draws the 16px Waning Crescent mark instead (lock, main --
+ * D-016/D-044/M9); page_title == NULL draws neither text nor mark,
+ * for a screen that already has its own branding elsewhere (the hub
+ * root's own 40px header, metro_screen_hub.c). */
 void metro_draw_header(const char *page_title);
 
 /* Battery icon (rect body + nub, proportionally filled) ending at

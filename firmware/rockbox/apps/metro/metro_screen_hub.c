@@ -948,10 +948,10 @@ void metro_screen_hub_show(void)
     int i, y = METRO_HUB_FIRST_Y;
 
     metro_draw_clear();
-    metro_draw_header("");
-    /* moonlit (D-016, D-044, M9): cabecera de marca -- solo aqui, el
-     * hub raiz, nunca en listas/pantallas hijas (esas ya tienen su
-     * propio titulo de pivot). */
+    /* moonlit (D-016, D-044, M9): NULL, no "" -- el hub ya dibuja su
+     * propia cabecera de marca de 40px abajo, asi que la barra de
+     * estado no debe repetir el creciente de 16px (metro_draw.c). */
+    metro_draw_header(NULL);
     moonlit_logo_draw_crescent(METRO_HUB_BRAND_SIZE, METRO_HUB_TEXT_X, METRO_HUB_BRAND_Y,
                                metro_color_accent());
 
