@@ -397,7 +397,7 @@ OK M7
    text	   data	    bss	    dec	    hex	filename
 1269856	  12292	8569948	9852096	 9654c0	firmware/build-ipod6g/rockbox.elf
 bss=8569948 coincide exacto con D-043 (base M7=7474076, +1095872, bajo el limite de 1100000 por 4128B)
--- sim shots Marea (hub->Musica->pivote Marea, SELECT,RIGHT x6,SELECT) --
+-- sim shots Marea (hub->Musica->pivote Marea, SELECT,SELECT -- v0.1.1/D-051: Marea es el primer pivote; en M11 era SELECT,RIGHT x6,SELECT) --
 NOTA: reproducibilidad de este shot en el entorno headless de esta sesion fue intermitente (la primera
 SELECT que entra a Musica corre metro_music_db_ready()/precarga; en varias corridas paralelas de este
 hito el snapshot de albumes tardaba en poblarse). Se instrumento temporalmente con DEBUGF (revertido

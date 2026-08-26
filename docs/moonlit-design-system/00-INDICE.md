@@ -33,7 +33,14 @@ Se documentan a medida que cada hito los construye — ver
   [`docs/moonlit-design-system/componentes/usb.md`](componentes/usb.md) (splash documentado ahí
   mismo, sin cambio de código propio).
 - Marea (Cover Flow vertical): **M8** (implementado, experimental hasta
-  M12) — [`docs/moonlit-design-system/componentes/marea.md`](componentes/marea.md).
+  M12; desde v0.1.1 es el primer pivote de Música, D-051, y precarga
+  las tapas visibles antes de cada scroll, D-045 cerrada) —
+  [`docs/moonlit-design-system/componentes/marea.md`](componentes/marea.md).
+- "Preparando biblioteca" (**v0.1.1**, D-049): pantalla bloqueante e
+  interrumpible entre el hub y Música — creciente 64 px, título
+  `MFONT_HEADLINE`, fase en `MFONT_BODY`, barra 120×2 y contador
+  `MFONT_LABEL`; sin nota propia, especificación en `DECISIONS.md`
+  D-049 y `firmware/rockbox/apps/metro/moonlit_screen_library.c`.
 - Logotipo Waning Crescent: **M9** (implementado) — sin nota de
   componente propia: la especificación vectorial vive en `DECISIONS.md`
   D-016/D-044 y el detalle de integración por pantalla en

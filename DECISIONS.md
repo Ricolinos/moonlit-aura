@@ -234,8 +234,10 @@ precalculado por `generate.py` (`MOONLIT_<esquema>_<nivel>_EDGE_LIGHT` /
 `firmware/rockbox/apps/metro/test/test_tokens.c`.
 
 **D-029 — Marea convive con Álbumes.** Pivote nuevo en `music_page`
-(`metro_screen_hub.c:606-623`); la rejilla se conserva. Se registra en
-M1 (decisión de alcance); se implementa en M8.
+(`music_pivots[]`, `apps/metro/metro_screen_hub.c:641-663` — la ruta
+`:606-623` citada originalmente quedó desfasada); la rejilla se
+conserva. Se registra en M1 (decisión de alcance); se implementa en M8
+como último pivote; D-051 lo mueve al primero.
 
 **D-030 — Layout de Marea.** Columna de portadas a la izquierda
 (x ∈ [0,152)), información del álbum a la derecha (x ∈ [160,320)):
@@ -1272,3 +1274,23 @@ confirma 320×98 y 103 colores distintos del fondo; `build_target.sh
 simulador pasa por `apps/main.c:421` (variante hosted) y `IPOD_6G` está
 definido en el build `--target=ipod6g --type=s`, así que ese camino
 también toma la rama nueva. `CLAUDE.md` §Comandos gana `--bootlogo`.
+
+**D-051 — Marea es el primer pivote de Música.** Metro (DA-1, M-065)
+dejó Quickplay como pivote de aterrizaje "abierto a que el dueño lo
+cambie en la PARADA"; en moonlit el dueño lo cambió: la superficie de
+llegada de Música es el Cover Flow vertical. **Decisión:** en
+`apps/metro/metro_screen_hub.c music_pivots[]` la entrada
+`{ LANG_MAREA_TITLE, marea_count, marea_get_row, marea_on_select, NULL }`
+pasa de la última posición a la primera; `npivots` sigue en 7 y ningún
+otro pivote cambia (Quickplay queda segundo con su rejilla). Comentario
+"DA-1: first pivot" reescrito ahí mismo. Actualizados: D-029 (ruta
+real y nota), `docs/ESTADO_FINAL.md` (Quickplay ya no es el primero),
+`docs/moonlit-design-system/componentes/marea.md` §Entrada,
+`docs/moonlit-design-system/00-INDICE.md`, `README.md`, y la secuencia
+de botones de `docs/screenshots/M11-verificacion.txt` (antes
+`SELECT,RIGHT×6,SELECT`, ahora `SELECT,SELECT`).
+`docs/screenshots/M8-marea-{0,1,mono}.png` regenerados con la
+secuencia nueva (`WAIT,SELECT,WAIT,SELECT,WAIT` para -0, `+SCROLL_FWD,WAIT`
+para -1, `+SCROLL_FWD×8,WAIT` para -mono: "Night Drive", monograma "N").
+Verificación: la captura de Música (`WAIT,SELECT`) muestra el
+encabezado del pivote "marea" primero.

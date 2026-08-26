@@ -67,7 +67,8 @@ resume, no reemplaza.
   del enfoque de Aura-Firmware) y la línea activa avanzando sola.
 - **Fotos de artista** (R3-F3): el pivot Artistas pasa a cuadrícula,
   consumiendo el `artist_images.cfg` que escribe Aura Studio.
-- **Quickplay** (R3-F4): primer pivot de Música, los álbumes
+- **Quickplay** (R3-F4): primer pivot de Música en Metro (en moonlit es
+  el segundo: Marea va primero, D-051), los álbumes
   reproducidos más recientemente con su carátula real. Requirió
   encender el runtime DB de Rockbox, que estaba apagado y sin ninguna
   forma de activarlo desde Metro.

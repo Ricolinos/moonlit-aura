@@ -671,8 +671,13 @@ static void marea_on_select(void *ctx, int index)
 }
 
 static const struct metro_pivot music_pivots[] = {
-    /* R3-F4/DD-5 (M-065), DA-1: first pivot -- the plan's recommended
-     * default (open for the owner to flip at this phase's PARADA). */
+    /* moonlit (D-051): Marea is the first pivot -- the landing surface
+     * of Música is the vertical cover flow, not Quickplay (DA-1 of
+     * Metro chose Quickplay "open for the owner to flip"; the owner
+     * flipped it for moonlit). Same struct, same count (7), only the
+     * order changes; Quickplay keeps its grid as the second pivot. */
+    { LANG_MAREA_TITLE,     marea_count,     marea_get_row,     marea_on_select,     NULL },
+    /* R3-F4/DD-5 (M-065), DA-1: Metro's first pivot, second here. */
     { LANG_PIVOT_QUICKPLAY, quickplay_count, quickplay_get_row, quickplay_on_select,
       (void *)&s_quickplay_grid,
       METRO_TILE_COLS, album_pivot_get_tile, LANG_QUICKPLAY_EMPTY },
@@ -686,7 +691,6 @@ static const struct metro_pivot music_pivots[] = {
     { LANG_PIVOT_SONGS,     songs_count,     songs_get_row,     songs_on_select,     NULL },
     { LANG_PIVOT_GENRES,    genres_count,    genres_get_row,    genres_on_select,    NULL },
     { LANG_PIVOT_PLAYLISTS, playlists_count, playlists_get_row, playlists_on_select, NULL },
-    { LANG_MAREA_TITLE,     marea_count,     marea_get_row,     marea_on_select,     NULL },
 };
 static const struct metro_page music_page = { LANG_HUB_MUSIC, music_pivots, 7, NULL };
 

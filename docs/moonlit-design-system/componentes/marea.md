@@ -49,7 +49,8 @@ saca a Marea de la pila. Contexto reusado: `MCTX_LIST` (D-030), sin tocar
 
 ## Entrada
 
-Pivote de una sola fila ("marea") al final de `music_pivots[]`
-(`metro_screen_hub.c`, D-029) — seleccionarlo empuja Marea como pantalla
-completa, un cuarto centinela junto a Ahora suena y el visor de fotos
+Pivote de una sola fila ("marea"), el **primero** de `music_pivots[]`
+(`metro_screen_hub.c`, D-029; D-051 lo movió del final al principio en
+v0.1.1: entrar a Música y pulsar SELECT abre Marea) — seleccionarlo
+empuja Marea como pantalla completa, un cuarto centinela junto a Ahora suena y el visor de fotos
 (`metro_main.c`).

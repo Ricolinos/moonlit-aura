@@ -22,7 +22,12 @@ Montserrat, iconos Material Symbols compilados, paleta y elevación
 tonal en hub/lista/ajustes/Ahora suena/candado/USB, el logotipo Waning
 Crescent, la sincronización de documentación y la revisión adversarial.
 "Cambiar sistema" ofrece una fila por familia hermana (Aura, Metro;
-D-047). Pendiente: M12 (medición en hardware real + empaquetado,
+D-047). v0.1.1 (D-049…D-051, tras medir en el iPod del dueño con
+~1 083 álbumes): pantalla "preparando biblioteca" con progreso e
+interrumpible en vez de 4 min a ciegas al entrar a Música, creciente
+desde el primer cuadro de arranque, Marea como primer pivote de Música
+y sin lecturas de disco dentro de su animación (D-045 cerrada).
+Pendiente: M12 (medición en hardware real + empaquetado,
 requiere el iPod). La pantalla "Marea" (Cover Flow vertical) es
 **experimental** hasta esa medición (D-043). Las decisiones cerradas
 viven en `DECISIONS.md` (D-001 en adelante); la bitácora heredada de
