@@ -39,12 +39,12 @@
 #include "metro_theme.h"
 #include "metro_lang.h"
 #include "metro_widgets.h"
+#include "moonlit_elevation.h"
 #include "metro_albumart.h"
 #include "metro_music.h"
 #include "metro_settings.h"
 #include "metro_fb.h"
 #include "metro_keymap.h"
-#include "metro_fsutil.h"
 #include "metro_lrc.h"
 #include "metro_motion.h" /* R4/FA-9: metro_seek_step_ms() */
 #include "metro_volume.h" /* R5-F3: 00..15 */
@@ -497,74 +497,52 @@ static void draw_transport_row(void)
                                       ring, metro_color_fg());
 }
 
-/* R4/FA-7 (M-078): el fondo deja de ser la misma imagen que el tile.
+/* moonlit (D-013, M5): el fondo del reproductor era 30% de la carátula
+ * (o foto del artista) mezclada sobre metro_color_bg() -- F12/R4-FA-7.
+ * D-013 lo cierra como "plano tonal Material... sin decodificar ni
+ * promediar la portada, costo por cuadro cero": el fondo pasa a ser
+ * metro_draw_clear() liso (superficie `surface`), sin decodificar
+ * ninguna imagen para el fondo. Los helpers de fondo de metro_albumart.c
+ * (carga desde artista/carátula, bitmap resultante) quedan sin llamador
+ * aquí -- D-013 permite que el módulo los conserve hasta que M11 decida
+ * si se retiran. La carátula en primer plano (metro_albumart_load_current())
+ * no cambia.
  *
- * Tabla acordada con el dueño (Q7 de la Fase 1), leída por columnas:
- *
- *   artista | álbum | FONDO             | TILE
- *   --------+-------+-------------------+---------------------------
- *      sí   |  sí   | foto del artista  | carátula real
- *      sí   |  no   | foto del artista  | acento + inicial
- *      no   |  sí   | carátula          | carátula real
- *      no   |  no   | plano (tema)      | acento + inicial
- *
- * La columna del TILE ya se comportaba así antes de esa fase (el
- * respaldo de acento + inicial existe desde F5), así que ahí solo
- * cambió la del FONDO. Y esa columna se reduce a una cascada: foto de
- * artista si la hay, si no la carátula, si no nada.
- *
- * La política vive aquí y no en metro_albumart.c a propósito: ese
- * módulo decodifica, no decide (su propia cabecera ya lo dice para el
- * nivel de FX). */
-static bool load_background(void)
+ * moonlit (D-039, M5): la carátula gana una tarjeta de elevación tonal
+ * detrás -- moonlit_draw_surface(..., MSURFACE_BASE, corner_s) -- que
+ * el bitmap cuadrado de la carátula real tapa por completo (no hay
+ * primitiva de blit con esquinas redondeadas en metro_fb.c); se dibuja
+ * igual porque es la que SÍ se ve cuando no hay carátula: el respaldo
+ * "acento sólido + inicial" de metro_draw_tile() (M-076, usado por el
+ * resto de la app) se reemplaza aquí por esta tarjeta + inicial en
+ * `primary`, mismo lenguaje visual que el monograma de Marea (M8). */
+static void draw_cover_initial(const char *label)
 {
-    struct mp3entry *id3 = audio_current_track();
-    char filename[METRO_FSUTIL_NAME_LEN];
-    char dir[MAX_PATH], path[MAX_PATH];
-    long mtime;
+    char initial[5] = { ' ', '\0' };
+    int w, h;
 
-    if (id3 && id3->artist &&
-        metro_music_artist_image(id3->artist, filename, sizeof(filename), &mtime))
-    {
-        /* metro_settings_artists_dir() es la única autorizada a armar
-         * esta ruta -- regla de rutas de contrato del CLAUDE.md. */
-        metro_settings_artists_dir(dir, sizeof(dir));
-        snprintf(path, sizeof(path), "%s/%s", dir, filename);
-        if (metro_albumart_load_background_file(path))
-            return true;
-        /* Mapeada pero ilegible (archivo corrupto, borrado entre el
-         * índice y aquí): se cae a la carátula, no a fondo plano. */
-    }
+    metro_lang_initial(label, initial, sizeof(initial));
+    if (!initial[0] || initial[0] == ' ')
+        return;
 
-    return metro_albumart_load_background();
+    lcd_setfont(metro_font_id(MFONT_DISPLAY));
+    lcd_getstringsize((const unsigned char *)initial, &w, &h);
+    metro_draw_text(MFONT_DISPLAY,
+                     NP_LEFT_X + (METRO_ALBUMART_SIZE - w) / 2,
+                     NP_COVER_Y + (METRO_ALBUMART_SIZE - h) / 2,
+                     initial, moonlit_color_accent());
 }
-
-/* F12: 30% of the track's own art, scaled to fill the screen, behind
- * everything else -- graphics=full only (PLAN_MAESTRO.md S3.3);
- * static, redrawn plainly every metro_screen_nowplaying_show() call
- * like the rest of this screen, never animated on its own.
- *
- * R2-F1/DD-2 (M-052): re-verified against a near-white cover fixture
- * (0xF2F2EC, "Wheel & Click/Analog Dreams" in gen_test_media.sh) --
- * kept at 77 rather than dropping to 51 (20%). Blending at only 30%
- * keeps metro_color_bg()'s dark base dominant in the composite
- * regardless of how bright the source art is (0.3*brightCover +
- * 0.7*darkBg still lands in a medium-dark gray, not near-white), so
- * the tertiary (album) text line stays legible in practice even
- * against the palest cover this fixture set can produce -- see
- * docs/screenshots/R2-F1-np-worstcase.png. */
-#define METRO_NP_BG_ALPHA256 77 /* ~30% of 256 */
 
 /* R3-F2/DD-2: full-screen lyrics -- active line in the title face at
  * screen center, up to 2 lines of context each side in the list face,
  * dimmed further with distance. Left-aligned at x=12 like every other
  * NP text (Metro doesn't center text), never the "vidrio" translucent
  * panel Aura-Firmware uses for the same problem (INVESTIGACION-metro-r3.md
- * A.4) -- Metro's flat language has no glass, and the 30% cover dim
- * already applied above (metro_fb_blend_over_color) is what keeps this
- * legible over a bright cover instead. Y positions are fixed pixels,
- * same convention as the rest of this screen (and the whole app) --
- * not computed from font metrics. */
+ * A.4) -- Metro's flat language has no glass. moonlit (D-013, M5): the
+ * background is now a flat `surface` tone (metro_draw_clear()), not a
+ * dimmed cover, so legibility no longer depends on any blend here.
+ * Y positions are fixed pixels, same convention as the rest of this
+ * screen (and the whole app) -- not computed from font metrics. */
 #define METRO_LYRICS_TOP_Y   40
 #define METRO_LYRICS_PITCH   32
 #define METRO_LYRICS_CONTEXT 2
@@ -625,19 +603,20 @@ static void draw_progress_and_times(struct mp3entry *id3)
 void metro_screen_nowplaying_show(void)
 {
     struct mp3entry *id3;
-    bool has_bg = metro_settings.graphics == METRO_GFX_FULL && load_background();
 
-    if (has_bg)
-        metro_fb_blend_over_color(metro_albumart_background_bitmap(),
-                                   metro_color_bg(), METRO_NP_BG_ALPHA256);
-    else
-        metro_draw_clear();
-
+    metro_draw_clear();
     metro_draw_header(metro_lang_str(LANG_HUB_NOWPLAYING));
 
     if (!metro_music_is_playing() || !(id3 = audio_current_track()))
     {
-        metro_draw_tile(NP_LEFT_X, NP_COVER_Y, METRO_ALBUMART_SIZE, "?");
+        /* moonlit_tokens.h:MOONLIT_CORNER_S (design-system/tokens.json
+         * shape.corner_s = 8) -- moonlit_palette.c es el único includer
+         * de moonlit_tokens.h dentro de apps/metro/ (D-028), así que el
+         * radio se pasa como literal, igual que los demás llamadores de
+         * moonlit_draw_surface() (metro_draw.c, metro_screen_hub.c). */
+        moonlit_draw_surface(NP_LEFT_X, NP_COVER_Y, METRO_ALBUMART_SIZE,
+                              METRO_ALBUMART_SIZE, MSURFACE_BASE, 8);
+        draw_cover_initial("?");
         lcd_update();
         return;
     }
@@ -657,30 +636,36 @@ void metro_screen_nowplaying_show(void)
         char upper[METRO_MUSIC_ITEM_LEN];
         int col_w = LCD_WIDTH - NP_COL_X - NP_LEFT_X;
 
+        moonlit_draw_surface(NP_LEFT_X, NP_COVER_Y, METRO_ALBUMART_SIZE,
+                              METRO_ALBUMART_SIZE, MSURFACE_BASE, 8);
         if (metro_albumart_load_current())
             lcd_bitmap(metro_albumart_bitmap(), NP_LEFT_X, NP_COVER_Y,
                        METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE);
         else
-            metro_draw_tile(NP_LEFT_X, NP_COVER_Y, METRO_ALBUMART_SIZE,
-                             id3->album ? id3->album : (id3->title ? id3->title : "?"));
+            draw_cover_initial(id3->album ? id3->album
+                                          : (id3->title ? id3->title : "?"));
 
         draw_mode_row(id3);
         draw_transport_row();
 
-        /* ARTISTA / álbum / título -- el orden de la maqueta (y del Zune
-         * original): la línea fuerte es quién, luego de dónde, luego qué. */
+        /* moonlit (D-039, M5): jerarquía MD3 -- el título de la pista
+         * es la línea fuerte (MFONT_TITLE, on_surface), el artista pasa
+         * a texto de cuerpo (MFONT_BODY, on_surface_variant). Invierte
+         * el orden WP7/Zune original de M-083 ("la línea fuerte es
+         * quién") a propósito: MD3 encabeza con QUÉ suena. El álbum no
+         * está en el alcance de M5 y conserva MFONT_LIST/secondary. */
         metro_lang_upper(id3->artist ? id3->artist
                                      : metro_lang_str(LANG_UNKNOWN_ARTIST),
                          upper, sizeof(upper));
-        metro_draw_text_cut_right(MFONT_LIST_SEL, NP_COL_X, NP_ARTIST_Y, upper,
-                                   metro_color_fg(), col_w);
+        metro_draw_text_cut_right(MFONT_BODY, NP_COL_X, NP_ARTIST_Y, upper,
+                                   metro_color_secondary(), col_w);
         metro_draw_text_cut_right(MFONT_LIST, NP_COL_X, NP_ALBUM_Y,
                                    id3->album ? id3->album
                                               : metro_lang_str(LANG_UNKNOWN_ALBUM),
                                    metro_color_secondary(), col_w);
-        metro_draw_text_cut_right(MFONT_LIST, NP_COL_X, NP_TITLE_Y,
+        metro_draw_text_cut_right(MFONT_TITLE, NP_COL_X, NP_TITLE_Y,
                                    id3->title ? id3->title : "?",
-                                   metro_color_secondary(), col_w);
+                                   metro_color_fg(), col_w);
 
         draw_progress_and_times(id3);
     }

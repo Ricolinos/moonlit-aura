@@ -487,3 +487,78 @@ dibujo), `metro_screen_settings.c` (4 presets), `metro_lang.{c,h}`
 `MFONT_CAPTION`), `firmware/tools/check_tones.py` (`--edge`),
 `firmware/tools/sim_matrix.sh` (2 esquemas × 4 presets × 3 pantallas),
 `apps/plugins/mpegplayer/*` (D-035). Elimina: `apps/metro/metro_palette.h`.
+
+# Hito M5 — Ahora suena, candado, USB y splash sobre el sistema nuevo (D-039…D-040)
+
+**D-039 — Ahora suena: fondo plano, tarjeta tonal de carátula (136 px,
+no 120) y jerarquía tipográfica invertida.**
+
+1. **Fondo (implementa D-013).** `metro_screen_nowplaying_show()`
+   mezclaba 30% de la carátula (o foto del artista) sobre
+   `metro_color_bg()` (F12/R4-FA-7, M-078). D-013 ya lo cerraba como
+   "plano tonal Material... costo por cuadro cero" desde H1; M5 lo
+   ejecuta: `load_background()` se retira, el fondo pasa a
+   `metro_draw_clear()` liso. Los helpers de fondo de
+   `metro_albumart.c` quedan sin llamador (D-013 permite conservarlos
+   hasta M11).
+
+2. **Tamaño de la carátula: discrepancia consultada con el dueño.**
+   `05-plan-correctivo.md` §M5 pide "carátula 120×120", pero la
+   constante real es `METRO_ALBUMART_SIZE 136`
+   (`apps/metro/metro_albumart.h:35`), compartida con el decodificador
+   de miniaturas del hub (`metro_albumart.c:205-221`, downscale a
+   `METRO_TILE_SIZE 80`) — y el propio M5 dice "NO tocar hub (M4)".
+   **Resolución (consultada con el dueño):** se mantiene 136, no se
+   toca `metro_albumart.h`. La tarjeta de elevación
+   (`moonlit_draw_surface(..., MSURFACE_BASE, corner_s)`) se dibuja a
+   136×136, no 120×120.
+
+3. **La tarjeta solo se ve sin carátula.** Con arte real,
+   `lcd_bitmap()` cuadrado tapa la tarjeta redondeada por completo —
+   `metro_fb.c` no tiene una primitiva de blit con esquinas
+   redondeadas. Se dibuja en ambos casos de todos modos (el costo es
+   un `fillrect` a ~1 Hz, no un bucle de animación) porque es la que sí
+   se ve en el respaldo sin carátula: reemplaza el "acento sólido +
+   inicial" de `metro_draw_tile()` (M-076) por tarjeta tonal + inicial
+   en `primary`, mismo lenguaje que el monograma de Marea (`05-plan-correctivo.md`
+   §M8 D.5).
+
+4. **Jerarquía tipográfica.** El plan solo nombra fuente/color para
+   "título" y "artista"; se interpreta que el título (no nombrado)
+   toma el rol fuerte por default (`on_surface`) ya que solo "artista"
+   se marca explícitamente `on_surface_variant`. Título:
+   `MFONT_LIST`/secundario → `MFONT_TITLE`/`on_surface`. Artista:
+   `MFONT_LIST_SEL`/`on_surface` (versalitas) → `MFONT_BODY`/
+   `on_surface_variant` (conserva las versalitas de `metro_lang_upper()`,
+   el plan no pide retirarlas). Álbum, fuera de alcance de M5, no
+   cambia. Invierte a propósito el orden WP7/Zune de M-083 ("la línea
+   fuerte es quién") — MD3 encabeza con QUÉ suena; posiciones Y sin
+   cambiar (el plan no pide reordenar líneas).
+
+5. **Barra de progreso.** `metro_draw_progress()` (compartida por
+   Ahora suena y el splash) pintaba la pista en `metro_color_tertiary()`
+   (`outline`) — un tono de contorno, no de superficie. Pasa a
+   `surface_container_highest`, el relleno sigue en `primary`.
+
+**D-040 — Retiro de `metro_glyphs_table.c`/`metro_widgets_draw_glyph()`;
+USB usa `moonlit_icon_draw()`.** El glifo `arrow_sync` de Fluent System
+Icons (M-089), la única razón por la que `metro_glyphs_table.c` y
+`metro_glyphs.h` sobrevivieron a M3 (D-033 punto 4, "se conserva hasta
+M5"), se sustituye por el ícono `usb` de Material Symbols a 40 px
+(`moonlit_icons.h`, ya compilado desde M3 sin consumidor). Retirados
+sin reemplazo: `metro_glyphs_table.c`, `metro_glyphs.h`,
+`metro_widgets_draw_glyph()` (`metro_widgets.c/.h`) — ningún llamador
+les sobrevive. `apps/SOURCES` pierde la entrada
+`metro/metro_glyphs_table.c` (fuera de `apps/metro/`, ver
+`MODIFICATIONS.md`). El grep "sin Fluent" de D-033 punto 4, acotado en
+M3 porque este archivo estaba protegido, ahora da vacío sin acotar.
+
+Implementada en M5: `apps/metro/metro_screen_nowplaying.c` (D-013,
+D-039), `apps/metro/metro_draw.c` (pista de `metro_draw_progress()`,
+D-039), `apps/metro/metro_screen_usb.c` (D-040),
+`apps/metro/metro_widgets.{c,h}` (retiro de `metro_widgets_draw_glyph()`),
+`docs/moonlit-design-system/componentes/{ahora-suena,candado,usb}.md`.
+`metro_screen_lock.c` y `metro_screen_splash.c` no cambiaron de código
+(ya resolvían color/fuente por rol MD3 desde M2/M4); solo se
+verificaron con captura. Elimina: `apps/metro/metro_glyphs_table.c`,
+`apps/metro/metro_glyphs.h`.

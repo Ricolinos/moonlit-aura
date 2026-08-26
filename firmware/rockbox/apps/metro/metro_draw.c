@@ -316,7 +316,11 @@ void metro_draw_progress(int x, int y, int width, int height, int pct)
         pct = 100;
     fill_w = width * pct / 100;
 
-    lcd_set_foreground(metro_color_tertiary());
+    /* moonlit (D-039, M5): la pista pasa de metro_color_tertiary()
+     * (outline) a surface_container_highest -- MD3 pinta la pista de
+     * una barra de progreso como una superficie tonal, no un contorno;
+     * el relleno sigue en primary (metro_color_accent()). */
+    lcd_set_foreground(moonlit_color(MROLE_SURFACE_CONTAINER_HIGHEST));
     lcd_fillrect(x, y, width, height);
 
     if (fill_w > 0)
