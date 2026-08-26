@@ -328,6 +328,8 @@ metro/metro_screen_hub.c
 metro/metro_screen_settings.c
 metro/metro_music.c
 metro/metro_albumart.c
+metro/moonlit_art.c /* moonlit (D-020, D-042, M7): formato .pfraw puro, de aura_art.c */
+metro/moonlit_art_cache.c /* moonlit (D-042, M7): resolucion album->pixeles + precarga D-224 */
 metro/metro_artist_images.c
 metro/metro_artist_images_parse.c
 metro/metro_screen_nowplaying.c
