@@ -2291,3 +2291,129 @@ hardware; si conviene que el constructor también compita por
 prioridad con el hilo de escaneo de tagcache durante un
 `tagcache_start_scan()` en curso (hoy ambos pueden correr a la vez,
 sin que este commit lo haya necesitado forzar de otro modo).
+
+---
+
+**D-060 — Esperar un `commit()` de tagcache en curso antes de rebotar
+por un cambio de familia (misma corrección en paralelo en
+`Aura-Firmware` AF D-342 y en `Metro-Aura` M-099).** `metro_settings.c`
+comparte base con Metro-Aura desde `moonlit-fork-base` (D-003):
+`metro_firmware_switch_to()` heredaba sin cambios el defecto M-090 ya
+presente ahí.
+
+**Diagnóstico.** `metro_firmware_switch_to()`
+(`apps/metro/metro_settings.c:409-448` antes de este commit) llamaba
+`tagcache_shutdown()` (`apps/tagcache.c:5508-5517`) y de inmediato
+`rename()` + `system_reboot()`. `tagcache_shutdown()` solo vacía la
+cola de escrituras numéricas diferidas (`run_command_queue(true)`,
+playcount/lastplayed/rating) -- **nunca** espera un `commit()` en
+curso. Un `commit()` (`apps/tagcache.c`, función `commit()`) marca el
+header maestro **compartido** (`/.aura/tagcache/database_idx.tcd`,
+contrato v15/D-054) `dirty = true` y lo escribe a disco de inmediato
+(`current_tcmh.dirty = true; update_master_header();`, `:3538-3540`) --
+antes incluso de reconstruir un solo índice -- y solo lo vuelve a
+marcar limpio (`tcmh.dirty = false;`) y lo persiste
+(`write_master_header()`) al final del todo (`:3593-3597`), después de
+reconstruir los índices de texto y numéricos. Si el reboot del cambio
+de familia cae en cualquier punto de esa ventana, el header queda con
+`dirty=1` en disco. `check_all_headers()` en el siguiente arranque de
+**cualquier** familia (Aura, Metro o moonlit -- el header es
+compartido) ve el flag sucio, `tc_stat.ready` se queda en `false`, y
+esa familia reconstruye la base entera desde cero aunque los datos en
+sí estuvieran íntegros.
+
+En moonlit este defecto es alcanzable en la práctica, a diferencia de
+Metro-Aura (M-099): `moonlit_master_art_builder_poll()` sondea
+`metro_music_db_ready()` desde el arranque (D-059,
+`metro_main.c:438`, dentro del bucle ocioso), no solo al entrar a
+Música como en Metro. Cualquier lectura de carátula que dispare una
+escritura de tag numérico, o un `tagcache_start_scan()` en curso por
+un marcador de sync pendiente, puede dejar un `commit()` a mitad de
+camino en el instante en que el dueño pide "cambiar sistema" desde
+Ajustes.
+
+**Corrección.** Antes del primer `rename()`, `metro_firmware_switch_to()`
+espera a que `tagcache_get_commit_step()` (API pública ya existente,
+`apps/tagcache.h:194`) vuelva a `0`, con tope de **8 s**
+(`METRO_SWITCH_COMMIT_WAIT_TICKS`, `metro_settings.c:432`), sondeando
+cada `HZ/10` -- mismo patrón que `wait_for_tagcache_with_splash()`
+(`metro_main.c:227-241`, tope `HZ*5`) y que el propio
+`init_tagcache()` de Rockbox (`apps/main.c:379`, sondea el mismo
+getter). Se eligió 8 s por encima del tope del splash (5 s) porque
+aquí no hay pantalla ni feedback -- un `sleep` silencioso, ya que el
+caso (una familia distinta pidiendo el cambio justo cuando hay un
+commit en vuelo) es raro y no amerita una pantalla nueva -- y conviene
+dar más margen que en el arranque, donde el usuario ya está mirando la
+barra de progreso del splash. Si el tope se agota, el switch **procede
+de todas formas**: no bloquear indefinidamente un cambio de familia
+por un hilo de tagcache atascado es más importante que blindar al
+100 % contra la reconstrucción ocasional -- la misma decisión que ya
+toma `tagcache_prepare_shutdown()` (`apps/tagcache.c:5495-5504`, la
+función de apagado limpio que Rockbox stock sí usa) al limitarse a
+**negarse** si `commit_step > 0` en vez de esperarlo: aquí no podemos
+negarnos (el switch ya se confirmó en el diálogo), así que esperamos
+con tope en su lugar.
+
+**Ventana residual (no cerrada, y no cerrable con la API pública).**
+`tagcache_get_commit_step()` vuelve a `0` en `apps/tagcache.c:3579`,
+**antes** de que el header realmente se reescriba limpio en disco
+(`:3593-3597`, abrir el master fd, actualizar el conteo de entradas,
+`tcmh.dirty = false`, `write_master_header()`). Entre esas dos líneas
+hay un puñado de syscalls (`open`, `lseek`, `write`, `close`), no un
+recorrido de biblioteca completo -- del orden de milisegundos, no de
+segundos. Un reboot que cayera justo ahí seguiría dejando el header
+sucio. Cerrar esta ventana exigiría una API interna de tagcache que
+señalice "header ya persistido" (no existe hoy; `commit_step` es lo
+único público) -- fuera de alcance de este commit, que solo puede usar
+`apps/tagcache.h`. La mitigación reduce la ventana de "toda la
+duración de un commit" (potencialmente segundos con una biblioteca
+grande) a "unas pocas syscalls", que es la misma exposición residual
+que ya acepta `tagcache_prepare_shutdown()` aguas arriba.
+
+**Cadena de arranque hasta el primer sondeo -- verificada, NO
+modificada a propósito.** `metro_main()` (`metro_main.c`):
+`metro_screen_splash_show()` → `wait_for_tagcache_with_splash()`
+(`:291-292`) → `metro_screen_list_init()` → `metro_screen_lock_init()`
++ `metro_screen_lock_run_if_active()` (candado, `:304-305`, R3-F7/DD-8)
+→ `metro_disk_handoff()` (`:307`, que a su vez llama
+`metro_run_sync_screen_if_needed()`, F6) → `redraw_current()` → bucle
+principal, donde recién en la rama `MACT_NONE` corre el primer
+`moonlit_master_art_builder_poll()` (`:438`). Si el candado está
+armado, o si hay un marcador de sync pendiente que dispara la pantalla
+F6 de "actualizando biblioteca", el primer sondeo del constructor de
+carátulas (y por lo tanto el primer punto en que ese hilo podría
+empezar a generar tráfico hacia tagcache) se retrasa lo que tarde el
+dueño en desbloquear o lo que tarde el sync. Esto es una limitación
+conocida, dejada **sin corregir a propósito**: mover el arranque del
+constructor de carátulas (o cualquier trabajo de tagcache) a antes del
+candado sería un cambio de superficie de seguridad distinto (el
+candado existe para que nada corra antes de desbloquear, R3-F7/DD-8) y
+de alcance distinto al de esta decisión -- no se hace sin que se pida
+explícitamente. En la práctica no agrava el riesgo que D-060 corrige:
+retrasa cuándo puede *empezar* un commit, no lo que pasa si uno ya
+estaba en vuelo cuando llega un cambio de familia.
+
+**Verificación:**
+- `make -C firmware/rockbox/apps/metro/test test`: 17 suites, todas en
+  verde (el defecto y su corrección viven enteros dentro de
+  `metro_firmware_switch_to()`, que ningún test host ejercita --
+  necesita `rename()`/`system_reboot()`/tagcache reales -- pero
+  ninguna suite existente se rompió por el cambio de firma/includes).
+- `firmware/tools/build_sim.sh`: compila limpio. Un switch normal (sin
+  commit en curso, caso de todo el día a día) no se retrasa: la
+  condición del `while` evalúa `tagcache_get_commit_step() != 0`
+  primero -- con el valor en `0` el cuerpo del bucle (el único `sleep`)
+  nunca corre, así que el costo agregado es una lectura de campo, no
+  medible. "Cambiar sistema" del hub sigue funcionando: capturado en
+  `docs/screenshots/v0.1.5-d060-cambiar-sistema-vacio.png`
+  (`SCROLL_FWD×3,SELECT,SCROLL_FWD×8,SELECT` desde el hub, patrón de
+  D-047) -- la fila 8 de Ajustes › General empuja `switch_page` con
+  "Aura"/"Metro" en "no instalado" (ninguna familia hermana instalada
+  en el disco simulado), igual que antes del cambio.
+- `RBDEV_TOOLCHAIN=… firmware/tools/build_target.sh`: exit 0 (firmware
+  y bootloader). `.bss` (`arm-elf-eabi-size firmware/build-ipod6g/rockbox.elf`):
+  **8 456 508**, sin cambio frente al valor limpio de D-059 -- el
+  arreglo solo agrega variables locales de pila (`wait_start`) y un
+  `#define`, cero estáticas nuevas. Bajo el techo D-043 de 8 574 076.
+- `git status --short`: limpio tras este commit (más el screenshot
+  nuevo, agregado al repo).

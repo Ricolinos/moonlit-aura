@@ -28,10 +28,11 @@
 #include "rtc.h"
 #include "string-extra.h"
 #include "timefuncs.h"
-#include "system.h"          /* system_reboot() -- M-090 */
+#include "system.h"          /* system_reboot(), TIME_BEFORE() -- M-090/D-060 */
 #include "settings.h"        /* settings_save() -- M-090 */
 #include "ata_idle_notify.h" /* call_storage_idle_notifys() -- M-090 */
-#include "tagcache.h"        /* tagcache_shutdown() -- M-090 */
+#include "tagcache.h"        /* tagcache_shutdown(), tagcache_get_commit_step() -- M-090/D-060 */
+#include "kernel.h"          /* current_tick, sleep() -- D-060 */
 
 #include "metro_settings.h"
 #include "metro_sync.h" /* marcador de sync al cambiar de firmware -- M-090 */
@@ -417,6 +418,25 @@ bool metro_firmware_switch_to(int i)
     /* 1. todo lo de moonlit al disco, AHORA */
     metro_settings_save();
     settings_save();
+
+    /* moonlit (D-060): don't cut a tagcache commit mid-write -- see
+     * DECISIONS.md. tagcache_shutdown() below only flushes the queue of
+     * numeric-tag writes (playcount/lastplayed/rating); it never waits
+     * for a commit() already in progress (apps/tagcache.c). A reboot
+     * while commit_step is nonzero can leave the SHARED master header's
+     * dirty flag stuck, forcing every family to rebuild from scratch on
+     * its next boot even though the data was fine. Bounded so a wedged
+     * commit thread can never block a firmware switch forever; if the
+     * cap is hit we proceed anyway -- see D-060 for why that's the
+     * right call here. */
+#define METRO_SWITCH_COMMIT_WAIT_TICKS (HZ * 8)
+    {
+        long wait_start = current_tick;
+        while (tagcache_get_commit_step() != 0 &&
+               TIME_BEFORE(current_tick, wait_start + METRO_SWITCH_COMMIT_WAIT_TICKS))
+            sleep(HZ / 10);
+    }
+
     tagcache_shutdown();
     call_storage_idle_notifys(true);
 
