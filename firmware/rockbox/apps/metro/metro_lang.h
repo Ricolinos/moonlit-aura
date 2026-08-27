@@ -192,6 +192,10 @@ enum metro_lang_id {
      * and the "%d de %d" counter. Appended at the end (M-009). */
     LANG_LIBRARY_PREPARING,
     LANG_LIBRARY_PHASE_DB,
+    /* moonlit (D-058): moonlit_art_pending_count()'s heartbeat while it
+     * sweeps the whole library, before the pending count (and so
+     * LANG_LIBRARY_PHASE_ART's screen) exists. */
+    LANG_LIBRARY_PHASE_SCAN,
     LANG_LIBRARY_PHASE_ART,
     LANG_LIBRARY_COUNT_FMT,
 

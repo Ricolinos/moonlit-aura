@@ -185,6 +185,9 @@ static const char *const strings_es[LANG_COUNT] = {
     /* moonlit (D-049): preparando biblioteca */
     [LANG_LIBRARY_PREPARING] = "preparando biblioteca",
     [LANG_LIBRARY_PHASE_DB]  = "construyendo la base de música",
+    /* moonlit (D-058): heartbeat de moonlit_art_pending_count() -- el
+     * conteo, no el precargado (LANG_LIBRARY_PHASE_ART, abajo). */
+    [LANG_LIBRARY_PHASE_SCAN] = "revisando carátulas",
     [LANG_LIBRARY_PHASE_ART] = "preparando carátulas",
     [LANG_LIBRARY_COUNT_FMT] = "%d de %d",
 };
@@ -347,6 +350,9 @@ static const char *const strings_en[LANG_COUNT] = {
     /* moonlit (D-049): preparing library */
     [LANG_LIBRARY_PREPARING] = "preparing library",
     [LANG_LIBRARY_PHASE_DB]  = "building the music database",
+    /* moonlit (D-058): heartbeat for moonlit_art_pending_count() --
+     * the count, not the precache (LANG_LIBRARY_PHASE_ART, below). */
+    [LANG_LIBRARY_PHASE_SCAN] = "checking covers",
     [LANG_LIBRARY_PHASE_ART] = "preparing covers",
     [LANG_LIBRARY_COUNT_FMT] = "%d of %d",
 };

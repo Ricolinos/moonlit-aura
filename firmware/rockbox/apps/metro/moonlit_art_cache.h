@@ -90,31 +90,57 @@ bool moonlit_art_load_for_album(int32_t album_seek, fb_data *out);
 typedef void (*moonlit_art_progress_fn)(int done, int total);
 typedef bool (*moonlit_art_abort_fn)(void);
 
-/* D-049: albums whose MOONLIT_ART_CACHE_SIZE .pfraw for the active
- * theme is missing or stale AND have no "<clave>.none" marker (D-056)
- * -- header reads only (one open() per album, no pixels). 0 means
- * moonlit_art_precache() has nothing to do and the "Preparando
+/* D-049/D-058: albums whose MOONLIT_ART_CACHE_SIZE .pfraw for the
+ * active theme is missing or stale AND have no "<clave>.none" marker
+ * (D-056) -- header reads only (one open() per album, no pixels). 0
+ * means moonlit_art_precache() has nothing to do and the "Preparando
  * biblioteca" screen never draws its phase 2. D-056: the answer is
  * memoized per (tagcache total_entries, theme, generation) whatever
  * its value; moonlit_art_pending_invalidate() bumps the generation
  * (sync finish_ok() via moonlit_art_request_gc(), the bootstrap seal
- * in metro_music_db_ready(), an aborted precache). */
-int moonlit_art_pending_count(void);
+ * in metro_music_db_ready(), an aborted precache).
+ *
+ * D-058: this walks the WHOLE library (unlike moonlit_art_precache(),
+ * which after this commit only visits the albums still pending) --
+ * on a large library with a slow disk the sweep itself can take
+ * minutes, and before D-058 it had no way to redraw or notice MENU.
+ * `progress_cb` (may be NULL), reusing moonlit_art_progress_fn's
+ * (int, int) shape, is called every ~8 albums or ~HZ/4 ticks
+ * (whichever comes first) as (checked, total_albums) -- total_albums,
+ * NOT the pending count, which isn't known until the sweep finishes.
+ * `should_abort` (may be NULL) is polled at the same cadence; if it
+ * returns true the sweep stops early and this returns -1 (the memo is
+ * NOT updated -- the count was incomplete). Callers must treat a
+ * negative return as "the user asked to leave", not as "0 pending". */
+int moonlit_art_pending_count(moonlit_art_progress_fn progress_cb,
+                              moonlit_art_abort_fn should_abort);
 void moonlit_art_pending_invalidate(void);
 
-/* D-224/D-049: recorre metro_music_albums() una vez y llama
+/* D-224/D-049/D-058: recorre metro_music_albums() una vez y llama
  * moonlit_art_load_for_album() SOLO por los álbumes sin .pfraw válido
  * (moonlit_art_pfraw_is_cached() antes, cabecera de 16 bytes, nunca el
  * read() completo del hit -- 264 ms/álbum medidos en el iPod del
- * dueño con el pase anterior, 4 min 18 s para 979 álbumes). `progress_cb`
- * recibe (hechos, pendientes) tras cada decode; `should_abort` se
- * consulta entre álbumes (nunca a mitad de un decode) y, si devuelve
- * true, la pasada se corta y esto devuelve false -- lo que falte queda
- * para la próxima llamada, idempotente. Ambos opcionales (NULL).
- * Único llamador: moonlit_screen_library.c (D-049); ya no corre dentro
- * de metro_music_db_ready(), que bloqueaba el hub sin pantalla ni
- * botones. */
-bool moonlit_art_precache(moonlit_art_progress_fn progress_cb,
+ * dueño con el pase anterior, 4 min 18 s para 979 álbumes).
+ *
+ * `pending` is the total the caller already learned from
+ * moonlit_art_pending_count() (or moonlit_art_pending_invalidate()'d
+ * knowledge that it changed) -- D-058 removed this function's OWN
+ * count_uncached_now() call, which used to repeat that exact same
+ * full-library sweep a second time, back to back, before touching a
+ * single album; <= 0 is a no-op. The per-iteration
+ * moonlit_art_is_resolved() check inside the loop below is NOT
+ * redundant with that outside count: it is the only way to know WHICH
+ * of the `count` albums to skip vs. decode, whereas `pending` is only
+ * used as the progress bar's denominator.
+ *
+ * `progress_cb` recibe (hechos, pendientes) tras cada decode;
+ * `should_abort` se consulta entre álbumes (nunca a mitad de un
+ * decode) y, si devuelve true, la pasada se corta y esto devuelve
+ * false -- lo que falte queda para la próxima llamada, idempotente.
+ * Ambos opcionales (NULL). Único llamador: moonlit_screen_library.c
+ * (D-049); ya no corre dentro de metro_music_db_ready(), que
+ * bloqueaba el hub sin pantalla ni botones. */
+bool moonlit_art_precache(int pending, moonlit_art_progress_fn progress_cb,
                           moonlit_art_abort_fn should_abort);
 
 #endif /* MOONLIT_ART_CACHE_H */

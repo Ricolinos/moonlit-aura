@@ -594,24 +594,46 @@ void metro_music_album_art_key_reset(void)
     s_art_key_memo_entries = -1;
 }
 
+/* D-058: one tagcache session instead of two. The old version ran
+ * metro_music_songs_of_album() (its own tag_title search filtered by
+ * tag_album) just to learn a track seek, then opened a SECOND session
+ * on tag_filename and used tagcache_retrieve()+a manual tcs.idx_id
+ * assignment to fetch that same track's path and mtime -- two full
+ * tagcache_search()/_finish() round trips per album, paid twice over
+ * (once from moonlit_art_pending_count()'s sweep, once from
+ * moonlit_art_precache()'s) before D-058 removed that duplicate sweep
+ * too. Searching tag_filename directly, filtered by tag_album, and
+ * taking the first tagcache_get_next() hit needs only one session and
+ * hands back the path straight away.
+ *
+ * Same (path, mtime) as before: build_lookup_list() (tagcache.c)
+ * walks the master index in position order applying `filter_count`
+ * filters that only look at idx->tag_seek[filter_tag] -- the same
+ * predicate regardless of which tag `tcs->type` is -- so the first
+ * master-index entry whose tag_album matches is identical whether the
+ * search type is tag_title or tag_filename; tagcache_get_next() sets
+ * tcs->idx_id from that same entry's position (get_next(), the
+ * "relative fetch" branch taken whenever filter_count > 0) before
+ * this function ever reads it, so no manual idx_id assignment is
+ * needed here the way the old two-session version required. Verified
+ * by reading tagcache.c's build_lookup_list()/get_next()/get_index()
+ * (no host stub exists for tagcache -- this file is not host-testable,
+ * same as moonlit_art_cache.c, see its header comment). */
 static bool compute_album_art_key(int32_t album_seek, char *out, size_t outsz)
 {
     struct tagcache_search tcs;
-    metro_music_item_t track;
     char path[MAX_PATH];
     long mtime;
     uint32_t crc;
 
-    if (metro_music_songs_of_album(album_seek, &track, 1) < 1)
-        return false;
     if (!tagcache_search(&tcs, tag_filename))
         return false;
-    if (!tagcache_retrieve(&tcs, track.seek, tag_filename, path, sizeof(path)) || !path[0])
+    tagcache_search_add_filter(&tcs, tag_album, album_seek);
+    if (!tagcache_get_next(&tcs, path, sizeof(path)) || !path[0])
     {
         tagcache_search_finish(&tcs);
         return false;
     }
-    tcs.idx_id = track.seek; /* tagcache_get_numeric() reads tcs->idx_id */
     mtime = tagcache_get_numeric(&tcs, tag_mtime);
     tagcache_search_finish(&tcs);
     if (mtime < 0)

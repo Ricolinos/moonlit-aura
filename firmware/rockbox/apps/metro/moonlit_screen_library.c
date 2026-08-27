@@ -146,6 +146,17 @@ static void precache_progress(int done, int total)
         draw_screen(LANG_LIBRARY_PHASE_ART, done, total);
 }
 
+/* D-058: heartbeat for moonlit_art_pending_count()'s own sweep of the
+ * WHOLE library (metro_music_albums(), not just what's pending -- that
+ * total isn't known yet). Called every ~8 albums or ~HZ/4 ticks
+ * (moonlit_art_cache.c's SWEEP_HEARTBEAT_*), so unlike precache_progress()
+ * above it never needs its own repaint throttle -- the caller already
+ * paces it. */
+static void count_progress(int checked, int total_albums)
+{
+    draw_screen(LANG_LIBRARY_PHASE_SCAN, checked, total_albums);
+}
+
 static bool precache_should_abort(void)
 {
     if (!s_abort_requested && poll_interrupt(0))
@@ -174,14 +185,21 @@ static bool run_phase_db(void)
 
 static bool run_phase_art(void)
 {
-    int pending = moonlit_art_pending_count();
+    int pending;
 
+    /* D-058: reset before the COUNT too, not just before the precache
+     * loop -- moonlit_art_pending_count() can now take a while and
+     * abort on its own on a large/slow library, so MENU must already
+     * be armed while it runs. */
+    s_abort_requested = false;
+    pending = moonlit_art_pending_count(count_progress, precache_should_abort);
+    if (pending < 0)
+        return false; /* user backed out while the sweep itself was counting */
     if (pending <= 0)
         return true;
 
-    s_abort_requested = false;
     draw_screen(LANG_LIBRARY_PHASE_ART, 0, pending);
-    return moonlit_art_precache(precache_progress, precache_should_abort);
+    return moonlit_art_precache(pending, precache_progress, precache_should_abort);
 }
 
 bool moonlit_screen_library_prepare(void)

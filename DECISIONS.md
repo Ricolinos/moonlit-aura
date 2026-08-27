@@ -1836,3 +1836,227 @@ resto de Marea, D-014/D-043); si `ART_KEY_MEMO_N` = 48
 (`metro_music.c`) alcanza para que la precarga direccional de 15
 álbumes no se pise con otros consumidores de esa clave
 (`metro_screen_hub.c` grid de álbumes) en una sesión larga.
+
+**D-058 — un solo barrido de biblioteca, responsivo, con conteo de
+una sola sesión de tagcache por álbum.** Reporte del dueño en hardware
+real (iPod 6G, 1 083 álbumes, 979 `.pfraw`, ~57 pendientes): al entrar
+a Música, "preparando biblioteca/carátulas" mostró "0/10" (fase 1,
+tagcache), tras ~5 min cambió a "0/57" (fase 2) y quedó **10 minutos**
+sin avanzar y sin responder a MENU -- forzó reinicio (SELECT+MENU).
+Peor que antes de D-049, que al menos mostraba progreso.
+
+**Diagnóstico (verificado leyendo el código en el commit anterior a
+este, `3ae50600`):**
+
+1. **Barrido completo duplicado.** `run_phase_art()`
+   (`moonlit_screen_library.c:175-185`) llamaba
+   `moonlit_art_pending_count()` (`moonlit_art_cache.c:238-254`), que
+   recorre TODOS los álbumes vía `count_uncached_now()`
+   (`:219-236`) para decidir el total de la pantalla. `moonlit_art_precache()`
+   (`:256-313`) volvía a llamar `count_uncached_now(count, theme)`
+   desde cero en su propia línea 271 -- el mismo barrido de ~1083
+   álbumes otra vez, antes de procesar un solo álbum. Cada álbum,
+   cacheado o no, necesita `metro_music_album_art_key()`
+   (`metro_music.c:625-661`) para construir la ruta a comprobar
+   (`precache_path_at()`, `moonlit_art_cache.c:173-181`), y esa
+   función, en frío (memo de 48 entradas insuficiente para 1083
+   álbumes), cae a `compute_album_art_key()` (`:597-623`): DOS
+   sesiones `tagcache_search` separadas -- una vía
+   `metro_music_songs_of_album()` (`:549-552` → `run_search()`,
+   `:315-373`, con `tag_title` filtrado por `tag_album`) solo para
+   obtener un `track.seek`, y otra vía `tagcache_search(&tcs, tag_filename)`
+   + `tagcache_retrieve()` + una asignación manual `tcs.idx_id = track.seek`
+   (`:614`) + `tagcache_get_numeric()`. En hardware real esto puede
+   tardar minutos para 1083 álbumes, y se paga **dos veces completas**
+   antes de que aparezca cualquier progreso.
+2. **Sin capacidad de interrupción durante el conteo.**
+   `count_uncached_now()` solo hacía `yield()` cada 32 iteraciones
+   (`:232-233` de la versión vieja) -- no redibujaba, no sondeaba
+   botones. `precache_should_abort()`
+   (`moonlit_screen_library.c:149-154`) solo se consultaba ENTRE
+   álbumes dentro del loop principal de `moonlit_art_precache()`
+   (`moonlit_art_cache.c:303` de la versión vieja), nunca durante el
+   conteo -- si el barrido es lento, la pantalla se ve congelada y
+   MENU no puede abortar hasta que termina TODO el barrido (dos veces,
+   por el punto 1).
+3. **`compute_album_art_key()` con dos sesiones donde bastaba una.**
+   Ver punto 1 -- la sesión A (`tag_title` + filtro `tag_album`, vía
+   `metro_music_songs_of_album()`) solo servía para aprender un
+   `track.seek` que la sesión B (`tag_filename` + `tagcache_retrieve()`
+   + `tcs.idx_id` manual) volvía a resolver por separado.
+
+**Decisión** (este commit, D-058):
+
+1. **Barrido único.** `moonlit_art_precache()` ya no recalcula
+   `pending` -- ahora recibe el total ya conocido como parámetro:
+   `bool moonlit_art_precache(int pending, moonlit_art_progress_fn
+   progress_cb, moonlit_art_abort_fn should_abort)`
+   (`moonlit_art_cache.h`/`.c`). `run_phase_art()`
+   (`moonlit_screen_library.c`) pasa el `pending` que ya obtuvo de
+   `moonlit_art_pending_count()`. El `for` de `moonlit_art_precache()`
+   SIGUE llamando `moonlit_art_is_resolved()` por álbum -- es la única
+   forma de saber cuáles procesar, `pending` solo alimenta el
+   denominador de la barra. `grep -n 'count_uncached_now'
+   apps/metro/moonlit_art_cache.c` da 4 líneas: la definición, un
+   comentario en `precache_path_at()`, la única llamada real (dentro
+   de `moonlit_art_pending_count()`) y un comentario en
+   `moonlit_art_precache()` documentando por qué esa llamada YA NO
+   está ahí.
+2. **Barrido interrumpible con heartbeat.** `count_uncached_now()`
+   (única función que recorre TODA la biblioteca, ahora llamada una
+   sola vez) recibe `progress_cb`/`should_abort` (mismos tipos que
+   `moonlit_art_precache()` -- `moonlit_art_progress_fn` reutilizado
+   con la forma `(checked, total_albums)` en vez de `(done, pending)`,
+   que todavía no se conoce durante el conteo) y los consulta cada
+   `SWEEP_HEARTBEAT_ALBUMS` = 8 álbumes o `SWEEP_HEARTBEAT_TICKS` =
+   `HZ/4` (lo que ocurra primero) -- nunca más de ~250 ms sin sondear
+   MENU, muy por debajo del margen de ~1 s pedido. Si `should_abort()`
+   devuelve true, el barrido corta y `moonlit_art_pending_count()`
+   devuelve **-1** (no memoiza un conteo parcial); `run_phase_art()`
+   trata `pending < 0` igual que un abort de la precarga (`return
+   false`). Pantalla nueva `LANG_LIBRARY_PHASE_SCAN` ("revisando
+   carátulas"/"checking covers", `metro_lang.h`/`.c`) distingue esta
+   fase de conteo de `LANG_LIBRARY_PHASE_ART` ("preparando
+   carátulas", la precarga real) y muestra `checked/total_albums` --
+   el total REAL de la biblioteca, no el pendiente, que aún no se
+   sabe. `s_abort_requested` (`moonlit_screen_library.c`) se resetea
+   ANTES del conteo, no solo antes de la precarga, porque ahora el
+   conteo también puede tardar y abortarse solo.
+3. **`compute_album_art_key()` de una sola sesión.** En vez de
+   `metro_music_songs_of_album()` + una segunda búsqueda por
+   `tag_filename`, ahora: `tagcache_search(&tcs, tag_filename)` +
+   `tagcache_search_add_filter(&tcs, tag_album, album_seek)` + UNA
+   `tagcache_get_next(&tcs, path, sizeof(path))` que ya entrega la
+   ruta, y `tagcache_get_numeric(&tcs, tag_mtime)` sobre la MISMA
+   sesión antes de `tagcache_search_finish()`. **No hace falta la
+   asignación manual `tcs.idx_id = track.seek`** que la versión vieja
+   necesitaba: `tagcache_get_next()` (`tagcache.c:2058-2075` →
+   `get_next()`, `:1909-2011`) entra por la rama de "relative fetch"
+   cuando `tcs->filter_count > 0` (nuestro caso, por el filtro de
+   `tag_album`) y ahí mismo hace `tcs->idx_id = seeklist->idx_id`
+   (`:1951`) antes de devolver el resultado -- exactamente lo que
+   `tagcache_get_numeric()` (`:1338-1352`) necesita leer.
+   **Mismo resultado (ruta, mtime) que el método viejo, verificado por
+   inspección de código, no por test host (no existe stub de tagcache
+   para host, ver más abajo):** `build_lookup_list()`
+   (`tagcache.c:1663-1712` para el camino RAM, análogo para disco)
+   recorre el índice maestro en orden de posición aplicando los
+   filtros (`idx->tag_seek[filter_tag] == filter_seek`) -- ese
+   predicado no mira `tcs->type` para nada, así que la primera entrada
+   del índice maestro que cumple `tag_album == album_seek` es la misma
+   sin importar si el tipo de búsqueda es `tag_title` (método viejo,
+   sesión A) o `tag_filename` (método nuevo); el `uniqbuf` que la
+   sesión A activaba (`run_search()`, `metro_music.c:315-330`) no
+   cambia esto porque nunca hay nada que deduplicar en la PRIMERA
+   coincidencia. La sesión B vieja retomaba ese mismo `idx_id`
+   (`track.seek`) a mano; la nueva lo obtiene automáticamente del
+   mismo camino.
+4. **Salvaguarda de reloj -- documentada, no implementada aparte.**
+   No se agregó un timeout explícito de ~20 s para el conteo: el
+   mecanismo del punto 2 (heartbeat cada ~250 ms con sondeo de MENU no
+   bloqueante) ya le da al usuario una salida en <1 s en cualquier
+   punto del barrido, sea cual sea su duración total -- un timeout
+   automático adicional sería redundante con "el usuario puede salir
+   cuando quiera" y añadiría un segundo criterio de corte a
+   coordinar con el primero sin beneficio claro.
+
+**Hipótesis del reporte de producción, documentada y NO
+implementada:** un directorio plano con 1000+ archivos en
+`moonlitcache/art/` y `/.aura/thumbs/albums/` podría ser lento de
+listar/abrir en FAT real (fragmentación de directorio, cada `open()`
+recorriendo entradas linealmente) y contribuir al estancamiento
+observado, más allá del barrido duplicado del punto 1. **No se
+implementa sharding de directorios en esta pasada** -- es un cambio
+más grande, que además tocaría el directorio `/.aura/thumbs/`
+COMPARTIDO con Metro-Aura/Aura-Studio (D-054/D-055, contrato
+`CONTRATO-moonlit-studio.md` v3) y requeriría coordinar el formato de
+ruta entre ambos repos antes de tocarlo. Queda como decisión futura,
+solo si el punto 1 (que por sí solo explica una tardanza de minutos)
+no basta para resolver el reporte en hardware real.
+
+**Antes / después:**
+
+| | Antes (D-049/D-056) | Después (D-058) |
+|---|---|---|
+| Barridos completos de la biblioteca por entrada a Música | 2 (`moonlit_art_pending_count()` + `moonlit_art_precache()`) | 1 |
+| Sesiones `tagcache_search` por álbum en frío (fuera del memo de 48) | 2 (`compute_album_art_key()`) | 1 |
+| MENU durante el conteo | no se sondea (congelado hasta terminar) | sondeado cada ≤8 álbumes / `HZ/4` ticks |
+| Pantalla durante el conteo | ninguna (pantalla previa sin cambios) | "revisando carátulas N/total_albums" |
+| `moonlit_art_pending_count()` firma | `(void)` | `(progress_cb, should_abort)`, puede devolver -1 (abortado) |
+| `moonlit_art_precache()` firma | `(progress_cb, should_abort)` | `(pending, progress_cb, should_abort)` |
+| `.bss` (`arm-elf-eabi-size`) | 8 571 420 | 8 571 420 (+0 B) |
+
+**Verificación:**
+
+- `make -C firmware/rockbox/apps/metro/test test`: verde, 14 suites
+  (mismas de D-057 -- `moonlit_art_cache.c`/`metro_music.c` no son
+  host-testables, sin stub de `tagcache.h`/`metro_settings.h`/
+  `metro_albumart.h` para host, igual que antes de este commit; sus
+  cabeceras ya documentaban esto. No se agregaron tests host nuevos
+  por esta razón -- el cambio de firma de `moonlit_art_precache()` y
+  la reescritura de `compute_album_art_key()` solo se pudieron
+  verificar por inspección de código (punto 3 de la decisión) y en
+  simulador (abajo), no con `cc` de host).
+- `firmware/tools/build_sim.sh --reconfigure`: 30 warnings, ninguno en
+  `moonlit_art_cache.c`/`metro_music.c`/`moonlit_screen_library.c`/
+  `metro_lang.c` (confirmado filtrando el log por esos archivos);
+  mismas categorías preexistentes que D-057 documentó (`tile_cols`/
+  `empty_message`/`-Wformat-truncation` de `metro_thumbs.c`).
+- **Responsividad de MENU durante el conteo, verificada en
+  simulador:** se generaron 300 álbumes sintéticos de una pista
+  (`ffmpeg -c copy` reetiquetando `metro-test.mp3`, sin arte --
+  `firmware/test-media/Music/Load Test Artist/`, no versionado) sobre
+  los ~11 álbumes de fixtures existentes (312 en total) y se copiaron
+  a `simdisk/`. Con un `DEBUGF("moonlit_art: sweep %d/%d")` temporal
+  en el heartbeat de `count_uncached_now()` se confirmó que dispara
+  cada 8 álbumes en punto (`0/312, 8/312, 16/312, ... 304/312`, 39
+  latidos para el barrido completo) sin cortes. Para forzar una
+  ventana de abort observable (el sim, sin HDD real, barre 312 álbumes
+  en bien menos de 1 s -- no reproduce la escala de minutos del
+  reporte), se insertó temporalmente un `usleep(3000)` por álbum
+  (`#ifdef MOONLIT_DEBUG_SLOW_SWEEP`, compilado solo con `make
+  EXTRA_DEFINES=... -DMOONLIT_DEBUG_SLOW_SWEEP`, revertido antes del
+  build final -- no está en el árbol commiteado, `grep -n
+  'MOONLIT_DEBUG_SLOW_SWEEP\|usleep' apps/metro/moonlit_art_cache.c`
+  vacío). Con esa build, inyectando `METRO_SIM_BUTTONS=SELECT,MENU`
+  (`firmware/tools/sim_shot.sh`-style automation), el log mostró
+  `moonlit_art: sweep aborted at 16/312` y el screendump capturado en
+  ese instante muestra la pantalla nueva a medio dibujar ("revisando
+  carátulas", "16 de 312") superpuesta a la transición de salida; un
+  dump posterior confirma que la app vuelve limpiamente al pivote de
+  Música (pestañas marea/reproducir), nunca se queda colgada ni entra
+  a Marea con datos a medias. **Limitación de esta verificación:** el
+  `usleep()` es un hack de host, no reproduce el costo real de
+  E/S en HDD -- prueba que el mecanismo de aborto FUNCIONA
+  correctamente cuando se le da tiempo de dispararse, no cuánto tarda
+  en hardware real (eso solo se puede medir en el iPod del dueño,
+  M12). Sin el `usleep`, la build final normal se re-verificó de
+  extremo a extremo (312 álbumes, sin MENU) llegando limpiamente hasta
+  Marea con los 39 latidos de heartbeat en el log.
+- `grep -n 'count_uncached_now' apps/metro/moonlit_art_cache.c`: 4
+  líneas -- definición, comentario en `precache_path_at()`, la única
+  llamada real (`moonlit_art_pending_count()`), comentario en
+  `moonlit_art_precache()` explicando la que ya no está.
+- `RBDEV_TOOLCHAIN=… firmware/tools/build_target.sh --firmware`:
+  exit 0 tanto en el commit anterior (`3ae50600`, baseline vía `git
+  stash`) como con este cambio. 26 warnings en ambos (ninguno nuevo;
+  la cifra de 24 que D-057 documentó ya no coincide con el HEAD actual
+  por cambios ajenos a este commit -- reconfirmado comparando
+  baseline vs. D-058 lado a lado, ambos 26). `.bss`: antes = 8 571 420,
+  después = 8 571 420 (**+0 B** -- sin estáticos nuevos, solo
+  reutilización de los typedefs/scratch existentes); `.text` +212 B.
+  Bajo el techo D-043 de 8 574 076, mismo margen de 2 656 B que D-057.
+- `git status --short`: limpio (ver commit); la biblioteca sintética
+  de 300 álbumes vive en `firmware/test-media/` (gitignored) y se
+  borró al terminar la verificación.
+
+**Hipótesis abiertas:** directorio plano en `moonlitcache/art/`/
+`/.aura/thumbs/albums/` como factor adicional de lentitud en FAT real
+(documentada arriba, no implementada); si `SWEEP_HEARTBEAT_ALBUMS` = 8
+/ `SWEEP_HEARTBEAT_TICKS` = `HZ/4` es la cadencia óptima para hardware
+real o conviene ajustarla una vez medido en el iPod del dueño (mismo
+estatus "experimental hasta M12" que Marea, D-014/D-043); si el
+conteo de 1083 álbumes en hardware real, ahora en un solo barrido en
+vez de dos, cae dentro de un tiempo que el usuario considere
+razonable, o si además hace falta paralelizar/cachear más agresivo el
+conteo mismo (fuera del alcance de este commit).

@@ -27,7 +27,7 @@
 
 #include "file.h"
 #include "dir.h"    /* dir_exists()/mkdir() */
-#include "kernel.h" /* yield() */
+#include "kernel.h" /* yield(), current_tick, HZ -- D-058 sweep heartbeat */
 #include "debug.h"  /* DEBUGF() */
 #include "crc32.h"  /* crc_32() -- D-055 gc table */
 #include "string-extra.h" /* strlcpy()/strlcat() */
@@ -216,13 +216,62 @@ static void remember_pending(int entries, int32_t theme, int value)
     s_pending_memo_value = value;
 }
 
-static int count_uncached_now(int count, int32_t theme)
+/* D-058: heartbeat cadence for any sweep of the whole library --
+ * small enough that MENU (polled through `should_abort` at this same
+ * cadence) never waits more than ~8 albums or ~HZ/4 ticks, whichever
+ * comes first, no matter how slow a single album's I/O turns out to
+ * be on real hardware. */
+#define SWEEP_HEARTBEAT_ALBUMS 8
+#define SWEEP_HEARTBEAT_TICKS  (HZ / 4)
+
+/* D-058: was moonlit_art_precache()'s own recount, called back to
+ * back with moonlit_art_pending_count()'s -- the same full sweep of
+ * `count` albums, twice, before a single one got decoded. Now only
+ * moonlit_art_pending_count() calls this; moonlit_art_precache()
+ * receives the already-known `pending` instead.
+ *
+ * `progress_cb`/`should_abort` (both optional) are polled every
+ * SWEEP_HEARTBEAT_ALBUMS albums or SWEEP_HEARTBEAT_TICKS ticks,
+ * whichever comes first -- unlike moonlit_art_precache()'s own
+ * per-album should_abort() (which only runs between full album
+ * decodes, naturally spaced out), this loop does no I/O heavier than
+ * one moonlit_art_is_resolved() header check per iteration, so without
+ * an explicit cadence a screen could go unrepainted and MENU unheard
+ * for the whole sweep on a slow disk -- exactly the bug D-058 fixes.
+ * `*aborted` (may be NULL) is set true iff should_abort() cut the
+ * sweep short; the returned count is then partial and must not be
+ * memoized by the caller. */
+static int count_uncached_now(int count, int32_t theme,
+                              moonlit_art_progress_fn progress_cb,
+                              moonlit_art_abort_fn should_abort,
+                              bool *aborted)
 {
     int i, n = 0;
     char path[MAX_PATH];
+    long beat_since = current_tick;
+
+    if (aborted)
+        *aborted = false;
 
     for (i = 0; i < count; i++)
     {
+        if ((progress_cb || should_abort) &&
+            ((i % SWEEP_HEARTBEAT_ALBUMS) == 0 ||
+             (current_tick - beat_since) >= SWEEP_HEARTBEAT_TICKS))
+        {
+            beat_since = current_tick;
+            DEBUGF("moonlit_art: sweep %d/%d\n", i, count);
+            if (progress_cb)
+                progress_cb(i, count);
+            if (should_abort && should_abort())
+            {
+                if (aborted)
+                    *aborted = true;
+                DEBUGF("moonlit_art: sweep aborted at %d/%d\n", i, count);
+                return n;
+            }
+        }
+
         precache_path_at(i, path, sizeof(path), NULL);
         if (!path[0])
             continue; /* no track -> nothing to cache, never pending */
@@ -235,11 +284,13 @@ static int count_uncached_now(int count, int32_t theme)
     return n;
 }
 
-int moonlit_art_pending_count(void)
+int moonlit_art_pending_count(moonlit_art_progress_fn progress_cb,
+                              moonlit_art_abort_fn should_abort)
 {
     int32_t theme = (int32_t)metro_theme_get();
     int entries = tagcache_get_stat()->total_entries;
     int count, pending;
+    bool aborted;
 
     if (entries == s_pending_memo_entries && theme == s_pending_memo_theme
         && s_pending_memo_gen_seen == s_pending_gen)
@@ -248,29 +299,32 @@ int moonlit_art_pending_count(void)
     count = load_albums();
     if (count <= 0)
         return 0;
-    pending = count_uncached_now(count, theme);
+    pending = count_uncached_now(count, theme, progress_cb, should_abort, &aborted);
+    if (aborted)
+        return -1; /* incomplete -- do not memoize a partial answer */
     remember_pending(entries, theme, pending);
     return pending;
 }
 
-bool moonlit_art_precache(moonlit_art_progress_fn progress_cb,
+bool moonlit_art_precache(int pending, moonlit_art_progress_fn progress_cb,
                           moonlit_art_abort_fn should_abort)
 {
     char path[MAX_PATH];
     int32_t theme = (int32_t)metro_theme_get();
-    int count, i, pending, done = 0;
+    int count, i, done = 0;
+
+    /* D-058: `pending` now comes from the caller's own
+     * moonlit_art_pending_count() -- no more recomputing it here with
+     * a second full count_uncached_now() sweep back to back with that
+     * one (AF/aura_music.c:352-358's "count first" idea is still
+     * honoured, just paid for once). */
+    if (pending <= 0)
+        return true;
 
     count = load_albums();
     if (count <= 0)
         return true;
 
-    /* D-049 (AF/aura_music.c:352-358): count first so the progress the
-     * screen shows is "N of the ones actually missing", not "N of the
-     * whole library" -- and so a library with nothing missing costs
-     * `count` header reads, never a screen. */
-    pending = count_uncached_now(count, theme);
-    if (pending == 0)
-        return true;
     moonlit_art_pending_invalidate();
 
     for (i = 0; i < count; i++)
@@ -278,7 +332,10 @@ bool moonlit_art_precache(moonlit_art_progress_fn progress_cb,
         /* D-049: header-only check before the full open()+read() that
          * moonlit_art_load_for_album() would do on a hit -- measured on
          * the owner's iPod, the old "load everything, let the hit path
-         * decide" pass cost 264 ms per album. */
+         * decide" pass cost 264 ms per album. This check is NOT the
+         * duplicate sweep D-058 removed: it is the only way to tell
+         * WHICH of the `count` albums still need work, `pending` only
+         * feeds the progress bar's denominator. */
         if (!moonlit_art_pfraw_path(s_precache_albums[i].seek, MOONLIT_ART_CACHE_SIZE,
                                     path, sizeof(path)))
             continue;
