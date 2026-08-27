@@ -22,14 +22,14 @@
 
 #include "file.h"
 #include "dir.h"
-#include "jpeg_load.h"
-#include "bmp.h"
 #include "string-extra.h"
 
 #include "metro_thumbs.h"
 #include "metro_settings.h"
 #include "metro_draw.h"
 #include "metro_fsutil.h"
+#include "moonlit_master_art.h"         /* moonlit (D-059) */
+#include "moonlit_master_art_builder.h" /* moonlit (D-059) */
 
 #define THUMB_PX (METRO_TILE_SIZE * METRO_TILE_SIZE)
 
@@ -72,30 +72,12 @@ struct pending_entry {
 static struct pending_entry s_pending[PENDING_MAX];
 static int s_pending_n = 0;
 
-/* R3-F3 correction (M-064, docs/DESVIACIONES.md R3-3): R2-F2 sized this
- * for METRO_TILE_SIZE (80px) x2 margin (M-033) and never hit trouble
- * because every /Photos/ fixture was comfortably larger than 80px.
- * Rockbox's JPEG decoder only offers power-of-two DCT scale steps
- * (1/1, 1/2, 1/4, 1/8); when the smallest step that's still >= the
- * requested size lands close to the SOURCE's own native resolution,
- * read_jpeg_file() decodes at that native resolution first and scales
- * down in software afterward -- the exact JPEG_DECODE_OVERHEAD
- * mechanism the photo VIEWER already had to account for explicitly
- * (R2-F3, metro_screen_photo_viewer.c). Artist photos are capped at
- * <=128px BY CONTRACT (CONTRATO-firmware-studio.md SS D.3) -- squarely
- * in that gap (128/2=64 < 80, so the decoder falls back to the full
- * 128x128 native size) -- confirmed live: every artist thumbnail
- * failed to decode (metro_thumbs_decode_jpeg_cover() returning false)
- * until this was widened to cover a full 128x128 decode, not just an
- * 80x80 one. Budgeted against the contract's own upper bound (128px),
- * same x2 margin rule, rather than adding a dimension probe like the
- * viewer did -- simpler, and this helper is shared with photos (whose
- * sources are typically far larger than 128px, so the wider budget
- * costs nothing there, it just also covers the rare small photo that
- * would have hit the exact same gap). */
-#define SCRATCH_MAX_SRC_PX 128
-#define SCRATCH_SIZE (SCRATCH_MAX_SRC_PX * SCRATCH_MAX_SRC_PX * 2 * 2)
-static unsigned char s_scratch[SCRATCH_SIZE];
+/* moonlit (D-059): the JPEG scratch that lived here (SCRATCH_MAX_SRC_PX,
+ * docs/DESVIACIONES.md R3-3) moved to metro_albumart.c's shared raw
+ * decodes -- this module only ever touches masters now. One master is
+ * at most 130 x 130 fb_data (33 800 B). */
+static fb_data s_master[MOONLIT_MASTER_ART_MAX_SIZE * MOONLIT_MASTER_ART_MAX_SIZE];
+static bool s_waiting;
 
 static struct thumb_slot *find_slot(const char *key)
 {
@@ -187,66 +169,63 @@ static void remove_stale(const struct metro_thumb_source *source, const char *ke
     closedir(d);
 }
 
-/* Nearest-neighbour "cover" crop from a single FORMAT_KEEP_ASPECT
- * decode -- no second (unscaled) decode and no JPEG-dimension probe
- * needed. `src`/`sw`/`sh` is the KEEP_ASPECT result (one dimension
- * already == METRO_TILE_SIZE, the other <= it); this conceptually
- * upscales that result until BOTH dimensions reach METRO_TILE_SIZE,
- * then samples the centered METRO_TILE_SIZE x METRO_TILE_SIZE crop
- * straight out of `src` (never materializes the upscaled bitmap).
- * Trades a little sharpness on the cropped axis for staying a single
- * cheap decode -- acceptable at 80x80. The photo VIEWER's own "cubrir"
- * (full 320x240) needs real precision instead, hence that one reads
- * Aura's Q16.16 algorithm as reference; a thumbnail this small doesn't
- * call for the same machinery. */
-static void cover_crop(const fb_data *src, int sw, int sh, fb_data *out)
+/* moonlit (D-059): see metro_thumbs.h. The nearest-neighbour
+ * cover_crop() that lived here (R2-F2/M-057) is superseded by
+ * moonlit_master_art_resample_cover()'s integer box filter -- one
+ * resampler for the master and for every derivation. */
+int metro_thumbs_decode_via_master(const char *master_path, int master_size,
+                                   metro_thumbs_raw_decode_fn raw_decode, void *ctx,
+                                   fb_data *out)
 {
-    int scale_den = (sw < sh) ? sw : sh; /* the dimension short of METRO_TILE_SIZE */
-    int upscaled_w = sw * METRO_TILE_SIZE / scale_den;
-    int upscaled_h = sh * METRO_TILE_SIZE / scale_den;
-    int crop_x = (upscaled_w - METRO_TILE_SIZE) / 2;
-    int crop_y = (upscaled_h - METRO_TILE_SIZE) / 2;
-    int ox, oy;
+    char none[MAX_PATH];
+    char dir[MAX_PATH];
+    const fb_data *px;
+    int w, h;
 
-    for (oy = 0; oy < METRO_TILE_SIZE; oy++)
+    if (moonlit_master_art_read(master_path, master_size, s_master))
     {
-        int up_y = oy + crop_y;
-        int sy = up_y * scale_den / METRO_TILE_SIZE;
-
-        if (sy < 0) sy = 0;
-        if (sy >= sh) sy = sh - 1;
-
-        for (ox = 0; ox < METRO_TILE_SIZE; ox++)
-        {
-            int up_x = ox + crop_x;
-            int sx = up_x * scale_den / METRO_TILE_SIZE;
-
-            if (sx < 0) sx = 0;
-            if (sx >= sw) sx = sw - 1;
-
-            out[oy * METRO_TILE_SIZE + ox] = src[sy * sw + sx];
-        }
+        moonlit_master_art_box_downscale(s_master, master_size, out, METRO_TILE_SIZE);
+        return METRO_THUMB_OK;
     }
+
+    if (!moonlit_master_art_none_path(master_path, none, sizeof(none)))
+        return METRO_THUMB_FAIL;
+    if (moonlit_master_art_none_exists(none))
+        return METRO_THUMB_FAIL;
+
+    if (moonlit_master_art_builder_active())
+    {
+        s_waiting = true;
+        return METRO_THUMB_WAITING;
+    }
+
+    px = raw_decode(ctx, &w, &h);
+
+    strlcpy(dir, master_path, sizeof(dir));
+    if (strrchr(dir, '/'))
+        *strrchr(dir, '/') = '\0';
+    moonlit_master_art_ensure_dir(dir);
+
+    if (!px)
+    {
+        /* Contract v16 (shared .none, D-056): a definitive "no art"
+         * is recorded once, for the three families. */
+        moonlit_master_art_write_none(none);
+        return METRO_THUMB_FAIL;
+    }
+
+    moonlit_master_art_resample_cover(px, w, h, s_master, master_size);
+    moonlit_master_art_write(master_path, master_size, s_master);
+    moonlit_master_art_box_downscale(s_master, master_size, out, METRO_TILE_SIZE);
+    return METRO_THUMB_OK;
 }
 
-bool metro_thumbs_decode_jpeg_cover(const char *path, fb_data *out)
+bool metro_thumbs_take_waiting(void)
 {
-    struct bitmap bm;
-    int ret;
+    bool was = s_waiting;
 
-    bm.width = METRO_TILE_SIZE;
-    bm.height = METRO_TILE_SIZE;
-    bm.data = (char *)s_scratch;
-#if (LCD_DEPTH > 1)
-    bm.maskdata = NULL;
-#endif
-    ret = read_jpeg_file(path, &bm, sizeof(s_scratch),
-                          FORMAT_NATIVE | FORMAT_RESIZE | FORMAT_KEEP_ASPECT, NULL);
-    if (ret <= 0)
-        return false;
-
-    cover_crop((const fb_data *)s_scratch, bm.width, bm.height, out);
-    return true;
+    s_waiting = false;
+    return was;
 }
 
 const fb_data *metro_thumbs_get(const struct metro_thumb_source *source,
@@ -316,8 +295,10 @@ bool metro_thumbs_tick(void)
     s_pending_n--;
 
     s = &s_window[s_window_ring];
-    if (!entry.source->decode(entry.ctx, entry.index, s->pixels))
-        return true; /* budget spent either way -- don't retry this tick */
+    if (entry.source->decode(entry.ctx, entry.index, s->pixels) != METRO_THUMB_OK)
+        return true; /* budget spent either way (a WAITING item is
+                      * re-queued by the next metro_thumbs_get() once
+                      * the builder's generation moves, metro_main.c) */
 
     strlcpy(s->key, entry.key, sizeof(s->key));
     s->valid = true;
@@ -342,4 +323,5 @@ void metro_thumbs_reset(void)
     for (i = 0; i < WINDOW_N; i++)
         s_window[i].valid = false;
     s_pending_n = 0;
+    s_waiting = false;
 }

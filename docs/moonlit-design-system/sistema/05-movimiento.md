@@ -58,19 +58,29 @@ banda izquierda (0,20,152,220) con `lcd_update_rect()` bajo
 vez, en el cuadro de asentamiento.
 
 D-057 (reporte del dueño en hardware real: las carátulas tardaban en
-aparecer aunque ya estuvieran todas horneadas a `.pfraw` en disco)
-relaja la regla dura "ninguna lectura de disco en el cuadro" en un solo
-punto, acotado: `moonlit_screen_marea_show_carousel()` se permite, solo
-mientras anima, **a lo sumo una** lectura PLANA de `.pfraw`
-(`try_frame_bounded_read()`, nunca decode JPEG ni tagcache — la clave
-del álbum ya tuvo que resolverse antes, fuera de cualquier cuadro,
-`moonlit_art_pfraw_path_peek()`). El grueso de la mejora es fuera del
+aparecer aunque ya estuvieran todas cacheadas en disco) relaja la regla
+dura "ninguna lectura de disco en el cuadro" en un solo punto, acotado:
+`moonlit_screen_marea_show_carousel()` se permite, solo mientras anima,
+**a lo sumo una** lectura PLANA + remuestreo de la caché maestra
+compartida (`try_frame_bounded_read()` → `moonlit_art_derive_from_master()`,
+D-059; nunca decode JPEG ni tagcache — la clave del álbum ya tuvo que
+resolverse antes, fuera de cualquier cuadro,
+`moonlit_art_master_path_peek()`). El grueso de la mejora es fuera del
 cuadro: `moonlit_screen_marea_tick()` pasa de una carga a un
 presupuesto por vuelta ociosa (~15 ms o 4 lecturas) y la precarga
 ociosa sigue la dirección del último scroll (`moonlit_marea_prefetch_order()`,
 10 tapas adelante / 4 atrás en vez de un radio parejo de 6). Ver
 DECISIONS.md D-057 para las cifras exactas y las capturas
 `v0.1.3-marea-settle-3ticks.png`/`-30ticks.png`.
+
+D-059: mientras `moonlit_screen_marea_animating()` es cierto,
+`metro_main.c` también pausa el constructor en segundo plano de la
+caché maestra (`moonlit_master_art_builder_pause(true)`) — "la
+animación es dueña del disco y la CPU" — y lo mismo alrededor de cada
+`metro_transitions_*` (push/pop/fade/slide); se recalcula cada vuelta,
+así que nunca queda pausado si el usuario sale de Marea a mitad de
+scroll. Ver DECISIONS.md D-059 para la evidencia de por qué un hilo
+Rockbox real (no un paso por vuelta ociosa) es seguro aquí.
 
 Captura previa: `docs/screenshots/v0.1.2-marea-mid.png` (banda
 cambiada, panel y cabecera idénticos a la captura en reposo, verificado

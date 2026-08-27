@@ -307,6 +307,15 @@ void metro_settings_shared_thumbs_dir(const char *subdir, char *out, size_t outs
     snprintf(out, outsz, "%s/%s", AURA_SHARED_THUMBS_DIR, subdir);
 }
 
+/* moonlit (D-059, contrato v16): shared MASTER art under /.aura/art/
+ * -- only this file spells the path. */
+#define AURA_SHARED_ART_DIR "/.aura/art"
+
+void metro_settings_shared_art_dir(const char *subdir, char *out, size_t outsz)
+{
+    snprintf(out, outsz, "%s/%s", AURA_SHARED_ART_DIR, subdir);
+}
+
 bool metro_settings_migrate_shared_thumbs(void)
 {
     static const char *const subdirs[] = { "albums", "artists", "photos" };

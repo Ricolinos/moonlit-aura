@@ -55,6 +55,7 @@
 #include "metro_screen_specimen.h"
 #include "moonlit_screen_marea.h" /* moonlit (D-029, M8) */
 #include "moonlit_art_cache.h"    /* moonlit (D-055): moonlit_art_request_gc() */
+#include "moonlit_master_art_builder.h" /* moonlit (D-059): background master-art builder */
 
 /* See metro_main.h for why this must be called from apps/main.c's
  * init(), not from here. None of these settings are exposed anywhere
@@ -244,6 +245,18 @@ void metro_main(void)
     long last_player_tick = 0;
     bool index_letter_was_pending = false;
     long last_hub_tick = 0; /* R5-F5 */
+    /* moonlit (D-059): last moonlit_master_art_builder_generation()
+     * seen while a thumb decode came back WAITING -- see the
+     * metro_thumbs_tick() branch below. */
+    unsigned last_thumbs_wait_gen = 0;
+
+    /* moonlit (D-059): mutex init only -- no thread yet
+     * (moonlit_master_art_builder_poll() creates it once the database
+     * is usable, polled from the idle branch below). Must run before
+     * ANY album-art decode can happen (metro_albumart.c's
+     * decode_file_into()/decode_embedded_into() always take this lock,
+     * even the very first Now Playing draw), so first thing here. */
+    moonlit_master_art_builder_init();
 
     /* metro_apply_hygiene() already ran inside init() (apps/main.c) --
      * see metro_main.h for why it can't run here, after init() returns. */
@@ -416,6 +429,14 @@ void metro_main(void)
             if (metro_sync_job_active())
                 metro_sync_tick();
 
+            /* moonlit (D-059): ~1 Hz-ish no-op until the database is
+             * usable, then creates the background master-art builder
+             * thread once and returns immediately every call after
+             * that (a single s_thread_running check) -- cheap enough
+             * to poll on every idle iteration, same as the sync job
+             * above. */
+            moonlit_master_art_builder_poll();
+
             /* Now Playing has no input of its own most of the time
              * (elapsed time, the progress bar, and the volume overlay's
              * 1.5s countdown all need to update on their own) -- redraw
@@ -464,9 +485,28 @@ void metro_main(void)
                  * grid, not just Photos anymore). Redraw only when it
                  * actually decoded something, so a freshly-ready tile
                  * replaces its placeholder without redrawing every
-                 * single idle tick for nothing. */
+                 * single idle tick for nothing. moonlit (D-059): a
+                 * WAITING decode (metro_thumbs_take_waiting()) also
+                 * makes tick() return true, but redrawing on every
+                 * such tick would just repaint the same placeholder in
+                 * a tight loop while the builder is mid-pass -- only
+                 * worth it once its generation actually moves (some
+                 * master may have landed since). */
                 if (metro_thumbs_tick())
-                    redraw_current();
+                {
+                    if (!metro_thumbs_take_waiting())
+                        redraw_current();
+                    else
+                    {
+                        unsigned gen = moonlit_master_art_builder_generation();
+
+                        if (gen != last_thumbs_wait_gen)
+                        {
+                            last_thumbs_wait_gen = gen;
+                            redraw_current();
+                        }
+                    }
+                }
             }
 
             /* moonlit (D-029, D-030, M8): presupuesto de decode por
@@ -487,6 +527,14 @@ void metro_main(void)
              * nunca decode ni tagcache) -- al asentar,
              * moonlit_screen_marea_tick() sigue siendo quien decodifica,
              * ahora con su presupuesto más grande, y repinta la banda. */
+            /* moonlit (D-059): pause the background master-art builder
+             * for the whole duration of a Marea scroll animation --
+             * "the animation owns the disk and the CPU"
+             * (moonlit_master_art_builder.h). Recomputed every idle
+             * iteration from the current state (never left dangling
+             * true after backing out of Marea mid-scroll): outside
+             * Marea, or once settled, the builder resumes. */
+            moonlit_master_art_builder_pause(at_marea && moonlit_screen_marea_animating());
             if (at_marea)
             {
                 if (moonlit_screen_marea_animating())
@@ -544,6 +592,15 @@ void metro_main(void)
              * FADE al entrar/salir que Now Playing/el visor de fotos. */
             marea_after = !root_after && moonlit_screen_marea_is_current();
 
+            /* moonlit (D-059): every branch below either runs a
+             * metro_transitions_* animation or draws a single Marea
+             * scroll frame -- "the animation owns the disk and the
+             * CPU" for the whole block, same reasoning as the idle
+             * branch's pause around Marea's own scroll above. Reset
+             * right after: none of these block for long, and the next
+             * idle iteration would just recompute the same state
+             * anyway. */
+            moonlit_master_art_builder_pause(true);
             if (depth_after > depth_before && (player_after || viewer_after || marea_after))
                 metro_transitions_fade(redraw_current);
             else if (depth_after > depth_before)
@@ -571,6 +628,7 @@ void metro_main(void)
                 moonlit_screen_marea_show_carousel();
             else
                 redraw_current();
+            moonlit_master_art_builder_pause(false);
         }
     }
 }

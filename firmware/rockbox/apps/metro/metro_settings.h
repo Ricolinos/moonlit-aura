@@ -149,6 +149,16 @@ void metro_settings_metro_cache_dir(const char *subdir, char *out, size_t outsz)
 void metro_settings_shared_thumbs_dir(const char *subdir, char *out, size_t outsz);
 bool metro_settings_migrate_shared_thumbs(void); /* true if anything was renamed */
 
+/* moonlit (D-059, contrato v16): /.aura/art/<subdir>/ -- the shared
+ * MASTER art cache ("<key>.art", 130 px albums/artists, 80 px photos,
+ * plus the shared "<key>.none" negative marker), decoded once by
+ * whichever family is running and only DERIVED by the others
+ * (moonlit_master_art.h). Subdirs: "albums", "artists", "photos".
+ * Studio ignores the directory except to delete it when forcing a
+ * rebuild. Writes into `out` only; moonlit_master_art_ensure_dir()
+ * creates it. */
+void metro_settings_shared_art_dir(const char *subdir, char *out, size_t outsz);
+
 /* R3-F3/DD-6 (M-064): .../aura/artist_images.cfg (Studio's index) and
  * .../aura/artists/ (Studio's own source photo cache, the directory
  * artist_images.cfg's filenames resolve into) -- CONTRATO-firmware-studio.md

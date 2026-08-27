@@ -85,6 +85,8 @@
 #include "moonlit_marea_prefetch.h" /* D-057: orden de precarga direccional, host-testable */
 #include "moonlit_art.h"
 #include "moonlit_art_cache.h"
+#include "moonlit_master_art.h"         /* moonlit (D-059): none marker helpers */
+#include "moonlit_master_art_builder.h" /* moonlit (D-059): builder generation */
 #include "moonlit_palette.h"
 #include "moonlit_elevation.h"
 #include "moonlit_fonts.h"
@@ -171,17 +173,21 @@
  * implicito, nunca un bucle que se alarga). */
 #define MAREA_SCROLL_ANIM_MS 220
 
-/* D-053/D-055: estado del arte por slot. Un miss en get_slot_for()
+/* D-053/D-055/D-059: estado del arte por slot. Un miss en get_slot_for()
  * reclama el slot SIN abrir archivos (monograma/relleno liso) y lo deja
  * en PENDING para moonlit_screen_marea_tick(), que es el unico sitio
  * de este archivo que toca disco (moonlit_art_load_for_album(): lee
- * el .pfraw o, si no existe, decodifica la caratula -- salvo que haya
- * un "<clave>.none" (D-056): entonces devuelve false sin abrir la
- * pista y el slot pasa a MISSING de inmediato). */
+ * la maestra y deriva, o decodifica la caratula si el builder esta
+ * ocioso -- salvo que haya un "<clave>.none" compartido (D-056/D-059):
+ * entonces el slot pasa a MISSING de inmediato). D-059: si el builder
+ * esta a mitad de pasada, load_for_album() ni decodifica ni escribe --
+ * deja el slot en WAITING (nunca vuelve a PENDING solo) hasta que
+ * requeue_waiting_slots_if_generation_moved() lo note. */
 enum marea_art_state {
     MAREA_ART_PENDING = 0, /* nadie ha intentado cargarla todavia */
     MAREA_ART_LOADED,      /* cover[] valido */
     MAREA_ART_MISSING,     /* el album no tiene caratula resoluble: monograma definitivo */
+    MAREA_ART_WAITING,     /* D-059: builder ocupado, ya se le aviso (hint); esperando su generacion */
 };
 
 typedef struct {
@@ -215,7 +221,7 @@ static int s_slots_theme = -1;
 
 /* D-226: scratch estatico para el decode presupuestado de
  * moonlit_screen_marea_tick() -- nunca en el stack del hilo de UI,
- * mismo criterio que s_precache_cover de moonlit_art_cache.c. */
+ * mismo criterio que s_master_scratch de moonlit_art_cache.c. */
 static fb_data s_tick_scratch[MAREA_COVER_SIZE * MAREA_COVER_SIZE];
 
 static const metro_music_item_t *s_albums;
@@ -432,28 +438,64 @@ static marea_slot_t *next_slot_to_load(void)
     return NULL;
 }
 
-/* Carga un slot PENDING ya elegido por next_slot_to_load() (lee el
- * .pfraw o decodifica la caratula si falta, D-055/D-056) -- misma
- * logica que antes vivia en el cuerpo de moonlit_screen_marea_tick(),
- * factorizada para que el bucle presupuestado de abajo (D-057, item 2)
- * la pueda llamar varias veces por vuelta. */
+/* Carga un slot PENDING ya elegido por next_slot_to_load() (lee la
+ * maestra y deriva, o decodifica la caratula si falta y el builder
+ * esta ocioso -- D-055/D-056/D-059) -- misma logica que antes vivia en
+ * el cuerpo de moonlit_screen_marea_tick(), factorizada para que el
+ * bucle presupuestado de abajo (D-057, item 2) la pueda llamar varias
+ * veces por vuelta.
+ *
+ * D-059: moonlit_art_load_for_album() devuelve un enum, no un bool
+ * (MOONLIT_ART_LOADED == 0) -- un `if (resultado)` trataria el EXITO
+ * como falso. WAITING dice que el builder esta a mitad de pasada (ya
+ * hinteado): el slot se marca WAITING, no MISSING, para que
+ * requeue_waiting_slots_if_generation_moved() lo reintente en cuanto
+ * el builder avance, en vez de mostrar el monograma como definitivo. */
 static void load_pending_slot(marea_slot_t *slot)
 {
     int idx = slot->album_index;
+    enum moonlit_art_result result = moonlit_art_load_for_album(s_albums[idx].seek,
+                                                                 s_tick_scratch);
 
-    if (moonlit_art_load_for_album(s_albums[idx].seek, s_tick_scratch))
-    {
-        /* el decode puede haber cedido la CPU: re-verificar que el
-         * slot sigue siendo de este album antes de escribirlo */
-        if (slot->album_index == idx)
-        {
-            memcpy(slot->cover, s_tick_scratch, sizeof(s_tick_scratch));
-            slot->art = MAREA_ART_LOADED;
-        }
+    /* el decode puede haber cedido la CPU: re-verificar que el slot
+     * sigue siendo de este album antes de escribirlo */
+    if (slot->album_index != idx)
         return;
-    }
-    if (slot->album_index == idx)
+
+    switch (result)
+    {
+    case MOONLIT_ART_LOADED:
+        memcpy(slot->cover, s_tick_scratch, sizeof(s_tick_scratch));
+        slot->art = MAREA_ART_LOADED;
+        break;
+    case MOONLIT_ART_WAITING:
+        slot->art = MAREA_ART_WAITING;
+        break;
+    case MOONLIT_ART_NONE:
+    default:
         slot->art = MAREA_ART_MISSING;
+        break;
+    }
+}
+
+/* D-059: un slot WAITING no se reintenta el sondeo siguiente (evitaria
+ * distinguirlo de un PENDING recien reclamado) -- se reintenta solo
+ * cuando moonlit_master_art_builder_generation() se mueve, senal de
+ * que el builder escribio (o marco ".none") algun elemento. Barrido
+ * de a lo sumo MAREA_CACHE_SLOTS (37) entradas, sin tocar disco. */
+static unsigned s_builder_generation_seen;
+
+static void requeue_waiting_slots_if_generation_moved(void)
+{
+    unsigned gen = moonlit_master_art_builder_generation();
+    int i;
+
+    if (gen == s_builder_generation_seen)
+        return;
+    s_builder_generation_seen = gen;
+    for (i = 0; i < MAREA_CACHE_SLOTS; i++)
+        if (s_slots[i].art == MAREA_ART_WAITING)
+            s_slots[i].art = MAREA_ART_PENDING;
 }
 
 /* D-057 (item 2): antes, una sola carga por vuelta ociosa (D-053); con
@@ -471,6 +513,8 @@ bool moonlit_screen_marea_tick(void)
 
     if (s_album_n <= 0)
         return false;
+
+    requeue_waiting_slots_if_generation_moved();
 
     t0 = current_tick;
     for (;;)
@@ -498,13 +542,17 @@ bool moonlit_screen_marea_tick(void)
  * que uno PENDING, ambos necesitan que moonlit_screen_marea_tick()
  * corra. Patron metro_screen_hub_wants_ticks(): metro_main.c pide
  * HZ/20 mientras esto sea cierto, ya no solo mientras
- * moonlit_screen_marea_animating(). */
+ * moonlit_screen_marea_animating(). D-059: un slot WAITING cuenta
+ * igual que PENDING -- sigue faltando su tapa, solo que el motivo es
+ * el builder en vez de que nadie lo haya intentado. */
 bool moonlit_screen_marea_wants_ticks(void)
 {
     int i;
 
     if (s_album_n <= 0)
         return false;
+
+    requeue_waiting_slots_if_generation_moved();
 
     for (i = -(MAREA_VISIBLE_RADIUS + 1); i <= MAREA_VISIBLE_RADIUS + 1; i++)
     {
@@ -514,36 +562,35 @@ bool moonlit_screen_marea_wants_ticks(void)
         if (idx < 0 || idx >= s_album_n)
             continue;
         slot = find_slot(idx);
-        if (slot == NULL || slot->art == MAREA_ART_PENDING)
+        if (slot == NULL || slot->art == MAREA_ART_PENDING || slot->art == MAREA_ART_WAITING)
             return true;
     }
     return false;
 }
 
-/* D-057 (item 1): LA UNICA lectura de disco permitida DENTRO de un
- * cuadro de animacion -- a lo sumo una, y solo un read() plano
- * (moonlit_art_read_pfraw(), nunca metro_music_songs_of_album()/
- * metro_albumart_decode_track_cover_sized()) de un album cuya clave YA
- * estaba memoizada por una vuelta anterior de moonlit_screen_marea_tick()
- * (moonlit_art_pfraw_path_peek(), jamas tagcache -- ver
- * metro_music_album_art_key_peek()). Prioriza el slot que sera CENTRAL
- * en el destino, luego sus visibles mas cercanos (mismo orden que
- * moonlit_marea_prefetch_order() con radio MAREA_VISIBLE_RADIUS a cada
- * lado). Un ".pfraw" inexistente o ya sabido ".none" NO cuenta como
- * lectura (D-056 ya los distingue de un miss real): se resuelven
- * gratis y el recorrido sigue probando el siguiente candidato -- solo
- * un read() completo de un .pfraw valido detiene el recorrido y gasta
- * el presupuesto del cuadro. Devuelve true si cargo una tapa. */
+/* D-057 (item 1)/D-059: LA UNICA lectura de disco permitida DENTRO de
+ * un cuadro de animacion -- a lo sumo una, y solo un read() plano +
+ * remuestreo (moonlit_art_derive_from_master(), nunca
+ * metro_music_songs_of_album()/metro_albumart_decode_track_cover_ui())
+ * de un album cuya clave YA estaba memoizada por una vuelta anterior
+ * de moonlit_screen_marea_tick() (moonlit_art_master_path_peek(),
+ * jamas tagcache -- ver metro_music_album_art_key_peek()). Prioriza el
+ * slot que sera CENTRAL en el destino, luego sus visibles mas
+ * cercanos (mismo orden que moonlit_marea_prefetch_order() con radio
+ * MAREA_VISIBLE_RADIUS a cada lado). Una maestra ausente o un
+ * ".none" compartido ya sabido NO cuenta como lectura (D-056/D-059 ya
+ * los distingue de un miss real): se resuelven gratis y el recorrido
+ * sigue probando el siguiente candidato -- solo una lectura+derivacion
+ * completa de una maestra valida detiene el recorrido y gasta el
+ * presupuesto del cuadro. Devuelve true si cargo una tapa. */
 static bool try_frame_bounded_read(void)
 {
     int order[1 + 2 * MAREA_VISIBLE_RADIUS];
     int n, i;
-    int32_t theme;
 
     n = moonlit_marea_prefetch_order(s_target_index, s_album_n, 1,
                                       MAREA_VISIBLE_RADIUS, MAREA_VISIBLE_RADIUS,
                                       order, (int)(sizeof(order) / sizeof(order[0])));
-    theme = (int32_t)metro_theme_get();
 
     for (i = 0; i < n; i++)
     {
@@ -553,24 +600,23 @@ static bool try_frame_bounded_read(void)
 
         if (slot->art != MAREA_ART_PENDING)
             continue;
-        if (!moonlit_art_pfraw_path_peek(s_albums[order[i]].seek, MAREA_COVER_SIZE,
-                                          path, sizeof(path)))
+        if (!moonlit_art_master_path_peek(s_albums[order[i]].seek, path, sizeof(path)))
             continue; /* clave todavia desconocida -- nada de tagcache aqui */
 
-        if (moonlit_art_read_pfraw(path, MAREA_COVER_SIZE, MAREA_CORNER_RADIUS,
-                                    theme, s_tick_scratch))
+        if (moonlit_art_derive_from_master(path, s_tick_scratch))
         {
             memcpy(slot->cover, s_tick_scratch, sizeof(s_tick_scratch));
             slot->art = MAREA_ART_LOADED;
             return true; /* presupuesto del cuadro gastado */
         }
 
-        /* D-057: no cuenta como lectura -- .pfraw ausente/con cabecera
-         * distinta. Un ".none" ya conocido resuelve el monograma
-         * gratis; si ni siquiera hay ".none", sigue PENDING para
-         * moonlit_screen_marea_tick() (unico que decodifica JPEG). */
-        if (moonlit_art_none_path(path, none, sizeof(none)) &&
-            moonlit_art_none_exists(none))
+        /* D-057/D-059: no cuenta como lectura -- maestra ausente. Un
+         * ".none" ya conocido resuelve el monograma gratis; si ni
+         * siquiera hay ".none", sigue PENDING para
+         * moonlit_screen_marea_tick() (unico que puede decodificar
+         * JPEG o esperar al builder). */
+        if (moonlit_master_art_none_path(path, none, sizeof(none)) &&
+            moonlit_master_art_none_exists(none))
             slot->art = MAREA_ART_MISSING;
     }
     return false;

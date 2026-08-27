@@ -21,9 +21,10 @@
 
 #include "metro_photos.h"
 
-#define PHOTOS_DIR "/Photos"
+/* moonlit (D-059): directory/extensions now live in metro_photos.h. */
+#define PHOTOS_DIR METRO_PHOTOS_DIR
 
-static const char *const k_exts[] = { ".jpg", ".jpeg" };
+static const char *const k_exts[] = { METRO_PHOTOS_EXT_JPG, METRO_PHOTOS_EXT_JPEG };
 
 int metro_photos_list(metro_photo_item_t *out, int max)
 {

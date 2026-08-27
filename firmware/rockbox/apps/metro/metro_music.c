@@ -46,7 +46,7 @@
 #include "metro_artist_images.h"
 #include "metro_fsutil.h"
 #include "metro_volume.h"
-#include "moonlit_art_cache.h" /* moonlit_art_pending_invalidate() -- D-056 */
+#include "moonlit_art_cache.h" /* moonlit_art_library_changed() -- D-056/D-059 */
 
 /* Enough unique values for a few thousand artists/albums/genres --
  * same size Aura-Firmware settled on for the same purpose (D-021).
@@ -202,9 +202,9 @@ bool metro_music_db_ready(void)
         if (s_scan_triggered)
         {
             metro_sync_record_db_stamp();
-            /* moonlit (D-056): a freshly built database may re-key
-             * albums -- forget the memoized pending count. */
-            moonlit_art_pending_invalidate();
+            /* moonlit (D-056/D-059): a freshly built database may
+             * re-key albums -- (re)start the master-art builder. */
+            moonlit_art_library_changed();
         }
         tagcache_start_scan();
         s_update_triggered = true;
@@ -619,17 +619,19 @@ void metro_music_album_art_key_reset(void)
  * by reading tagcache.c's build_lookup_list()/get_next()/get_index()
  * (no host stub exists for tagcache -- this file is not host-testable,
  * same as moonlit_art_cache.c, see its header comment). */
-static bool compute_album_art_key(int32_t album_seek, char *out, size_t outsz)
+bool metro_music_album_art_source(int32_t album_seek, char *key, size_t keysz,
+                                  char *track_path, size_t pathsz)
 {
     struct tagcache_search tcs;
-    char path[MAX_PATH];
     long mtime;
     uint32_t crc;
 
+    if (!tagcache_is_usable())
+        return false;
     if (!tagcache_search(&tcs, tag_filename))
         return false;
     tagcache_search_add_filter(&tcs, tag_album, album_seek);
-    if (!tagcache_get_next(&tcs, path, sizeof(path)) || !path[0])
+    if (!tagcache_get_next(&tcs, track_path, pathsz) || !track_path[0])
     {
         tagcache_search_finish(&tcs);
         return false;
@@ -639,9 +641,16 @@ static bool compute_album_art_key(int32_t album_seek, char *out, size_t outsz)
     if (mtime < 0)
         mtime = 0;
 
-    crc = crc_32(path, strlen(path), 0xffffffff);
-    snprintf(out, outsz, "a-%08lx.%ld", (unsigned long)crc, mtime);
+    crc = crc_32(track_path, strlen(track_path), 0xffffffff);
+    snprintf(key, keysz, "a-%08lx.%ld", (unsigned long)crc, mtime);
     return true;
+}
+
+static bool compute_album_art_key(int32_t album_seek, char *out, size_t outsz)
+{
+    char path[MAX_PATH];
+
+    return metro_music_album_art_source(album_seek, out, outsz, path, sizeof(path));
 }
 
 bool metro_music_album_art_key(int32_t album_seek, char *out, size_t outsz)

@@ -30,7 +30,6 @@
 #include "tagcache.h"
 
 #include "moonlit_screen_library.h"
-#include "moonlit_art_cache.h"
 #include "moonlit_logo.h"
 #include "moonlit_palette.h"
 #include "moonlit_fonts.h"
@@ -60,9 +59,6 @@
      LIB_BAR_GAP + LIB_BAR_H + LIB_COUNT_GAP + LIB_COUNT_H)
 #define LIB_TOP ((LCD_HEIGHT - LIB_BLOCK_H) / 2)
 
-/* AF/aura_music.c:376-380: repaint every 4th cover, plus the last. */
-#define LIB_REPAINT_EVERY 4
-
 static void draw_centered(enum metro_font_role role, int y, const char *text, unsigned color)
 {
     int w, h;
@@ -72,9 +68,11 @@ static void draw_centered(enum metro_font_role role, int y, const char *text, un
     metro_draw_text(role, (LCD_WIDTH - w) / 2, y, text, color);
 }
 
-/* `done`/`total` <= 0: no bar, no counter (phase 1 before the commit
- * starts reporting steps). */
-static void draw_screen(enum metro_lang_id phase, int done, int total)
+/* `done`/`total` <= 0: no bar, no counter (before the commit starts
+ * reporting steps). D-059: this screen only ever has the ONE phase
+ * left (tagcache) -- the subtitle is always LANG_LIBRARY_PHASE_DB, no
+ * longer a parameter. */
+static void draw_screen(int done, int total)
 {
     int y = LIB_TOP;
     char count[32];
@@ -86,7 +84,7 @@ static void draw_screen(enum metro_lang_id phase, int done, int total)
     draw_centered(MFONT_HEADLINE, y, metro_lang_str(LANG_LIBRARY_PREPARING),
                   moonlit_color(MROLE_ON_SURFACE));
     y += LIB_TITLE_H + LIB_SUB_GAP;
-    draw_centered(MFONT_BODY, y, metro_lang_str(phase),
+    draw_centered(MFONT_BODY, y, metro_lang_str(LANG_LIBRARY_PHASE_DB),
                   moonlit_color(MROLE_ON_SURFACE_VARIANT));
     y += LIB_SUB_H + LIB_BAR_GAP;
 
@@ -138,83 +136,34 @@ static bool db_ready(void)
     return metro_music_db_ready() && tagcache_is_fully_initialized();
 }
 
-static bool s_abort_requested;
-
-static void precache_progress(int done, int total)
-{
-    if ((done % LIB_REPAINT_EVERY) == 0 || done == total)
-        draw_screen(LANG_LIBRARY_PHASE_ART, done, total);
-}
-
-/* D-058: heartbeat for moonlit_art_pending_count()'s own sweep of the
- * WHOLE library (metro_music_albums(), not just what's pending -- that
- * total isn't known yet). Called every ~8 albums or ~HZ/4 ticks
- * (moonlit_art_cache.c's SWEEP_HEARTBEAT_*), so unlike precache_progress()
- * above it never needs its own repaint throttle -- the caller already
- * paces it. */
-static void count_progress(int checked, int total_albums)
-{
-    draw_screen(LANG_LIBRARY_PHASE_SCAN, checked, total_albums);
-}
-
-static bool precache_should_abort(void)
-{
-    if (!s_abort_requested && poll_interrupt(0))
-        s_abort_requested = true;
-    return s_abort_requested;
-}
-
 static bool run_phase_db(void)
 {
     if (db_ready())
         return true;
 
-    draw_screen(LANG_LIBRARY_PHASE_DB, tagcache_get_commit_step(),
-                tagcache_get_max_commit_step());
+    draw_screen(tagcache_get_commit_step(), tagcache_get_max_commit_step());
     while (!db_ready())
     {
         if (poll_interrupt(HZ / 10))
             return false;
         /* apps/main.c:380-388 pattern: commit_step is 0 until the scan
          * finishes and the commit starts, then 1..max_commit_step. */
-        draw_screen(LANG_LIBRARY_PHASE_DB, tagcache_get_commit_step(),
-                    tagcache_get_max_commit_step());
+        draw_screen(tagcache_get_commit_step(), tagcache_get_max_commit_step());
     }
     return true;
 }
 
-static bool run_phase_art(void)
-{
-    int pending;
-
-    /* D-058: reset before the COUNT too, not just before the precache
-     * loop -- moonlit_art_pending_count() can now take a while and
-     * abort on its own on a large/slow library, so MENU must already
-     * be armed while it runs. */
-    s_abort_requested = false;
-    pending = moonlit_art_pending_count(count_progress, precache_should_abort);
-    if (pending < 0)
-        return false; /* user backed out while the sweep itself was counting */
-    if (pending <= 0)
-        return true;
-
-    draw_screen(LANG_LIBRARY_PHASE_ART, 0, pending);
-    return moonlit_art_precache(pending, precache_progress, precache_should_abort);
-}
-
+/* D-059: this is now the WHOLE screen -- the "preparando caratulas"/
+ * "revisando caratulas" second phase (D-056/D-058) is gone. The
+ * background builder (moonlit_master_art_builder.c) replaces it: it
+ * walks the library on its own low-priority thread once the database
+ * is ready, and Marea/the grids show the monogram/placeholder for
+ * whatever it hasn't reached yet, repainting via their own tick()
+ * mechanism when it does (moonlit_master_art_builder_generation()).
+ * The orphan sweep (D-055) moved with it -- moonlit_art_gc_pending()/
+ * moonlit_art_gc_clear() are now serviced by the builder thread at the
+ * end of its next pass, never on screen. */
 bool moonlit_screen_library_prepare(void)
 {
-    if (!run_phase_db())
-        return false;
-    if (!run_phase_art())
-        return false;
-    /* D-055: orphan sweep requested by the last music sync -- one
-     * bounded pass (key table + two directory scans), with the phase-2
-     * screen up so the wait is visible, never inside a frame. */
-    if (moonlit_art_gc_pending())
-    {
-        draw_screen(LANG_LIBRARY_PHASE_ART, 0, 0);
-        moonlit_art_gc();
-    }
-    return true;
+    return run_phase_db();
 }

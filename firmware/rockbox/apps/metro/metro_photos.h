@@ -32,6 +32,13 @@
 /* Contract cap: the firmware lists up to 500 photos. */
 #define METRO_PHOTOS_MAX 500
 
+/* Where the contract puts them (library-layout-v1.md). Exported since
+ * moonlit D-059 so the master-art builder walks the same directory the
+ * Photos hub lists, with the same extensions. */
+#define METRO_PHOTOS_DIR "/Photos"
+#define METRO_PHOTOS_EXT_JPG  ".jpg"
+#define METRO_PHOTOS_EXT_JPEG ".jpeg"
+
 typedef struct {
     char filename[METRO_FSUTIL_NAME_LEN];
     metro_photo_cat_t category;

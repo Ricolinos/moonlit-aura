@@ -30,6 +30,7 @@
 #define METRO_ALBUMART_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include "lcd.h"
 
 #define METRO_ALBUMART_SIZE 136
@@ -76,29 +77,46 @@ bool metro_albumart_load_background_file(const char *path);
  * LCD_WIDTH x LCD_HEIGHT, row-major, native LCD format. */
 const fb_data *metro_albumart_background_bitmap(void);
 
-/* R3-F4/DD-5 (M-065): resolves and decodes art for `track_path` (any
- * real track file, not necessarily the one playing) straight into
- * `out` -- METRO_TILE_SIZE x METRO_TILE_SIZE (metro_draw.h), ready for
- * metro_thumbs.c's "albums" source. Reads the track's own tags via
- * get_metadata() (folder art needs id3->path/album, embedded art needs
- * the real has_embedded_albumart/albumart.* fields -- a hand-built
- * stand-in mp3entry with just a path would silently never find
- * embedded art). Decodes at METRO_ALBUMART_SIZE first (the same
- * already-proven-safe target metro_albumart_load_current() uses for
- * covers of any real-world size) and downscales the ALREADY-DECODED
- * PIXELS to the tile size -- not a second JPEG decode at 80px, which
- * would risk the exact JPEG_DECODE_OVERHEAD gap R3-F3 hit for artist
- * photos (docs/DESVIACIONES.md R3-3) for any cover landing near that
- * size. Returns false if the track has no metadata Rockbox can read,
- * or no art at all -- caller falls back to the usual accent tile. */
-bool metro_albumart_decode_track_cover(const char *track_path, fb_data *out);
+/* moonlit (D-059): raw decodes shared by the master-art builder thread
+ * (own scratch, own mp3entry) and the UI (the *_ui variants below,
+ * this module's own s_scratch). Every one of them decodes with
+ * FORMAT_KEEP_ASPECT into a METRO_ALBUMART_SIZE box -- the same
+ * already-proven-safe target metro_albumart_load_current() uses, never
+ * a second JPEG decode at the final size (R3-F4/DD-5, docs/DESVIACIONES.md
+ * R3-3) -- and reports the real decoded `w` x `h` (one side ==
+ * METRO_ALBUMART_SIZE, the other <= it) so the caller can
+ * fill-and-center-crop the ALREADY-DECODED pixels
+ * (moonlit_master_art_resample_cover()). `scratch` must be at least
+ * METRO_ALBUMART_SCRATCH_SIZE: FORMAT_RESIZE needs real working room
+ * beyond the final bitmap (JPEG_DECODE_OVERHEAD) -- undersizing it
+ * corrupts whatever the linker placed next, it does not fail loudly.
+ * Any thread: the JPEG decoder's single static state is serialised
+ * inside via moonlit_master_art_lock(). */
+#define METRO_ALBUMART_SCRATCH_SIZE \
+    (METRO_ALBUMART_SIZE * METRO_ALBUMART_SIZE * 2 * 2)
 
-/* D-042/PC-2 (M7, docs/plan/05-plan-correctivo.md II.4 "Precarga de
- * Marea"): misma decodificación de arriba, pero remuestreada a `size`
- * x `size` en vez del METRO_TILE_SIZE fijo -- moonlit_art_cache.c la
- * usa para la tapa de 120px de Marea. `size` debe ser <=
- * METRO_ALBUMART_SIZE (136); no hay caso de uso que necesite ampliar
- * en vez de reducir. */
-bool metro_albumart_decode_track_cover_sized(const char *track_path, fb_data *out, int size);
+/* Any image file (.jpg/.jpeg/.bmp): artist photos, /Photos. */
+bool metro_albumart_decode_file_raw(const char *art_path, unsigned char *scratch,
+                                    size_t scratch_size, int *w, int *h);
+
+/* Art for `track_path` (any real track file, not necessarily the one
+ * playing): folder art via find_albumart(), embedded JPEG otherwise.
+ * Reads the track's own tags via get_metadata() into `id3` (folder art
+ * needs id3->path/album, embedded art needs the real
+ * has_embedded_albumart/albumart.* fields -- a hand-built stand-in
+ * mp3entry with just a path would silently never find embedded art).
+ * false if the track has no readable metadata or no art at all. */
+struct mp3entry;
+bool metro_albumart_decode_track_cover_raw(const char *track_path, struct mp3entry *id3,
+                                           unsigned char *scratch, size_t scratch_size,
+                                           int *w, int *h);
+
+/* UI-thread variants into this module's own scratch: the returned
+ * pointer (row-major `w` x `h`, native LCD format) is valid until the
+ * next call into this module. Both invalidate
+ * metro_albumart_load_current()'s cache-of-1 (same buffer). NULL on
+ * failure. */
+const fb_data *metro_albumart_decode_track_cover_ui(const char *track_path, int *w, int *h);
+const fb_data *metro_albumart_decode_file_ui(const char *art_path, int *w, int *h);
 
 #endif /* METRO_ALBUMART_H */

@@ -188,15 +188,14 @@ enum metro_lang_id {
     LANG_DIALOG_SWITCH_FMT,
 
     /* moonlit (D-049): "preparando biblioteca" screen
-     * (moonlit_screen_library.c) -- title, one subtitle per phase,
-     * and the "%d de %d" counter. Appended at the end (M-009). */
+     * (moonlit_screen_library.c) -- title, subtitle, and the "%d de %d"
+     * counter. Appended at the end (M-009). D-059: the LANG_LIBRARY_
+     * PHASE_SCAN/PHASE_ART pair this screen used for its now-gone
+     * cover-precache phase (D-056/D-058) is retired with it -- the
+     * background builder (moonlit_master_art_builder.c) has no screen
+     * at all, so no strings of its own. */
     LANG_LIBRARY_PREPARING,
     LANG_LIBRARY_PHASE_DB,
-    /* moonlit (D-058): moonlit_art_pending_count()'s heartbeat while it
-     * sweeps the whole library, before the pending count (and so
-     * LANG_LIBRARY_PHASE_ART's screen) exists. */
-    LANG_LIBRARY_PHASE_SCAN,
-    LANG_LIBRARY_PHASE_ART,
     LANG_LIBRARY_COUNT_FMT,
 
     LANG_COUNT

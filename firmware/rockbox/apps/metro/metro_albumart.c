@@ -29,7 +29,7 @@
 #include "metadata.h" /* get_metadata() -- R3-F4/DD-5 */
 
 #include "metro_albumart.h"
-#include "metro_draw.h" /* METRO_TILE_SIZE */
+#include "moonlit_master_art_builder.h" /* moonlit (D-059): moonlit_master_art_lock() */
 
 /* NOT just width*height*sizeof(fb_data) -- FORMAT_RESIZE needs real
  * working room beyond the final bitmap (JPEG_DECODE_OVERHEAD,
@@ -42,9 +42,6 @@
  * read_jpeg_file()/clip_jpeg_file() write past the end of an
  * undersized buffer before their own bounds check gives up, corrupting
  * whatever static data the linker placed next. */
-#define METRO_ALBUMART_SCRATCH_SIZE \
-    (METRO_ALBUMART_SIZE * METRO_ALBUMART_SIZE * 2 * 2)
-
 static unsigned char s_scratch[METRO_ALBUMART_SCRATCH_SIZE];
 static char s_loaded_path[MAX_PATH];
 static bool s_loaded = false;
@@ -65,10 +62,12 @@ static bool s_bg_loaded = false;
  * background) -- only the destination width/height/buffer and the
  * FORMAT_* flags differ between them. */
 static bool decode_file_into(const char *art_path, unsigned char *scratch,
-                              size_t scratch_size, int width, int height, int format)
+                              size_t scratch_size, int width, int height, int format,
+                              int *out_w, int *out_h)
 {
     struct bitmap bm;
     size_t len = strlen(art_path);
+    bool ok;
 
     bm.width = width;
     bm.height = height;
@@ -77,16 +76,29 @@ static bool decode_file_into(const char *art_path, unsigned char *scratch,
     bm.maskdata = NULL;
 #endif
 
+    /* moonlit (D-059): apps/recorder/jpeg_load.c keeps its decoder
+     * state in ONE static (`static struct jpeg jpeg`), so a decode on
+     * the master-art builder thread and one here must never
+     * interleave -- every read_jpeg_file()/clip_jpeg_file() under
+     * apps/metro/ runs under moonlit_master_art_lock() (recursive,
+     * so callers may hold it around a longer decode+resample too). */
+    moonlit_master_art_lock();
     if (len > 4 && !strcasecmp(art_path + len - 4, ".bmp"))
-        return read_bmp_file(art_path, &bm, scratch_size, format, NULL) > 0;
-
-    return read_jpeg_file(art_path, &bm, scratch_size, format, NULL) > 0;
+        ok = read_bmp_file(art_path, &bm, scratch_size, format, NULL) > 0;
+    else
+        ok = read_jpeg_file(art_path, &bm, scratch_size, format, NULL) > 0;
+    moonlit_master_art_unlock();
+    *out_w = bm.width;
+    *out_h = bm.height;
+    return ok;
 }
 
 static bool decode_embedded_into(struct mp3entry *id3, unsigned char *scratch,
-                                  size_t scratch_size, int width, int height, int format)
+                                  size_t scratch_size, int width, int height, int format,
+                                  int *out_w, int *out_h)
 {
     struct bitmap bm;
+    bool ok;
 
     if (!id3->has_embedded_albumart ||
         (id3->albumart.type & AA_CLEAR_FLAGS_MASK) != AA_TYPE_JPG)
@@ -99,8 +111,13 @@ static bool decode_embedded_into(struct mp3entry *id3, unsigned char *scratch,
     bm.maskdata = NULL;
 #endif
 
-    return clip_jpeg_file(id3->path, id3->albumart.pos, id3->albumart.size,
-                           &bm, scratch_size, format, NULL) > 0;
+    moonlit_master_art_lock(); /* moonlit (D-059): see decode_file_into() */
+    ok = clip_jpeg_file(id3->path, id3->albumart.pos, id3->albumart.size,
+                        &bm, scratch_size, format, NULL) > 0;
+    moonlit_master_art_unlock();
+    *out_w = bm.width;
+    *out_h = bm.height;
+    return ok;
 }
 
 /* "cache of 1" (module doc comment): reloads only when the track's
@@ -115,6 +132,7 @@ static bool load_art(char *loaded_path, size_t loaded_path_sz, bool *loaded_flag
     char art_path[MAX_PATH];
     struct dim dim = { width, height };
     bool ok;
+    int w, h;
 
     if (!(audio_status() & AUDIO_STATUS_PLAY))
         return false;
@@ -127,9 +145,9 @@ static bool load_art(char *loaded_path, size_t loaded_path_sz, bool *loaded_flag
         return true;
 
     if (find_albumart(id3, art_path, sizeof(art_path), &dim))
-        ok = decode_file_into(art_path, scratch, scratch_size, width, height, format);
+        ok = decode_file_into(art_path, scratch, scratch_size, width, height, format, &w, &h);
     else
-        ok = decode_embedded_into(id3, scratch, scratch_size, width, height, format);
+        ok = decode_embedded_into(id3, scratch, scratch_size, width, height, format, &w, &h);
 
     if (!ok)
     {
@@ -168,6 +186,8 @@ bool metro_albumart_load_background(void)
 
 bool metro_albumart_load_background_file(const char *path)
 {
+    int w, h;
+
     if (!path || !path[0])
         return false;
 
@@ -184,7 +204,7 @@ bool metro_albumart_load_background_file(const char *path)
      * aquí se AGRANDA -- se ve suave, y a 30% de opacidad detrás del
      * texto eso no es un defecto sino lo deseable. */
     if (!decode_file_into(path, s_bg_scratch, sizeof(s_bg_scratch),
-                           LCD_WIDTH, LCD_HEIGHT, FORMAT_NATIVE | FORMAT_RESIZE))
+                           LCD_WIDTH, LCD_HEIGHT, FORMAT_NATIVE | FORMAT_RESIZE, &w, &h))
     {
         s_bg_loaded = false;
         s_bg_loaded_path[0] = '\0';
@@ -201,31 +221,6 @@ const fb_data *metro_albumart_background_bitmap(void)
     return (const fb_data *)s_bg_scratch;
 }
 
-/* R3-F4/DD-5 (M-065), generalized D-042/PC-2 (M7, docs/plan/05-plan-
- * correctivo.md II.4): nearest-neighbour downscale of an ALREADY-
- * DECODED METRO_ALBUMART_SIZE x METRO_ALBUMART_SIZE bitmap to a
- * `size` x `size` one -- pure pixel resampling, no JPEG involved, so
- * it can't hit the JPEG_DECODE_OVERHEAD gap a second from-JPEG decode
- * near that size would risk (docs/DESVIACIONES.md R3-3). Both sizes
- * are square, so this is a plain scale, no cover-crop math needed.
- * `size` must be <= METRO_ALBUMART_SIZE (upscaling isn't a case either
- * caller needs: METRO_TILE_SIZE=80 and moonlit's MOONLIT_ART_CACHE_SIZE
- * =120 are both smaller). */
-static void downscale_to(const fb_data *src, fb_data *out, int size)
-{
-    int oy, ox;
-
-    for (oy = 0; oy < size; oy++)
-    {
-        int sy = oy * METRO_ALBUMART_SIZE / size;
-        for (ox = 0; ox < size; ox++)
-        {
-            int sx = ox * METRO_ALBUMART_SIZE / size;
-            out[oy * size + ox] = src[sy * METRO_ALBUMART_SIZE + sx];
-        }
-    }
-}
-
 /* Own static mp3entry -- struct mp3entry is ~1.5-2KB (ID3V2_BUF_SIZE
  * alone is up to 1800B, lib/rbcodec/metadata/metadata.h), too big for
  * a comfortable stack frame on Rockbox's small per-thread stacks (same
@@ -237,57 +232,70 @@ static void downscale_to(const fb_data *src, fb_data *out, int size)
  * something that has nothing to do with it. get_metadata() itself is
  * a standalone utility, not tied to that machinery -- tagcache.c calls
  * it the same way, for the same reason (reading tags from an arbitrary
- * file, independent of what's playing). */
+ * file, independent of what's playing). UI thread only (moonlit
+ * D-059: the builder thread passes its own via
+ * metro_albumart_decode_track_cover_raw()). */
 static struct mp3entry s_track_id3;
 
-/* D-042/PC-2 (M7): variante parametrizada -- decodifica siempre al
- * mismo destino ya probado (METRO_ALBUMART_SIZE, "same already-proven-
- * safe target" del comentario de metro_albumart.h) y remuestrea las
- * PIXELS YA DECODIFICADOS a `size`, en vez de arriesgar un segundo
- * decode de JPEG al tamaño final (la razón que R3-F4/DD-5 ya dejó
- * escrita arriba). moonlit_art_cache.c (D-042) la llama con
- * MOONLIT_ART_CACHE_SIZE=120 para la tapa de Marea;
- * metro_albumart_decode_track_cover() de abajo es ahora un envoltorio
- * de esta con size=METRO_TILE_SIZE=80, sin cambiar su firma ni sus 3
- * llamadores existentes. */
-bool metro_albumart_decode_track_cover_sized(const char *track_path, fb_data *out, int size)
+/* moonlit (D-059): the KEEP_ASPECT decode every cover/photo path now
+ * shares -- METRO_ALBUMART_SIZE box, the same already-proven-safe
+ * target metro_albumart_load_current() uses for covers of any real-
+ * world size (R3-F4/DD-5: never a second JPEG decode at the final
+ * size, which would risk the JPEG_DECODE_OVERHEAD gap R3-F3 hit,
+ * docs/DESVIACIONES.md R3-3). The caller resamples the ALREADY-DECODED
+ * pixels (moonlit_master_art_resample_cover()) to whatever it needs. */
+bool metro_albumart_decode_file_raw(const char *art_path, unsigned char *scratch,
+                                    size_t scratch_size, int *w, int *h)
+{
+    if (scratch_size < METRO_ALBUMART_SCRATCH_SIZE)
+        return false;
+    return decode_file_into(art_path, scratch, scratch_size,
+                            METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE,
+                            FORMAT_NATIVE | FORMAT_RESIZE | FORMAT_KEEP_ASPECT, w, h);
+}
+
+bool metro_albumart_decode_track_cover_raw(const char *track_path, struct mp3entry *id3,
+                                           unsigned char *scratch, size_t scratch_size,
+                                           int *w, int *h)
 {
     char art_path[MAX_PATH];
     struct dim dim = { METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE };
-    bool ok;
 
-    /* Shares s_scratch with metro_albumart_load_current()'s own "cache
-     * of 1" (Now Playing's screens and Quickplay's grid are never on
-     * screen at once, so there's no *concurrent* use) -- but its
-     * bookkeeping (s_loaded/s_loaded_path) has no way to know this
-     * function just overwrote the buffer's CONTENTS for an unrelated
-     * track. Without this, returning to Now Playing on the same track
-     * that was already cached before a Quickplay visit would trust the
-     * stale flag and serve whatever album cover Quickplay decoded
-     * last, not the real one -- force a real redecode next time
-     * instead. */
-    s_loaded = false;
-
-    if (!get_metadata(&s_track_id3, -1, track_path))
+    if (scratch_size < METRO_ALBUMART_SCRATCH_SIZE)
+        return false;
+    if (!get_metadata(id3, -1, track_path))
         return false;
 
-    if (find_albumart(&s_track_id3, art_path, sizeof(art_path), &dim))
-        ok = decode_file_into(art_path, s_scratch, sizeof(s_scratch),
-                              METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE,
-                              FORMAT_NATIVE | FORMAT_RESIZE | FORMAT_KEEP_ASPECT);
-    else
-        ok = decode_embedded_into(&s_track_id3, s_scratch, sizeof(s_scratch),
-                                  METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE,
-                                  FORMAT_NATIVE | FORMAT_RESIZE | FORMAT_KEEP_ASPECT);
-
-    if (!ok)
-        return false;
-
-    downscale_to((const fb_data *)s_scratch, out, size);
-    return true;
+    if (find_albumart(id3, art_path, sizeof(art_path), &dim))
+        return decode_file_into(art_path, scratch, scratch_size,
+                                METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE,
+                                FORMAT_NATIVE | FORMAT_RESIZE | FORMAT_KEEP_ASPECT, w, h);
+    return decode_embedded_into(id3, scratch, scratch_size,
+                                METRO_ALBUMART_SIZE, METRO_ALBUMART_SIZE,
+                                FORMAT_NATIVE | FORMAT_RESIZE | FORMAT_KEEP_ASPECT, w, h);
 }
 
-bool metro_albumart_decode_track_cover(const char *track_path, fb_data *out)
+/* Both UI variants share s_scratch with metro_albumart_load_current()'s
+ * own "cache of 1" (Now Playing and a grid/Marea are never on screen
+ * at once, so there's no *concurrent* use) -- but its bookkeeping
+ * (s_loaded/s_loaded_path) has no way to know the buffer's CONTENTS
+ * were just overwritten for an unrelated image. Without the reset,
+ * returning to Now Playing on the same track that was already cached
+ * before would trust the stale flag and serve whatever was decoded
+ * last -- force a real redecode next time instead. */
+const fb_data *metro_albumart_decode_track_cover_ui(const char *track_path, int *w, int *h)
 {
-    return metro_albumart_decode_track_cover_sized(track_path, out, METRO_TILE_SIZE);
+    s_loaded = false;
+    if (!metro_albumart_decode_track_cover_raw(track_path, &s_track_id3,
+                                               s_scratch, sizeof(s_scratch), w, h))
+        return NULL;
+    return (const fb_data *)s_scratch;
+}
+
+const fb_data *metro_albumart_decode_file_ui(const char *art_path, int *w, int *h)
+{
+    s_loaded = false;
+    if (!metro_albumart_decode_file_raw(art_path, s_scratch, sizeof(s_scratch), w, h))
+        return NULL;
+    return (const fb_data *)s_scratch;
 }

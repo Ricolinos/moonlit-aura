@@ -2060,3 +2060,234 @@ conteo de 1083 álbumes en hardware real, ahora en un solo barrido en
 vez de dos, cae dentro de un tiempo que el usuario considere
 razonable, o si además hace falta paralelizar/cachear más agresivo el
 conteo mismo (fuera del alcance de este commit).
+
+**D-059 — caché maestra compartida `/.aura/art/` (contrato v16):
+constructor en segundo plano reemplaza la pantalla de "preparando
+carátulas".** D-058 hizo el conteo/precarga de D-049 responsivo y de
+una sola sesión de tagcache por álbum, pero no cambió la naturaleza
+del problema: la pantalla "preparando biblioteca" seguía teniendo una
+FASE 2 completa (contar + decodificar) delante de Música, y **cada
+familia (Aura, Metro, moonlit) decodifica y cachea sus propias
+carátulas por separado** aunque las tres lean del mismo disco --
+Studio ya define un contrato v16 de imagen maestra compartida
+(`/.aura/art/`) para que un JPEG se decodifique UNA vez, sin importar
+cuál familia lo hizo primero. Este commit implementa ese contrato del
+lado de moonlit y usa su llegada para retirar la fase 2 por completo
+en vez de optimizarla más.
+
+**Formato en disco** (`moonlit_master_art.h`, módulo puro, D-042):
+`/.aura/art/{albums,artists,photos}/<clave>.art` -- cabecera LE de 16 B
+(`magic 'MAST'`, `width`, `height`, `flags=0`, `reserved=0`) + píxeles
+RGB565 LE fila-contigua, cuadrados SIN esquinas ni tema (recorte
+fill-and-center-crop puro de la fuente): álbumes/artistas 130×130,
+fotos 80×80. `<clave>.none` (0 B) es el marcador negativo compartido,
+mismo esquema de clave que D-055/D-056
+(`a-<crc32 hex8 ruta pista representativa>.<mtime>` = la clave que ya
+memoiza `metro_music_album_art_key()`; `r-`/`p-` análogas para
+artistas/fotos vía `metro_music_album_art_source()`, sin memo, D-059).
+Cada familia DERIVA su tamaño de trabajo desde la maestra al cargarla
+-- nunca al revés: moonlit reduce 130→120 con filtro de caja entero +
+`moonlit_art_mask_corners()` para Marea, y 130→80 para la rejilla
+(`metro_thumbs.c`). Escritura atómica (`<ruta>.tmp` + `rename()`) para
+que una familia hermana nunca lea una maestra a medio escribir.
+
+**Decisión hilo vs. plan B -- HILO real, con evidencia citada en el
+propio código (`moonlit_master_art_builder.c`, comentario de cabecera,
+verificado leyendo las tres fuentes, no supuesto):**
+
+- `tagcache_search()` incrementa un `write_lock` global compartido por
+  todas las sesiones abiertas, así que un commit concurrente espera a
+  que termine cualquier búsqueda en curso; todo el estado de una
+  búsqueda vive dentro del `struct tagcache_search` del llamador; la
+  copia en RAM (`tagcache_ram`) es de solo lectura para búsquedas.
+  Rockbox reparte CPU cooperativamente (un cambio de hilo solo ocurre
+  en `yield()`/`sleep()`/una llamada bloqueante), así que el
+  incremento no atómico de `write_lock` es seguro entre hilos. El
+  constructor usa `metro_music_album_art_source()` (sin memo) --
+  precisamente para que la memoización de 48 entradas que la UI lee
+  sin candado dentro de un cuadro de Marea (`metro_music_album_art_key_peek()`,
+  D-053/D-057) nunca tenga un segundo escritor.
+- El decodificador JPEG (`apps/recorder/jpeg_load.c`) guarda su estado
+  en UN `static struct jpeg` y cede CPU por fila de MCU -- dos decodes
+  en dos hilos SÍ se entrelazarían y corromperían el resultado. Por
+  eso todo `read_jpeg_file()`/`clip_jpeg_file()` bajo `apps/metro/`
+  ahora corre bajo `moonlit_master_art_lock()` (mutex recursivo):
+  `metro_albumart.c` (UI y constructor comparten el mismo
+  `decode_file_into()`/`decode_embedded_into()`) y
+  `metro_screen_photo_viewer.c`. El hilo de buffering de audio nunca
+  decodifica JPEG aquí (moonlit no tiene skin engine, así que la
+  reproducción nunca pide arte al buffering).
+- El constructor tiene su propio scratch (`METRO_ALBUMART_SCRATCH_SIZE`)
+  y su propio `struct mp3entry` -- nunca toca `s_scratch`/`s_track_id3`
+  de `metro_albumart.c` (UI-only, y Ahora Suena guarda un puntero
+  dentro del suyo).
+
+Con las tres condiciones verificadas, un hilo Rockbox real de baja
+prioridad (patrón `apps/plugins/pictureflow.c`) es seguro y más simple
+que el plan B (un elemento por vuelta ociosa tras ≥2 s sin input): un
+hilo dedicado no compite por el presupuesto de `metro_thumbs_tick()`/
+`moonlit_screen_marea_tick()` en la vuelta ociosa de `metro_main.c`, y
+`BUILDER_PRIORITY = PRIORITY_BACKGROUND + 2` (por debajo del propio
+hilo de tagcache y de `PRIORITY_BUFFERING`) es lo más parecido que
+ofrece este kernel a "suspendido mientras el audio bufferea" -- no
+existe un bit `audio_status()` para "bufferea ahora mismo".
+`sleep(HZ/20)` entre elementos con trabajo real (`yield()` si el
+elemento ya estaba resuelto) más `moonlit_master_art_builder_pause()`
+(consultado por el hilo entre elementos, nunca a mitad de uno) dejan
+el disco y la CPU libres durante el scroll de Marea y las transiciones
+de pantalla.
+
+**Qué se integró en el hilo principal (`metro_main.c`)**, quedaba
+pendiente del commit anterior a este:
+`moonlit_master_art_builder_init()` una vez, antes de que cualquier
+decode de carátula sea posible; `moonlit_master_art_builder_poll()` en
+cada vuelta ociosa (no-op de un `bool` tras crear el hilo la primera
+vez que `metro_music_db_ready()` y `tagcache_is_fully_initialized()`
+se sostienen); `moonlit_master_art_builder_pause(true/false)`
+alrededor de todo el bloque de `metro_transitions_*` y mientras
+`moonlit_screen_marea_animating()` es cierto (recalculado cada vuelta,
+nunca queda pegado en `true` si el usuario sale de Marea a mitad de
+scroll); y el emparejamiento `metro_thumbs_take_waiting()` +
+`moonlit_master_art_builder_generation()` para repintar la rejilla
+solo cuando el generador realmente avanzó, no en cada vuelta ociosa
+mientras el constructor sigue ocupado (evita una tormenta de
+repintados completos sin nada nuevo que mostrar).
+
+**Qué encontró este commit ya hecho** (agente anterior, cortado a
+mitad de sesión): `moonlit_master_art.{c,h}` (formato puro, 71/71
+checks en `test_master_art.c`, ya en `apps/SOURCES`/`test/Makefile`),
+`moonlit_master_art_builder.{c,h}` (hilo completo: `init/poll/kick/
+pause/active/generation/hint_album/lock/unlock`, migración de
+`moonlit_art.none` heredados, gc reubicado como `run_gc()` al final de
+cada pasada), `metro_albumart.{c,h}` (decodes `_raw`/`_ui` compartidos
+entre UI e hilo constructor, con `moonlit_master_art_lock()` alrededor
+de cada `read_jpeg_file()`/`clip_jpeg_file()`), `metro_thumbs.{c,h}`
+(`metro_thumbs_decode_via_master()` + `METRO_THUMB_OK/FAIL/WAITING`),
+`metro_music.{c,h}` (`metro_music_album_art_source()` sin memo),
+`metro_settings.{c,h}` (`metro_settings_shared_art_dir()`),
+`metro_photos.h` (`METRO_PHOTOS_DIR`/`_EXT_*` exportados),
+`moonlit_art.{c,h}`/`moonlit_art_cache.{c,h}` ya reducidos al nuevo
+contrato (`moonlit_art_load_for_album()` devuelve
+`enum moonlit_art_result { LOADED, NONE, WAITING }`), `test/dir.h`
+(stand-ins `dir_exists()`/`mkdir()` de un argumento) y `test/test_art.c`
+ya migrados.
+
+**Qué completó este commit** (verificado leyendo cada consumidor de
+las funciones que D-059 cambió de firma, no solo los archivos que la
+nota del encargo señalaba):
+
+1. `moonlit_screen_library.c`/`.h`: se retira la FASE 2 completa
+   (`run_phase_art()`, `precache_progress()`, `count_progress()`,
+   `precache_should_abort()`, `s_abort_requested`, el barrido de gc al
+   final) -- la pantalla ahora es solo la fase 1 (tagcache);
+   `LANG_LIBRARY_PHASE_SCAN`/`LANG_LIBRARY_PHASE_ART` se retiran de
+   `metro_lang.{c,h}` (quedaban sin ningún llamador). `moonlit_art_gc()`
+   ya no existía en `moonlit_art_cache.h` (el gc vive en
+   `moonlit_master_art_builder.c` desde el punto anterior) -- este
+   archivo todavía la llamaba: no compilaba.
+2. `metro_screen_hub.c`: sus tres `metro_thumb_source.decode()`
+   (álbumes, artistas, fotos) todavía llamaban
+   `metro_thumbs_decode_jpeg_cover()`/`metro_albumart_decode_track_cover()`,
+   ninguna de las dos existe ya -- no compilaba. Reescritos sobre
+   `metro_thumbs_decode_via_master()` + `metro_albumart_decode_file_ui()`/
+   `_decode_track_cover_ui()`, con la clave de maestra resuelta vía
+   `moonlit_art_master_path()`/`moonlit_art_master_file_path()`.
+3. `moonlit_screen_marea.c` -- el más grave, silencioso (compilaba,
+   pero con la carga de carátula rota):
+   - `load_pending_slot()` hacía `if (moonlit_art_load_for_album(...))`
+     tratando el resultado como `bool`. `moonlit_art_load_for_album()`
+     devuelve el nuevo `enum moonlit_art_result` con `MOONLIT_ART_LOADED
+     == 0` -- exactamente invertido: el `if` era **falso** en el caso de
+     ÉXITO. Sin este fix, Marea jamás mostraría una carátula cargada
+     con éxito por esta vía (aunque `try_frame_bounded_read()`, más
+     abajo, sí podía enmascararlo en parte). Corregido a un `switch`
+     explícito sobre el enum, con un tercer estado nuevo
+     `MAREA_ART_WAITING` para `MOONLIT_ART_WAITING` (constructor
+     ocupado, ya hinteado) -- antes solo existían PENDING/LOADED/MISSING.
+   - `try_frame_bounded_read()` llamaba `moonlit_art_pfraw_path_peek()`/
+     `moonlit_art_read_pfraw()`/`moonlit_art_none_path()`/
+     `moonlit_art_none_exists()` -- ninguna existe desde que D-059
+     retiró el `.pfraw` privado. No compilaba. Reescrito sobre
+     `moonlit_art_master_path_peek()` + `moonlit_art_derive_from_master()`
+     (lectura + remuestreo en una llamada, ya no hace falta el
+     parámetro `theme` -- el horneado de esquinas lo aplica
+     `moonlit_art_cache.c` con el tema vigente en cada derivación) +
+     `moonlit_master_art_none_path()`/`_none_exists()`.
+   - Nuevo `requeue_waiting_slots_if_generation_moved()`: un slot
+     WAITING no se reintenta solo en la siguiente vuelta (se
+     confundiría con un PENDING recién reclamado) -- se reintenta
+     cuando `moonlit_master_art_builder_generation()` avanza, señal de
+     que el constructor escribió (o marcó `.none`) algún elemento.
+     Llamado desde `moonlit_screen_marea_tick()` y
+     `moonlit_screen_marea_wants_ticks()` (que ahora también cuenta un
+     slot WAITING como "todavía falta", igual que PENDING, para que
+     `metro_main.c` siga pidiendo HZ/20 mientras se espera al
+     constructor). El dibujo (`slot->art == MAREA_ART_LOADED`) no
+     necesitó cambios: cualquier estado que no sea LOADED ya mostraba
+     el monograma/relleno.
+4. `metro_main.c`: no llamaba a `moonlit_master_art_builder_init()`/
+   `_poll()`/`_pause()` en ningún lado -- el hilo constructor nunca se
+   habría creado en el firmware real (aunque el módulo compilara y sus
+   tests pasaran). Se agregó `_init()` al principio de `metro_main()`
+   (antes de que cualquier `decode_file_into()` sea alcanzable),
+   `_poll()` en la vuelta ociosa, `_pause()` alrededor del bloque de
+   transiciones y espejado del estado de scroll de Marea, y el
+   emparejamiento generación/`metro_thumbs_take_waiting()` descrito
+   arriba.
+
+**Verificación:**
+
+- `make -C firmware/rockbox/apps/metro/test test`: 17 suites, todas en
+  verde, incluida `test_master_art` (71/71, ya existía) y `test_art`
+  (17/17, ya migrado).
+- `firmware/tools/build_sim.sh`: compila limpio (solo warnings
+  preexistentes de `-Wformat-truncation`/`-Wmissing-field-initializers`,
+  ninguno nuevo de lógica). Con `/.aura/art/`, `/.aura/thumbs/` y
+  `moonlitcache/` vacíos, arranque de 1200 ticks SIN entrar a Música:
+  `find .aura/art -name '*.art' | wc -l` → 21, `*.none` → 307 (312
+  álbumes de la biblioteca sintética de prueba, la mayoría sin
+  carátula por diseño de la fixture); cabecera verificada con
+  `python3`/`struct`: `MAST`, 130×130 en álbumes, 80×80 en fotos.
+  Entrar a Música (`SELECT`) aterriza directo en el pivote "marea" sin
+  ninguna barra de progreso de por medio (capturado en pantalla,
+  comparado con el bug de D-058: cero fases entre el hub y Marea).
+  Dentro de Marea, dos álbumes con carátula real (`Analog Dreams` de
+  `Wheel & Click`, `First Light` de `Aura Test Combo`) muestran su
+  imagen decodificada -- captura `docs/screenshots/v0.1.5-marea-from-master.png`
+  -- sin ninguna línea `moonlit_art: decode` en el log (`grep decode`
+  sobre stdout de `rockboxui`): la maestra ya estaba escrita por el
+  constructor antes de entrar a Música, Marea solo la leyó y derivó.
+  La rejilla de Fotos (`fotos` → `todos`) muestra las miniaturas reales
+  de la fixture, también sin placeholders. Segundo arranque: `stat -f
+  "%m %z"` de tres maestras (dos álbumes, una foto) idéntico byte a
+  byte y tick a tick frente al primer arranque -- nada se reescribe.
+- `RBDEV_TOOLCHAIN=… firmware/tools/build_target.sh`: exit 0 (firmware
+  y bootloader). `.bss` (`arm-elf-eabi-size firmware/build-ipod6g/rockbox.elf`):
+  **antes = 8 571 420** (valor limpio conocido, D-058), **después =
+  8 456 508** (**-114 912 B**), bajo el techo D-043 de 8 574 076 con
+  **117 568 B de margen** -- el ahorro viene de consolidar los scratch
+  de decode JPEG que antes duplicaban `metro_albumart.c` (`s_scratch`,
+  METRO_ALBUMART_SCRATCH_SIZE) y `metro_thumbs.c` (`SCRATCH_MAX_SRC_PX`
+  128×128×2×2 = 65 536 B) en un solo scratch compartido más pequeño
+  (`moonlit_master_art_builder.c`: `s_decode` = el mismo
+  `METRO_ALBUMART_SCRATCH_SIZE`, `s_master` = 130×130 fb_data =
+  33 800 B) mas el retiro completo del `.pfraw` privado y su
+  maquinaria de precarga (D-042/D-058), pese a sumar la pila del hilo
+  nuevo (`BUILDER_STACK_SIZE` = `DEFAULT_STACK_SIZE + 0x2000`).
+- `git status --short`: limpio tras los commits de este cambio.
+
+**Hipótesis abiertas:** si el conteo de álbumes que ve el constructor
+en una pasada (`enumerate_albums()`, 312 en la fixture de prueba) varía
+entre arranques por razones no relacionadas con D-059 (orden de commit
+de tagcache en un `tagcache_start_scan()` desde cero) -- observado en
+la fixture sintética, no en la biblioteca real del dueño, fuera del
+alcance de este commit; si el ritmo `BUILDER_ELEMENT_PACE = HZ/20`
+resulta demasiado lento/rápido en hardware real con 1083 álbumes +
+fotos + artistas (mismo estatus "experimental hasta M12" que Marea,
+D-014/D-043) -- el reporte original de D-058 (10 min bloqueados) ya no
+puede repetirse (no hay pantalla que bloquear), pero el TIEMPO TOTAL
+hasta que la última carátula real llega sigue sin medirse en ese
+hardware; si conviene que el constructor también compita por
+prioridad con el hilo de escaneo de tagcache durante un
+`tagcache_start_scan()` en curso (hoy ambos pueden correr a la vez,
+sin que este commit lo haya necesitado forzar de otro modo).

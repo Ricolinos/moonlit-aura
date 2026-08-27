@@ -1,5 +1,14 @@
 # Contrato entre `moonlit-aura` y Aura Studio
 
+**Versión 4 — 2026-08-26 (v0.1.5, D-059).** Cambios respecto a v3:
+referencia al contrato canónico **v16** (caché maestra de imagen
+compartida entre las tres familias, redactado por Aura-Firmware en
+paralelo); §A.11 nueva, caché maestra compartida `/.aura/art/`; §A.4
+aclara que `moonlitcache/art/` ya solo contiene la bandera
+`.gc-pending` (el `.pfraw`/`.none` privado que documentaba se retiró
+con la maestra); §A.10 aclara que las miniaturas ahora se DERIVAN de la
+maestra en vez de decodificarse por separado.
+
 **Versión 3 — 2026-08-26 (v0.1.2, D-054/D-055).** Cambios respecto a v2:
 referencia al contrato canónico **v15** (base tagcache y miniaturas
 compartidas entre familias, redactado por Aura-Firmware en paralelo);
@@ -27,7 +36,7 @@ Contratos referenciados (fuente canónica, se leen desde el repo hermano):
 
 | Contrato | Versión referenciada | Ruta |
 |---|---|---|
-| Firmware ↔ Studio | **v15** (2026-08-26; v14 + base tagcache y miniaturas compartidas en `/.aura/`) | `Aura-Firmware/CONTRATO-firmware-studio.md` |
+| Firmware ↔ Studio | **v16** (2026-08-26; v15 + caché maestra de imagen compartida en `/.aura/art/`) | `Aura-Firmware/CONTRATO-firmware-studio.md` |
 | Nombre del dispositivo | **v2** (2026-08-17) | `Aura-Firmware/CONTRATO-dispositivo.md` |
 | Estructura de biblioteca | **v1.3** (2026-08-18) | `Aura-Firmware/docs/contracts/library-layout-v1.md` |
 
@@ -64,10 +73,12 @@ en Studio que aquí se requieren (§C) **no** se ejecutan desde este repo
    ".firmware-moonlit"`.
 4. **Caché privada `/.rockbox/aura/moonlitcache/art/`**
    (`metro_settings.c`, D-023; desde D-055 solo `art/`, los `.mth` viven
-   en §A.10). Árbol interno de moonlit, ajeno al contrato: Studio no lo
-   lee ni lo escribe (C23) y la limpieza de convivencia entre familias lo
-   borra completo, igual que `metrocache/`, `photocache/` y `cfcache/`.
-   Nunca `metrocache/`.
+   en §A.10; desde D-059 `art/` en sí solo contiene la bandera interna
+   `.gc-pending` — el `.pfraw`/`.none` privado que vivía aquí se retiró
+   junto con la caché maestra compartida de §A.11). Árbol interno de
+   moonlit, ajeno al contrato: Studio no lo lee ni lo escribe (C23) y la
+   limpieza de convivencia entre familias lo borra completo, igual que
+   `metrocache/`, `photocache/` y `cfcache/`. Nunca `metrocache/`.
 5. **`install_manifest.cfg`** se ignora (C28). `version.txt` dentro de
    `rockbox.zip` solo se escribe con `--release-tag` (C22, M-056).
 6. **Build reproducible**: nada que viaje en `rockbox.zip` usa
@@ -106,11 +117,31 @@ en Studio que aquí se requieren (§C) **no** se ejecutan desde este repo
    en Metro y moonlit. Clave de álbum `a-<crc32 de la ruta de la pista
    representativa>.<tag_mtime>` — estable a través de rebuilds; fotos y
    artistas conservan `<archivo>.<mtime>`. Studio ignora el directorio
-   salvo para borrarlo al forzar rebuild. Huérfanos: moonlit los limpia
-   tras un sync con música (bandera `moonlitcache/art/.gc-pending`,
-   barrido bajo "preparando biblioteca").
+   salvo para borrarlo al forzar rebuild. Desde D-059 esta miniatura se
+   DERIVA de la caché maestra de §A.11 (reducción entera 130→80) en vez
+   de decodificar el JPEG por separado — mismo formato en disco, distinto
+   origen del píxel. Huérfanos: moonlit los limpia tras un sync con
+   música (bandera `moonlitcache/art/.gc-pending`, barrido por el
+   constructor en segundo plano de §A.11, ya no bajo "preparando
+   biblioteca").
+11. **Caché maestra compartida `/.aura/art/{albums,artists,photos}/`**
+   (v16, D-059, C31): un JPEG se decodifica UNA vez, sin importar cuál
+   de las tres familias lo hizo primero. `<clave>.art` — cabecera LE de
+   16 B (`magic 'MAST'`, `width`, `height`, `flags=0`, `reserved=0`) +
+   RGB565 LE fila-contigua, cuadrado, SIN esquinas ni tema horneados
+   (recorte fill-and-center-crop puro de la fuente): álbumes/artistas
+   130×130, fotos 80×80. `<clave>.none` (0 B) es el marcador negativo
+   compartido — reemplaza el `.none` privado de `moonlitcache/art/`
+   (D-056). Misma clave de álbum que §A.10 (`a-<crc32 ruta pista
+   representativa>.<tag_mtime>`); artistas/fotos análogas con prefijo
+   `r-`/`p-` sobre la ruta del archivo de imagen. Escritura atómica
+   (`<ruta>.tmp` + `rename()`): una familia hermana nunca lee una
+   maestra a medio escribir. Cada familia deriva su propio tamaño de
+   trabajo al cargar (moonlit: 130→120 para Marea, 130→80 para la
+   rejilla de §A.10) — nunca al revés. Studio ignora el directorio
+   salvo para borrarlo al forzar un rebuild (junto con §A.9/§A.10).
 
-Todo lo demás (C1–C30 de `docs/COMPAT_STUDIO.md`) se hereda de Metro-Aura
+Todo lo demás (C1–C31 de `docs/COMPAT_STUDIO.md`) se hereda de Metro-Aura
 sin cambios de formato.
 
 ## §B — Frontera GPL: bootloader y `mks5lboot`

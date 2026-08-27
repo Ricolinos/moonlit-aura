@@ -329,7 +329,9 @@ metro/metro_screen_settings.c
 metro/metro_music.c
 metro/metro_albumart.c
 metro/moonlit_art.c /* moonlit (D-020, D-042, M7): formato .pfraw puro, de aura_art.c */
-metro/moonlit_art_cache.c /* moonlit (D-042, M7): resolucion album->pixeles + precarga D-224 */
+metro/moonlit_art_cache.c /* moonlit (D-042, M7): resolucion album->pixeles; D-059: deriva de la maestra */
+metro/moonlit_master_art.c /* moonlit (D-059): formato maestro compartido /.aura/art (contrato v16), modulo puro */
+metro/moonlit_master_art_builder.c /* moonlit (D-059): hilo constructor de maestras en segundo plano */
 metro/metro_artist_images.c
 metro/metro_artist_images_parse.c
 metro/metro_screen_nowplaying.c
@@ -362,4 +364,4 @@ metro/moonlit_flow.c /* moonlit (D-014, D-041, M6): motor de proyeccion de Marea
 metro/moonlit_wheel.c /* moonlit (D-019, D-041, M6): dinamica de rueda de Marea, de aura_wheel.c */
 metro/moonlit_screen_marea.c /* moonlit (D-029, D-030, M8): pantalla Marea, portadas izquierda/info derecha */
 metro/moonlit_marea_prefetch.c /* moonlit (D-057): orden de precarga direccional de Marea, modulo puro */
-metro/moonlit_screen_library.c /* moonlit (D-049): pantalla "preparando biblioteca" (tagcache + caratulas) */
+metro/moonlit_screen_library.c /* moonlit (D-049, D-059): pantalla "preparando biblioteca" (solo tagcache) */

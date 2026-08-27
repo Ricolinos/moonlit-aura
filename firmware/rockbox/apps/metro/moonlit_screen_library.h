@@ -20,27 +20,30 @@
  * KIND, either express or implied.
  *
  ****************************************************************************/
-/* moonlit (D-049): "preparando biblioteca" -- the ONE blocking screen
- * between the hub's Música row and the Música page. Measured on the
- * owner's iPod (4 556 tracks, ~1 083 albums): the cover pre-pass used
- * to run synchronously inside metro_music_db_ready() with no screen
- * and no buttons for 4 min 18 s. This screen owns that time instead:
+/* moonlit (D-049, D-059): "preparando biblioteca" -- the ONE blocking
+ * screen between the hub's Música row and the Música page, now down
+ * to a single phase: "construyendo la base de música" while the
+ * tagcache is not usable yet, progress = tagcache commit steps.
  *
- *   phase 1 (only while the tagcache is not usable yet): "construyendo
- *           la base de música", progress = tagcache commit steps;
- *   phase 2 (only if moonlit_art_pending_count() > 0): "preparando
- *           carátulas", progress = covers decoded / covers missing,
- *           repainted every 4 albums (lcd_update() costs more than a
- *           small decode, AF/aura_music.c:376-380).
+ * D-059: the second phase this screen used to own ("preparando
+ * carátulas"/"revisando carátulas", D-056/D-058 -- covers decoded /
+ * covers missing) is gone. Measured on the owner's iPod (4 556
+ * tracks, ~1 083 albums) that synchronous cover pre-pass used to block
+ * for 4 min 18 s with no screen and no buttons at all; the fix since
+ * D-059 is not a bigger progress bar but making the wait disappear:
+ * moonlit_master_art_builder.c walks the library on its own
+ * background thread once the database is ready, and Marea/the grids
+ * show the monogram/placeholder for whatever it hasn't reached yet,
+ * repainting on their own tick() when it does. Nothing here waits on
+ * it anymore.
  *
  * Blocking on purpose (its own input loop, same shape as
  * metro_run_sync_screen_if_needed(), metro_main.c) but interruptible:
- * MENU/back returns false and leaves whatever is pending for the next
- * visit -- both phases are idempotent, nothing is lost. A USB
- * connection is handed to default_event_handler() and also returns
- * false. Returns true when there was nothing to do or everything
- * finished (in which case it drew nothing at all if both phases were
- * already satisfied). */
+ * MENU/back returns false and leaves the tagcache build for the next
+ * visit -- idempotent, nothing is lost. A USB connection is handed to
+ * default_event_handler() and also returns false. Returns true when
+ * there was nothing to do or the build finished (in which case it drew
+ * nothing at all if the database was already usable). */
 #ifndef MOONLIT_SCREEN_LIBRARY_H
 #define MOONLIT_SCREEN_LIBRARY_H
 

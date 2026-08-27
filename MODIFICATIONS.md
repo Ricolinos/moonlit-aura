@@ -506,3 +506,24 @@ Ver `DECISIONS.md` D-057 para el resto (`apps/metro/moonlit_screen_marea.{c,h}`,
 `apps/metro/metro_music.{c,h}`, `apps/metro/metro_main.c`,
 `apps/metro/test/test_marea_prefetch.c`, `apps/metro/test/Makefile`,
 todo dentro de `apps/metro/`).
+
+### moonlit v0.1.5 (2026-08-26, D-059)
+
+- `apps/SOURCES`: se agregan las entradas `metro/moonlit_master_art.c`
+  y `metro/moonlit_master_art_builder.c` — formato puro de la caché
+  maestra compartida `/.aura/art/` (contrato v16) y el hilo constructor
+  en segundo plano que la llena, respectivamente; se actualiza el
+  comentario de `metro/moonlit_art_cache.c` ("deriva de la maestra") y
+  el de `metro/moonlit_screen_library.c` ("solo tagcache", la fase de
+  precarga de carátulas se retira de esa pantalla). Comentarios inline
+  `moonlit (D-059)`.
+
+Ver `DECISIONS.md` D-059 para el resto (`apps/metro/moonlit_master_art.{c,h}`,
+`apps/metro/moonlit_master_art_builder.{c,h}`, `apps/metro/moonlit_art.{c,h}`,
+`apps/metro/moonlit_art_cache.{c,h}`, `apps/metro/moonlit_screen_library.{c,h}`,
+`apps/metro/moonlit_screen_marea.c`, `apps/metro/metro_albumart.{c,h}`,
+`apps/metro/metro_music.{c,h}`, `apps/metro/metro_photos.{c,h}`,
+`apps/metro/metro_thumbs.{c,h}`, `apps/metro/metro_settings.{c,h}`,
+`apps/metro/metro_screen_hub.c`, `apps/metro/metro_main.c`,
+`apps/metro/metro_lang.{c,h}`, `apps/metro/test/`, todo dentro de
+`apps/metro/`).

@@ -125,8 +125,8 @@ int metro_music_recent_albums(metro_music_item_t *out, int max);
 /* R3-F4/DD-5 (M-065): resolves the real file path for `idx_id` (a
  * metro_music_item_t.seek from a tag_title search, e.g. one
  * metro_music_songs_of_album() returned) -- Quickplay's tile decode
- * needs a real path to hand to metro_albumart_decode_track_cover(),
- * which reads the track's tags itself via get_metadata() rather than
+ * needs a real path to hand to metro_albumart_decode_track_cover_ui()
+ * (moonlit D-059), which reads the track's tags itself via get_metadata() rather than
  * trusting anything tagcache already has cached for it. */
 bool metro_music_track_path(int32_t idx_id, char *out, size_t outsz);
 
@@ -164,6 +164,17 @@ void metro_music_album_art_key_reset(void);
  * segura de llamar dentro de un cuadro de animacion de Marea (D-053).
  * false si el album no esta memoizado todavia. Ver metro_music.c. */
 bool metro_music_album_art_key_peek(int32_t album_seek, char *out, size_t outsz);
+
+/* moonlit (D-059): the ONE tagcache session behind
+ * metro_music_album_art_key() (D-058), exposed for the master-art
+ * builder thread: the representative track's path AND its stable key
+ * in one go, with NO memo read or write -- the 48-entry memo above is
+ * UI-thread state (metro_music_album_art_key_peek() reads it from
+ * inside Marea's animation frames without a lock; a second writer
+ * would race it). Safe from another thread: tagcache_search() takes
+ * its own write_lock and the search state is all inside `tcs`. */
+bool metro_music_album_art_source(int32_t album_seek, char *key, size_t keysz,
+                                  char *track_path, size_t pathsz);
 
 /* Same order as the matching list above (alphabetical, or by track
  * number for an album) -- the row index the user selected on screen is

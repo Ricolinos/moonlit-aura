@@ -35,7 +35,9 @@
 #include "metro_video.h"
 #include "metro_photos.h"
 #include "metro_thumbs.h"
-#include "metro_albumart.h" /* R3-F4/DD-5 -- metro_albumart_decode_track_cover() */
+#include "metro_albumart.h" /* R3-F4/DD-5, moonlit D-059 -- decode_*_ui() */
+#include "moonlit_art_cache.h"       /* moonlit (D-059): moonlit_art_master_path*() */
+#include "moonlit_master_art.h"      /* moonlit (D-059): MOONLIT_MASTER_ART_*_SIZE */
 #include "metro_fsutil.h"
 #include "metro_settings.h"
 #include "metro_screen_photo_viewer.h"
@@ -211,12 +213,32 @@ static bool photo_thumb_cache_key(void *ctx, int index, char *out, size_t out_le
     return true;
 }
 
-static bool photo_thumb_decode(void *ctx, int index, fb_data *dst)
+/* moonlit (D-059): raw_decode callback for metro_thumbs_decode_via_master()
+ * -- a plain JPEG-cover read of `ctx->path` into this module's own UI
+ * scratch (metro_albumart.c). */
+struct photo_raw_ctx {
+    const char *path;
+};
+
+static const fb_data *photo_raw_decode(void *ctx, int *w, int *h)
+{
+    const struct photo_raw_ctx *c = ctx;
+    return metro_albumart_decode_file_ui(c->path, w, h);
+}
+
+static int photo_thumb_decode(void *ctx, int index, fb_data *dst)
 {
     struct photo_pivot_ctx *c = ctx;
     char path[MAX_PATH];
+    char master_path[MAX_PATH];
+    struct photo_raw_ctx raw;
+
     snprintf(path, sizeof(path), "%s/%s", PHOTOS_DIR, c->items[index].filename);
-    return metro_thumbs_decode_jpeg_cover(path, dst);
+    raw.path = path;
+    moonlit_art_master_file_path('p', "photos", path, c->items[index].mtime,
+                                 master_path, sizeof(master_path));
+    return metro_thumbs_decode_via_master(master_path, MOONLIT_MASTER_ART_PHOTO_SIZE,
+                                          photo_raw_decode, &raw, dst);
 }
 
 static const struct metro_thumb_source photo_thumb_source = {
@@ -407,20 +429,43 @@ static bool album_thumb_cache_key(void *ctx, int index, char *out, size_t out_le
     return metro_music_album_art_key(g->items[index].seek, out, out_len);
 }
 
-static bool album_thumb_decode(void *ctx, int index, fb_data *dst)
+/* moonlit (D-059): raw_decode callback -- decodes the representative
+ * track's cover art (folder or embedded) into this module's own UI
+ * scratch. */
+struct album_raw_ctx {
+    const char *track_path;
+};
+
+static const fb_data *album_raw_decode(void *ctx, int *w, int *h)
+{
+    const struct album_raw_ctx *c = ctx;
+    return metro_albumart_decode_track_cover_ui(c->track_path, w, h);
+}
+
+static int album_thumb_decode(void *ctx, int index, fb_data *dst)
 {
     const struct album_grid *g = (const struct album_grid *)ctx;
     metro_music_item_t track;
     char path[MAX_PATH];
+    char master_path[MAX_PATH];
+    struct album_raw_ctx raw;
 
     if (!g || index < 0 || index >= *g->count)
-        return false;
+        return METRO_THUMB_FAIL;
     if (metro_music_songs_of_album(g->items[index].seek, &track, 1) < 1)
-        return false;
+        return METRO_THUMB_FAIL;
     if (!metro_music_track_path(track.seek, path, sizeof(path)))
-        return false;
+        return METRO_THUMB_FAIL;
+    /* Same album -> master key as Marea's own moonlit_art_cache.c
+     * (metro_music_album_art_key(), memoized) -- one master file
+     * serves both the grid (downscaled 130 -> 80 here) and Marea
+     * (130 -> 120 there). */
+    if (!moonlit_art_master_path(g->items[index].seek, master_path, sizeof(master_path)))
+        return METRO_THUMB_FAIL;
 
-    return metro_albumart_decode_track_cover(path, dst);
+    raw.track_path = path;
+    return metro_thumbs_decode_via_master(master_path, MOONLIT_MASTER_ART_ALBUM_SIZE,
+                                          album_raw_decode, &raw, dst);
 }
 
 static const struct metro_thumb_source album_thumb_source = {
@@ -474,22 +519,39 @@ static bool artist_thumb_cache_key(void *ctx, int index, char *out, size_t out_l
     return true;
 }
 
-static bool artist_thumb_decode(void *ctx, int index, fb_data *dst)
+/* moonlit (D-059): raw_decode callback -- a plain JPEG-cover read of
+ * `ctx->path` (the resolved artist image file). */
+struct artist_raw_ctx {
+    const char *path;
+};
+
+static const fb_data *artist_raw_decode(void *ctx, int *w, int *h)
+{
+    const struct artist_raw_ctx *c = ctx;
+    return metro_albumart_decode_file_ui(c->path, w, h);
+}
+
+static int artist_thumb_decode(void *ctx, int index, fb_data *dst)
 {
     char filename[METRO_FSUTIL_NAME_LEN];
     long mtime;
     char dir[MAX_PATH], path[MAX_PATH];
+    char master_path[MAX_PATH];
+    struct artist_raw_ctx raw;
     (void)ctx;
 
     if (!metro_music_artist_image(s_artists[index].label, filename, sizeof(filename), &mtime))
-        return false; /* changed between the get_tile() and tick() passes -- skip */
+        return METRO_THUMB_FAIL; /* changed between the get_tile() and tick() passes -- skip */
 
     /* metro_settings_artists_dir() (metro_settings.c) is the only
      * function allowed to build this path -- CLAUDE.md's compat-path
      * rule. */
     metro_settings_artists_dir(dir, sizeof(dir));
     snprintf(path, sizeof(path), "%s/%s", dir, filename);
-    return metro_thumbs_decode_jpeg_cover(path, dst);
+    raw.path = path;
+    moonlit_art_master_file_path('r', "artists", path, mtime, master_path, sizeof(master_path));
+    return metro_thumbs_decode_via_master(master_path, MOONLIT_MASTER_ART_ARTIST_SIZE,
+                                          artist_raw_decode, &raw, dst);
 }
 
 static const struct metro_thumb_source artist_thumb_source = {
@@ -869,15 +931,15 @@ static void hub_on_select(void *ctx, int index)
     switch (base)
     {
         case 0:
-            /* moonlit (D-049): the blocking-but-interruptible
-             * "preparando biblioteca" screen runs first (tagcache
-             * build if needed, then the cover pre-pass that used to
-             * hide inside metro_music_db_ready()). Its return value is
-             * not what decides the page: if the user postponed while
-             * the database was still building, db_ready() below is
-             * still false and the static "actualizando" row shows as
-             * before; if only the covers were postponed, Música opens
-             * and Marea decodes the rest one per idle tick. */
+            /* moonlit (D-049, D-059): the blocking-but-interruptible
+             * "preparando biblioteca" screen runs first -- tagcache
+             * build if needed, the one phase it has left since D-059
+             * moved the cover pre-pass to the background master-art
+             * builder (moonlit_master_art_builder.c), which has no
+             * screen at all. Its return value is not what decides the
+             * page: if the user postponed while the database was
+             * still building, db_ready() below is still false and the
+             * static "actualizando" row shows as before. */
             moonlit_screen_library_prepare();
             if (!metro_music_db_ready())
                 metro_screen_list_push(&updating_page);
