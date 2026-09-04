@@ -104,14 +104,23 @@ FAULT_HANDLERS = (
 # motivo, para que la exclusion sea auditable y no un numero que baja
 # sin explicacion. Si alguna deja de ser cierta, el numero del reporte
 # se vuelve optimista: revisar al tocar cualquiera de los dos extremos.
-# moonlit NO hereda la arista con guarda que Aura corta aqui
-# (skin_get_gwps -> skin_load): esa exclusion se apoya en que AF D-345
-# vacio settings_apply_skins(), un cambio que este repo no tiene --
-# apps/metro/ tiene PROHIBIDO usar el skin engine (CLAUDE.md), pero
-# apps/settings.c de Rockbox base sigue intacto, asi que la arista es
-# alcanzable y contarla es lo correcto. Si alguna vez hace falta cortar
-# una, va aqui CON su motivo: el reporte las imprime una por una.
-GUARDED_EDGES = {}
+# Aristas que existen en el binario pero que una GUARDA DE EJECUCION
+# vuelve inalcanzables. El desensamblado no puede verlas: la guarda es
+# una variable, no una constante de compilacion. Se cortan aqui de forma
+# DECLARADA -- cada una se imprime en el reporte con su motivo, para que
+# la exclusion sea auditable y no un numero que baja sin explicacion. Si
+# alguna deja de ser cierta, el numero se vuelve optimista: revisar al
+# tocar cualquiera de los dos extremos.
+GUARDED_EDGES = {
+    ("skin_get_gwps", "skin_load"):
+        "D-062 (addendum): settings_apply_skins() ya no carga skins "
+        "(apps/gui/skin_engine/skin_engine.c, mismo cambio que AF "
+        "D-345), asi que skins_initialised queda en false y "
+        "skin_get_gwps() sale temprano para CUSTOM_STATUSBAR -- la "
+        "unica pantalla skinneable a la que moonlit puede llegar. WPS y "
+        "FM_SCREEN son pantallas de Rockbox que moonlit reemplaza y "
+        "nunca muestra.",
+}
 
 # Marcos grandes DECLARADOS de apps/metro/: funciones cuyo marco supera
 # --max-frame por una razon estructural, no por descuido. No fallan (a);

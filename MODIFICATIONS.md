@@ -530,6 +530,26 @@ Ver `DECISIONS.md` D-059 para el resto (`apps/metro/moonlit_master_art.{c,h}`,
 
 ### moonlit v0.2.0 (2026-09-03, D-062)
 
+- `apps/gui/skin_engine/skin_engine.c` `settings_apply_skins()`: se
+  retira el bucle que carga los skins de arranque
+  (`gui_skin_reset()` + `skin_get_gwps()` por pantalla skinneable) y
+  `skins_initialised` se queda en `false`; el resto de la función (init
+  de backdrops, `skin_backdrop_load_setting()`, el aviso
+  `THEME_STATUSBAR` y `skin_backdrop_show()`) queda intacto.
+  Comentario inline `moonlit (D-062)` con el razonamiento completo.
+  Motivo: moonlit no usa el motor de skins —lo tiene **prohibido** desde
+  `apps/metro/` (CLAUDE.md), dibuja su propia barra de estado y su
+  propio "Ahora suena", y ningún tema suyo es un `.wps`/`.sbs`— pero
+  mientras `skins_initialised` fuera `true`, cualquier camino de UI que
+  pasara por `sb_get_backdrop()`/`sb_skin_update()` entraba a
+  `skin_get_gwps(CUSTOM_STATUSBAR, …)` y de ahí a
+  `skin_data_load → font_load_ex → glyph_cache_load → FAT/ATA`.
+  Medido con `firmware/tools/stack_report.py`: el peor camino desde
+  `gui_usb_screen_run()` baja de **7 056 a 4 376 B**, y el peor camino
+  desde `main` de **7 688 a 5 520 B**. Es el mismo cambio, en el mismo
+  archivo, que hizo Aura-Firmware (AF D-345, commit `7705b4a3`): se leyó
+  de ese repositorio, no se reescribió.
+
 - `firmware/target/arm/s5l8702/app.lds` sección `.stack`: la pila del hilo
   `main` pasa de `. += 0x2000` (8 KB) a `. += 0x3000` (12 KB), con
   comentario inline `moonlit (D-062)`. Motivo: el hilo `main` de las tres

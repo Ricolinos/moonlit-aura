@@ -180,19 +180,37 @@ void settings_apply_skins(void)
                 skin_reset_buffers(i, j);
         }
     }
-    skins_initialised = true;
-
-    /* Make sure each skin is loaded */
-    for (i=0; i<SKINNABLE_SCREENS_COUNT; i++)
-    {
-        FOR_NB_SCREENS(j)
-        {
-            gui_skin_reset(&skins[i][j]);
-            skins[i][j].gui_wps.display = &screens[j];
-            if (skin_helpers[i]->load_on_boot)
-                skin_get_gwps(i, j);
-        }
-    }
+    /* moonlit (D-062): moonlit NO usa el motor de skins -- lo tiene
+     * PROHIBIDO desde apps/metro/ (CLAUDE.md), dibuja su propia barra de
+     * estado (metro_draw_header(), apps/metro/metro_draw.c) y su propio
+     * "Ahora suena" (metro_screen_nowplaying.c), y ningun tema de
+     * moonlit es un .wps/.sbs. Cargar los skins por defecto aqui costaba
+     * pila del hilo main en el arranque y, peor, en cualquier camino de
+     * UI que llamara a sb_get_backdrop()/sb_skin_update(): esos entran
+     * por skin_get_gwps(CUSTOM_STATUSBAR, ...), que carga en diferido
+     * mientras skins_initialised sea true, y su subarbol
+     * skin_data_load (848 B) -> font_load_ex -> glyph_cache_load
+     * (2 088 B) -> apertura de archivo -> FAT/ATA mide 5 136 B el solo
+     * (firmware/tools/stack_report.py) y es la cola del peor camino
+     * completo desde main.
+     *
+     * Dejando skins_initialised en false, skin_get_gwps() devuelve de
+     * inmediato para CUSTOM_STATUSBAR -- la unica de las pantallas
+     * skinneables a la que moonlit puede llegar -- y todo ese subarbol
+     * desaparece del hilo de UI. Los consumidores ya toleran ese estado
+     * porque es el mismo en el que corre Rockbox ANTES de este init:
+     * gui_wps.data apunta a memoria valida desde gui_sync_skin_init()
+     * (apps/main.c, antes que esta funcion), sb_get_backdrop() devuelve
+     * -1 (data->wps_loaded en false) y skin_backdrop_show(-1) esta
+     * contemplado; sb_skin_update() y sb_skin_get_info_vp() salen
+     * temprano por sbs_loaded == false.
+     *
+     * Se conserva todo lo demas de esta funcion (init de backdrops,
+     * recarga del ajuste de backdrop y el aviso THEME_STATUSBAR): solo
+     * se salta la carga de skins. Mismo cambio, mismo archivo, que
+     * Aura-Firmware AF D-345 -- leido de ese repo, no reescrito. Ver
+     * MODIFICATIONS.md. */
+    (void)i;
 
     /* any backdrop that was loaded with "-" has to be reloaded because
      * the setting may have changed */

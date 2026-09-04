@@ -2558,6 +2558,105 @@ visible porque el archivo llevaba tiempo sin recompilarse; el cambio de
   tiene) y que 12 KB basten en el iPod del dueño. Va a la lista de
   verificación de la ronda.
 
+### D-062, addendum — el camino de skins se cierra en la raíz
+
+Cerrada ya la decisión, la sesión de Aura-Firmware (vía la supervisora)
+avisó de dos cosas que cambian el número de arriba. Se verificaron
+ambas antes de actuar:
+
+**1. La premisa del maestro sobre los skins era falsa, y el camino se
+cierra en la raíz.** Dejar `wps_file`/`sbs_file` vacíos no sirve:
+`skin_load()` cae al skin por defecto **compilado**. Aura lo cerró
+haciendo que `settings_apply_skins()` no cargue skins
+(`apps/gui/skin_engine/skin_engine.c`, AF D-345). Aquí aplica igual y
+por una razón más fuerte: `apps/metro/` tiene **prohibido** el motor de
+skins (CLAUDE.md), moonlit dibuja su propia barra de estado
+(`metro_draw_header()`) y su propio "Ahora suena", y ningún tema de
+moonlit es un `.wps`/`.sbs` — el motor solo estaba cargando skins que
+nadie iba a mirar.
+
+Se portó el mismo cambio, del mismo archivo, leído de
+`../Aura-Firmware` (commit `7705b4a3`, solo lectura): se retira el bucle
+de carga de arranque y `skins_initialised` se queda en `false`, con lo
+que `skin_get_gwps()` sale de inmediato para `CUSTOM_STATUSBAR` — la
+única pantalla skinneable a la que moonlit puede llegar. Todo lo demás
+de la función (backdrops, `THEME_STATUSBAR`, `skin_backdrop_show()`)
+queda intacto. Anotado en `MODIFICATIONS.md` con comentario inline
+`moonlit (D-062)`.
+
+**El criterio que se aplicó, y por qué el número no bajó solo.** El
+umbral que dio la supervisora era "si el camino de skins supera 6 KB,
+pórtalo": medido, `skin_get_gwps` cuesta **5 136 B**, por debajo. Se
+portó igual —instrucción explícita de la supervisora y, sobre todo,
+porque ese subárbol es **la cola del peor camino completo**— y el
+resultado justifica la decisión mucho mejor que el umbral:
+
+| | Antes | Después |
+|---|---|---|
+| Peor camino desde `main` | 7 688 B (62.6 %) | **5 520 B (44.9 %)** |
+| Peor camino desde `gui_usb_screen_run()` | 7 056 B | **4 376 B** |
+
+Ese segundo número es el que importa: es el camino de ~9.5 KB que
+AF D-343 dejó anotado sin corregir, medido en este binario.
+
+Recompilar solo, sin más, movió el total apenas 8 B (7 688 → 7 680): la
+arista `skin_get_gwps → skin_load` **sigue existiendo en el
+desensamblado**, porque la guarda es una variable de runtime
+(`skins_initialised`), no una constante de compilación. Por eso vuelve a
+`GUARDED_EDGES` —vaciada en la primera versión de esta decisión
+justamente porque entonces la guarda **no** era cierta aquí— ahora con
+su motivo propio de moonlit. El peor camino pasa a ser de código
+propio: `metro_main → moonlit_screen_marea_tick →
+moonlit_art_load_for_album (1 184) → metro_music_songs_of_album →
+run_search (1 592) → tagcache → FAT/ATA`.
+
+**Lo que esto NO cambia: la pila se queda en 12 KB.** Con 5 520 B, los
+8 192 B viejos darían 67.4 %, bajo el tope del 75 %. Aun así los 4 KB se
+quedan, por tres razones que el número no ve: la guarda es de runtime y
+un cambio aguas arriba puede reactivar la arista; la herramienta **no
+sigue llamadas por puntero** (275 funciones del binario tienen alguna) y
+su estimación es por lo tanto un piso, no un techo; y el panic del dueño
+existió de verdad. El margen es barato: 2 768 B de IRAM que nadie más
+estaba usando.
+
+**Verificación funcional en simulador** (lo que el maestro pide
+comprobar al apagar los skins):
+- Rejilla de fotos → visor → MENU de vuelta: la rejilla vuelve con su
+  barra de estado propia dibujada
+  (`f1-skins-02-fotos.png`, `f1-skins-03-visor.png`,
+  `f1-skins-04-visor-vuelta.png`).
+- `mpegplayer.rock`: **se carga de verdad** (el log del simulador
+  muestra sus `mpeg_alloc_internal: … MPEG_ALLOC_MPEG2_BUFFER/PCMOUT/
+  DISKBUF/YUV`) y devuelve el control a la lista de videos con la barra
+  intacta, sin panic ni assert (`f1-skins-05-video.png`).
+- **Pendiente de hardware**: la pantalla USB. Es propia
+  (`metro_screen_usb.c`), pero se dibuja **desde** `usb_screen.c` de
+  Rockbox después de `font_disable_all()`, y el arnés headless no puede
+  inyectar una conexión USB (solo pulsaciones de rueda/botón). Va a la
+  lista de verificación de la ronda; es justo el camino que más baja
+  (7 056 → 4 376 B).
+
+**2. La carrera del `uniqbuf` de tagcache NO existe en moonlit** (en
+Aura sí). Verificado leyendo los dos hilos, no supuesto:
+`s_uniqbuf` (`metro_music.c:56`) lo usan solo `run_search()`,
+`metro_music_recent_albums()` e `insert_matching_tracks()`, y las tres
+corren únicamente en el hilo de UI. El hilo constructor de maestras
+llama exactamente a dos cosas de este módulo —
+`metro_music_album_art_source()` y `metro_music_db_ready()`— y ninguna
+pide `tagcache_search_set_uniqbuf()`: `enumerate_albums()`
+(`moonlit_master_art_builder.c:274`) abre su propia
+`struct tagcache_search` en su pila, sin uniqbuf, y escribe en el
+`s_seeks[]` privado del constructor. Es la separación que D-059 ya había
+razonado al elegir la variante **sin memo** para el constructor. No hace
+falta decisión nueva.
+
+Nota relacionada, del mismo tipo y por construcción: la lectura de
+directorio que D-063 agrega dentro de `metro_music_album_art_source()`
+—que sí corre en los dos hilos— usa `metro_fsutil_mtime_in_dir()`, que
+trabaja **solo con locales**. Deliberadamente no se reutilizó
+`metro_fsutil_list_by_ext_mtime()`, que sí tiene un `s_scan[]` estático
+y habría introducido exactamente la carrera que este punto buscaba.
+
 ## D-063 — Caché de carátulas con versión de formato y clave de álbum v18
 
 **Encargo** (maestro §A.2/§A.3, plan hijo Fase 1.2). Dos agujeros que
