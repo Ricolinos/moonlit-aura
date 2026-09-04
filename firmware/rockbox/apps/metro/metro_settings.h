@@ -84,6 +84,11 @@ typedef struct {
      * servia para lo unico que la gente hace con el: guardarse el
      * aparato en el bolsillo. */
     enum metro_lock_require screen_lock_require;
+    /* moonlit (D-079, contrato v19, maestro SS A.2.1): "rev" de
+     * /.aura/settings.cfg ya aplicado -- desempata si hace falta
+     * volver a aplicar el archivo compartido (rev > este valor) en el
+     * proximo handoff de disco. 0 = nunca se aplico nada todavia. */
+    long shared_rev_applied;
 } metro_settings_t;
 
 extern metro_settings_t metro_settings;
@@ -129,6 +134,31 @@ void metro_settings_save(void);
  * the same two moments as the sync marker: boot and after returning
  * from the USB screen. */
 void metro_settings_apply_pending_clock(void);
+
+/* moonlit (D-079, contrato v19, maestro SS A.2.2): lee
+ * /.aura/settings.cfg (moonlit_shared_settings.h); si existe, tiene la
+ * cabecera valida y su `rev` es mayor que
+ * metro_settings.shared_rev_applied, aplica las 13 claves conocidas
+ * (a global_settings con el flush de save_global_settings_now() y a
+ * metro_settings/metro_theme_set()/metro_lang_set() segun corresponda)
+ * y actualiza shared_rev_applied. Una clave con un valor fuera del
+ * rango real del target se ignora sola, nunca aborta las demas. Sin
+ * archivo, sin cabecera, o rev <= shared_rev_applied: no-op. Llamar en
+ * los mismos dos momentos que metro_settings_apply_pending_clock():
+ * arranque y al volver de USB (metro_main.c's metro_disk_handoff()). */
+void metro_settings_apply_pending_shared(void);
+
+/* moonlit (D-079, contrato v19, maestro SS A.2.3/A.2.4): reescribe
+ * /.aura/settings.cfg ENTERO (escritura atomica .tmp+rename) con
+ * rev+1, updated_by="moonlit", las 13 claves conocidas tomadas de su
+ * valor VIGENTE ahora mismo (global_settings/metro_settings) y
+ * cualquier clave desconocida que el archivo ya tuviera, preservada
+ * verbatim. Actualiza metro_settings.shared_rev_applied al rev nuevo
+ * (esta escritura ES la fuente de verdad, no hace falta reaplicarla).
+ * Llamar despues de cualquier cambio de UI a una de las 13 claves
+ * compartidas (metro_screen_settings.c) y desde "restablecer
+ * ajustes". Sin archivo previo: lo crea con rev 1. */
+void metro_settings_write_shared(void);
 
 /* R2-F1/DD-4 (M-054): creates /Music, /Videos, /Photos, /Playlists
  * (mkdir(), no-op if a path already exists) -- library-layout-v1.md's

@@ -13,7 +13,7 @@ BUILD := build
 
 .PHONY: test clean
 
-test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/test_motion $(BUILD)/test_lrc $(BUILD)/test_artist_images $(BUILD)/test_fsutil $(BUILD)/test_lang $(BUILD)/test_volume $(BUILD)/test_tokens $(BUILD)/test_flow $(BUILD)/test_wheel $(BUILD)/test_art $(BUILD)/test_firmware_families $(BUILD)/test_marea_prefetch $(BUILD)/test_master_art $(BUILD)/test_translit $(BUILD)/test_marquee $(BUILD)/test_textseg
+test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/test_motion $(BUILD)/test_lrc $(BUILD)/test_artist_images $(BUILD)/test_fsutil $(BUILD)/test_lang $(BUILD)/test_volume $(BUILD)/test_tokens $(BUILD)/test_flow $(BUILD)/test_wheel $(BUILD)/test_art $(BUILD)/test_firmware_families $(BUILD)/test_marea_prefetch $(BUILD)/test_master_art $(BUILD)/test_translit $(BUILD)/test_marquee $(BUILD)/test_textseg $(BUILD)/test_shared_settings
 	@echo "== test_nav =="
 	@$(BUILD)/test_nav
 	@echo "== test_sync_marker =="
@@ -52,6 +52,8 @@ test: $(BUILD)/test_nav $(BUILD)/test_sync_marker $(BUILD)/test_device $(BUILD)/
 	@$(BUILD)/test_marquee
 	@echo "== test_textseg =="
 	@$(BUILD)/test_textseg
+	@echo "== test_shared_settings =="
+	@$(BUILD)/test_shared_settings
 
 $(BUILD)/test_marquee: test_marquee.c ../moonlit_marquee_cycle.c | $(BUILD)
 	$(CC) $(CFLAGS) test_marquee.c ../moonlit_marquee_cycle.c -o $@
@@ -115,3 +117,6 @@ $(BUILD)/test_marea_prefetch: test_marea_prefetch.c ../moonlit_marea_prefetch.c 
 
 $(BUILD)/test_master_art: test_master_art.c ../moonlit_master_art.c ../moonlit_master_art.h file.h dir.h lcd.h | $(BUILD)
 	$(CC) $(CFLAGS) test_master_art.c ../moonlit_master_art.c -o $@
+
+$(BUILD)/test_shared_settings: test_shared_settings.c ../moonlit_shared_settings.c ../moonlit_shared_settings.h | $(BUILD)
+	$(CC) $(CFLAGS) test_shared_settings.c ../moonlit_shared_settings.c -o $@

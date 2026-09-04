@@ -33,12 +33,19 @@
 #include "ata_idle_notify.h" /* call_storage_idle_notifys() -- M-090 */
 #include "tagcache.h"        /* tagcache_shutdown(), tagcache_get_commit_step() -- M-090/D-060 */
 #include "kernel.h"          /* current_tick, sleep() -- D-060 */
+#include "backlight.h"       /* backlight_set_brightness()/_timeout(), MAX_BRIGHTNESS_SETTING -- moonlit (D-079) */
+#include "dsp_misc.h"        /* dsp_replaygain_set_settings(), REPLAYGAIN_* -- moonlit (D-079) */
+#include "powermgmt.h"       /* set_poweroff_timeout() -- moonlit (D-079) */
+#include "sound.h"           /* sound_min()/sound_max(SOUND_VOLUME) -- moonlit (D-079) */
 
 #include "metro_settings.h"
 #include "metro_sync.h" /* marcador de sync al cambiar de firmware -- M-090 */
 #include "metro_firmware_families.h" /* moonlit (D-047): tabla de hermanas */
 #include "moonlit_art.h"         /* moonlit_art_sweep() -- moonlit (D-063) */
 #include "moonlit_master_art.h"  /* format.txt -- moonlit (D-063) */
+#include "moonlit_shared_settings.h" /* moonlit (D-079, contrato v19) */
+#include "metro_theme.h"         /* metro_theme_set() -- moonlit (D-079) */
+#include "metro_lang.h"          /* metro_lang_set()/metro_lang_code_* -- moonlit (D-079) */
 
 #define METRO_DIR      ROCKBOX_DIR "/aura"
 #define METRO_CFG_PATH METRO_DIR "/aura.cfg"
@@ -119,6 +126,11 @@ void metro_settings_load(void)
                 strlcpy(metro_settings.screen_lock_pin, value,
                          sizeof(metro_settings.screen_lock_pin));
             }
+            else if (!strcmp(name, "shared_rev_applied"))
+                /* atol() no esta disponible en el build de target
+                 * (Rockbox no trae libc completa) -- atoi() alcanza,
+                 * el resto del archivo tampoco usa nada mas grande. */
+                metro_settings.shared_rev_applied = (long)atoi(value);
             /* firmware_family/sync_marker_supported: write-only, Aura
              * Studio reads these off the mounted disk -- never read back
              * here. rtc_sync_*: transient, only
@@ -154,6 +166,12 @@ void metro_settings_save(void)
     fdprintf(fd, "graphics: %d\n", metro_settings.graphics);
     fdprintf(fd, "tz_local_quarters: %d\n", metro_settings.tz_local_quarters);
     fdprintf(fd, "first_boot_done: %d\n", metro_settings.first_boot_done ? 1 : 0);
+    /* moonlit (D-079): 0 (nunca se aplico nada compartido) no hace
+     * falta escribirlo -- es el valor por defecto de un aura.cfg
+     * fresco y metro_settings_apply_pending_shared() lo trata igual
+     * que si la linea faltara. */
+    if (metro_settings.shared_rev_applied > 0)
+        fdprintf(fd, "shared_rev_applied: %ld\n", metro_settings.shared_rev_applied);
 
     /* R3-F7/DD-8 (M-068): las dos claves del candado se escriben SOLO
      * cuando hay candado. Así, un aparato sin candado no las tiene en
@@ -216,6 +234,220 @@ void metro_settings_apply_pending_clock(void)
          * they disappear on their own, nothing to delete by hand. */
         metro_settings_save();
     }
+}
+
+/* moonlit (D-079, contrato v19): /.aura/settings.cfg -- compartido por
+ * las tres familias, Studio nunca lo toca ni lo borra (igual que
+ * /.aura/art, ver metro_settings_shared_art_dir()). */
+#define AURA_SHARED_SETTINGS_PATH "/.aura/settings.cfg"
+#define AURA_SHARED_SETTINGS_BUF  1024
+
+static int read_shared_settings_text(char *buf, size_t bufsize)
+{
+    int fd = open(AURA_SHARED_SETTINGS_PATH, O_RDONLY);
+    ssize_t n;
+
+    if (fd < 0)
+        return -1;
+    n = read(fd, buf, bufsize - 1);
+    close(fd);
+    if (n < 0)
+        return -1;
+    buf[n] = '\0';
+    return (int)n;
+}
+
+/* replaygain: el 0/1/2 de moonlit_shared_settings.h (off/track/album,
+ * el orden de la tabla SS A.1) no coincide con el enum de Rockbox
+ * (REPLAYGAIN_TRACK=0/ALBUM=1/SHUFFLE=2/OFF=3, dsp_misc.h) -- SHUFFLE
+ * nunca se expone (mismo criterio que metro_screen_settings.c's
+ * replaygain_label()/cycle_replaygain()). */
+static int replaygain_shared_to_rockbox(int shared)
+{
+    switch (shared)
+    {
+    case 0: return REPLAYGAIN_OFF;
+    case 1: return REPLAYGAIN_TRACK;
+    case 2: return REPLAYGAIN_ALBUM;
+    default: return -1;
+    }
+}
+
+static int replaygain_rockbox_to_shared(int type)
+{
+    switch (type)
+    {
+    case REPLAYGAIN_OFF:   return 0;
+    case REPLAYGAIN_TRACK: return 1;
+    case REPLAYGAIN_ALBUM: return 2;
+    default:                return 1; /* SHUFFLE -> "track", ver arriba */
+    }
+}
+
+void metro_settings_apply_pending_shared(void)
+{
+    char buf[AURA_SHARED_SETTINGS_BUF];
+    moonlit_shared_settings_t s;
+    bool touched_global = false;
+    int v;
+
+    if (read_shared_settings_text(buf, sizeof(buf)) < 0)
+        return;
+    if (!moonlit_shared_settings_parse(buf, &s))
+        return; /* sin cabecera valida: como si no existiera (SS A.2.5) */
+    if (!s.have_rev || s.rev <= metro_settings.shared_rev_applied)
+        return;
+
+    if (s.have_screen_lock_enabled)
+        metro_settings.screen_lock = s.screen_lock_enabled;
+    if (s.have_screen_lock_pin)
+        strlcpy(metro_settings.screen_lock_pin, s.screen_lock_pin,
+                sizeof(metro_settings.screen_lock_pin));
+    if (s.have_screen_lock_require &&
+        (v = moonlit_shared_settings_lock_require_from_str(s.screen_lock_require)) >= 0)
+        metro_settings.screen_lock_require = (enum metro_lock_require)v;
+
+    if (s.have_brightness &&
+        moonlit_shared_settings_int_in_range(s.brightness, 1, MAX_BRIGHTNESS_SETTING))
+    {
+        global_settings.brightness = (int)s.brightness;
+        backlight_set_brightness(global_settings.brightness);
+        touched_global = true;
+    }
+    if (s.have_backlight_timeout && s.backlight_timeout >= -1)
+    {
+        global_settings.backlight_timeout = (int)s.backlight_timeout;
+        backlight_set_timeout(global_settings.backlight_timeout);
+        touched_global = true;
+    }
+    if (s.have_idle_poweroff && s.idle_poweroff >= 0)
+    {
+        global_settings.poweroff = (int)s.idle_poweroff;
+        set_poweroff_timeout(global_settings.poweroff);
+        touched_global = true;
+    }
+    if (s.have_keyclick)
+    {
+        global_settings.keyclick = s.keyclick ? 2 : 0;
+        touched_global = true;
+    }
+    if (s.have_volume_limit &&
+        moonlit_shared_settings_int_in_range(s.volume_limit, sound_min(SOUND_VOLUME),
+                                              sound_max(SOUND_VOLUME)))
+    {
+        global_settings.volume_limit = (int)s.volume_limit;
+        touched_global = true;
+    }
+    if (s.have_replaygain &&
+        (v = moonlit_shared_settings_replaygain_from_str(s.replaygain)) >= 0 &&
+        (v = replaygain_shared_to_rockbox(v)) >= 0)
+    {
+        global_settings.replaygain_settings.type = v;
+        dsp_replaygain_set_settings(&global_settings.replaygain_settings);
+        touched_global = true;
+    }
+    if (s.have_language && (v = metro_lang_code_to_enum(s.language)) >= 0)
+    {
+        metro_settings.language = (enum metro_language)v;
+        metro_lang_set(metro_settings.language);
+    }
+    if (s.have_appearance &&
+        (v = moonlit_shared_settings_appearance_from_str(s.appearance)) >= 0)
+    {
+        metro_settings.theme = (enum metro_theme_kind)v;
+        metro_theme_set(metro_settings.theme);
+    }
+
+    metro_settings.shared_rev_applied = s.rev;
+    metro_settings_save();
+    if (touched_global)
+    {
+        settings_save();
+        call_storage_idle_notifys(true);
+    }
+}
+
+/* moonlit (D-079, contrato v19): cuánto se reserva para preservar
+ * claves desconocidas al reescribir -- generoso a proposito, la
+ * misma capacidad de moonlit_shared_settings_t.unknown_lines. */
+void metro_settings_write_shared(void)
+{
+    char buf[AURA_SHARED_SETTINGS_BUF];
+    char tmp_path[sizeof(AURA_SHARED_SETTINGS_PATH) + 4];
+    moonlit_shared_settings_t s;
+    long old_rev = 0;
+    int fd, n;
+    const char *word;
+
+    /* Lee el archivo previo SOLO para heredar su "rev" y las lineas
+     * desconocidas -- las 13 claves conocidas se pisan todas con el
+     * valor VIGENTE ahora mismo, nunca con lo que decia el archivo
+     * viejo (SS A.2.3: "se reescribe el archivo completo... con todas
+     * las claves conocidas"). */
+    moonlit_shared_settings_init(&s);
+    if (read_shared_settings_text(buf, sizeof(buf)) >= 0)
+    {
+        moonlit_shared_settings_t old;
+        if (moonlit_shared_settings_parse(buf, &old))
+        {
+            old_rev = old.rev;
+            strlcpy(s.unknown_lines, old.unknown_lines, sizeof(s.unknown_lines));
+        }
+    }
+
+    s.have_rev = true;             s.rev = old_rev + 1;
+    s.have_updated_by = true;      strlcpy(s.updated_by, "moonlit", sizeof(s.updated_by));
+    s.have_screen_lock_enabled = true; s.screen_lock_enabled = metro_settings.screen_lock;
+    s.have_screen_lock_pin = true; strlcpy(s.screen_lock_pin, metro_settings.screen_lock_pin,
+                                            sizeof(s.screen_lock_pin));
+    s.have_screen_lock_require = true;
+    word = moonlit_shared_settings_lock_require_to_str((int)metro_settings.screen_lock_require);
+    strlcpy(s.screen_lock_require, word ? word : "hold", sizeof(s.screen_lock_require));
+    s.have_brightness = true;        s.brightness = global_settings.brightness;
+    s.have_backlight_timeout = true; s.backlight_timeout = global_settings.backlight_timeout;
+    s.have_idle_poweroff = true;     s.idle_poweroff = global_settings.poweroff;
+    s.have_keyclick = true;          s.keyclick = global_settings.keyclick != 0;
+    s.have_volume_limit = true;      s.volume_limit = global_settings.volume_limit;
+    s.have_replaygain = true;
+    strlcpy(s.replaygain,
+            moonlit_shared_settings_replaygain_to_str(
+                replaygain_rockbox_to_shared(global_settings.replaygain_settings.type)),
+            sizeof(s.replaygain));
+    s.have_language = true;
+    word = metro_lang_code_from_enum(metro_settings.language);
+    strlcpy(s.language, word ? word : "es", sizeof(s.language));
+    s.have_appearance = true;
+    word = moonlit_shared_settings_appearance_to_str((int)metro_settings.theme);
+    strlcpy(s.appearance, word ? word : "dark", sizeof(s.appearance));
+
+    n = moonlit_shared_settings_serialize(&s, buf, sizeof(buf));
+    if (n < 0)
+        return;
+
+    if (!dir_exists("/.aura"))
+        mkdir("/.aura");
+
+    /* Escritura atomica (SS A.1): .tmp + rename -- un corte de luz a
+     * mitad de escritura deja el archivo VIEJO intacto, nunca uno a
+     * medias. rename() sobre un destino existente no es portable
+     * (mismo motivo que moonlit_master_art_write()), asi que se borra
+     * el viejo primero. */
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", AURA_SHARED_SETTINGS_PATH);
+    fd = creat(tmp_path, 0666);
+    if (fd < 0)
+        return;
+    if (write(fd, buf, (size_t)n) != n)
+    {
+        close(fd);
+        remove(tmp_path);
+        return;
+    }
+    close(fd);
+    remove(AURA_SHARED_SETTINGS_PATH);
+    rename(tmp_path, AURA_SHARED_SETTINGS_PATH);
+
+    metro_settings.shared_rev_applied = s.rev;
+    metro_settings_save();
 }
 
 /* --- moonlit (D-054): base tagcache compartida en /.aura/tagcache ---- */

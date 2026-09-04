@@ -198,6 +198,31 @@ static void test_upper(void)
     CHECK(out[0] == '\0');
 }
 
+/* moonlit (D-079): codigo de dos letras <-> enum, para la clave
+ * `language` de /.aura/settings.cfg. Solo es/en existen todavia --
+ * D-080 (Fase 3) agrega fr/de/ru/it a esta misma tabla. */
+static void test_code_mapping(void)
+{
+    CHECK(metro_lang_code_to_enum("es") == METRO_LANG_ES);
+    CHECK(metro_lang_code_to_enum("en") == METRO_LANG_EN);
+    CHECK(metro_lang_code_to_enum("fr") == -1); /* SS A.3: no soportado todavia */
+    CHECK(metro_lang_code_to_enum("") == -1);
+
+    CHECK(!strcmp(metro_lang_code_from_enum(METRO_LANG_ES), "es"));
+    CHECK(!strcmp(metro_lang_code_from_enum(METRO_LANG_EN), "en"));
+
+    /* Round-trip para cada idioma que SI existe. */
+    {
+        int lang;
+        for (lang = 0; lang < METRO_LANG_COUNT; lang++)
+        {
+            const char *code = metro_lang_code_from_enum((enum metro_language)lang);
+            CHECK(code != NULL);
+            CHECK(metro_lang_code_to_enum(code) == lang);
+        }
+    }
+}
+
 int main(void)
 {
     test_ascii();
@@ -207,6 +232,7 @@ int main(void)
     test_degenerado();
     test_collate();
     test_upper();
+    test_code_mapping();
 
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

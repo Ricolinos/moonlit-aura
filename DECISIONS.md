@@ -4132,3 +4132,138 @@ ronda anterior — dos ranuras de marquesina nuevas,
 D-043 8 574 076 B, margen **106 272 B**. `make -C firmware/build-sim
 install` corrido antes de las capturas. Capturas en
 `docs/screenshots/ajustes-2/`. Sigue Fase 2 (ajustes compartidos).
+
+## D-079 — Ajustes compartidos entre familias: `/.aura/settings.cfg`, contrato v19
+
+**Motivo.** El maestro (§A) pide un archivo compartido en `/.aura/`
+para los ajustes que Aura, Metro y moonlit ya exponen cada uno por su
+lado (candado, brillo, retroiluminación, apagado automático, clicker,
+límite de volumen, ajuste de volumen/replaygain, idioma, apariencia) —
+hoy cambiar uno en una familia no se refleja al cambiar de sistema
+(D-047) ni tras una sincronización con Aura Studio.
+
+**Decisión — módulo puro, mismo vector de prueba, implementación
+propia.** `moonlit_shared_settings.c/.h` (nuevo, cero dependencias de
+Rockbox, mismo patrón que `metro_sync_marker.c`): parsea/serializa el
+archivo texto-plano "clave: valor" del contrato (cabecera
+`# aura-shared-settings v1` obligatoria y exacta -- sin ella el
+archivo se rechaza entero, SS A.2.5), captura las 13 claves conocidas
+en su forma literal (strings para los campos tipo-enum, `long` para
+los numéricos) y **preserva verbatim** cualquier clave no reconocida
+para la próxima escritura (`unknown_lines`, acotado a 512 B). Los
+límites numéricos reales (`MAX_BRIGHTNESS_SETTING`, `sound_min/max`)
+no los conoce este módulo -- los aplica el llamador
+(`metro_settings.c`), que sí puede ver el target; el módulo solo
+expone `moonlit_shared_settings_int_in_range()` para expresarlo. Tres
+mapas palabra↔entero puros (`screen_lock_require`, `replaygain`,
+`appearance`), en el mismo orden que los enums de moonlit para poder
+castear directo. `metro_lang.c` gana `metro_lang_code_to_enum()`/
+`_from_enum()` (código ISO 639-1 de dos letras) -- hoy solo
+reconoce `es`/`en`; D-080 (Fase 3) agrega `fr`/`de`/`ru`/`it` a esta
+misma tabla, no una nueva.
+
+**`metro_settings.c` — aplicar y escribir.**
+`metro_settings_apply_pending_shared()`: si `/.aura/settings.cfg`
+existe, tiene la cabecera válida y su `rev` es mayor que
+`metro_settings.shared_rev_applied` (nuevo campo, persistido en
+`aura.cfg`), aplica las 13 claves -- `screen_lock_*`/`language`/
+`appearance` a `metro_settings` (con `metro_theme_set()`/
+`metro_lang_set()` en vivo), las otras seis a `global_settings`
+directo (`brightness`, `backlight_timeout`, `idle_poweroff`,
+`keyclick`, `volume_limit`, `replaygain_settings.type` -- este último
+con su propio mapa 0/1/2↔`REPLAYGAIN_OFF/TRACK/ALBUM`, que **no**
+coinciden en orden, D-071 ya evitaba exponer `REPLAYGAIN_SHUFFLE`) con
+el flush de `save_global_settings_now()`. Una clave fuera de rango
+(`brightness: 999`) se ignora sola; `language: fr` se reconoce como
+clave *conocida* pero no cambia nada porque este build todavía no
+soporta ese código (D-080 lo resuelve). `metro_settings_write_shared()`
+hace el camino inverso: lee el archivo previo solo para heredar `rev`
+y las líneas desconocidas, arma las 13 claves con el valor VIGENTE
+ahora mismo (nunca con lo que decía el archivo viejo, SS A.2.3) y
+reescribe con escritura atómica (`.tmp` + `rename()`, mismo patrón que
+`moonlit_master_art_write()`). Se llama desde cada fila de Ajustes que
+toca una de las 13 claves (idioma, brillo, retroiluminación, apagado
+automático, clicker, límite de volumen, ajuste de volumen, apariencia,
+candado activar/cambiar/quitar/cuándo pedir) y desde "restablecer
+ajustes" -- que ahora también vuelve candado/retroiluminación/apagado
+automático/clicker/replaygain a sus valores por defecto, algo que
+D-071 había dejado fuera del botón.
+
+**Dónde se aplica.** Mismo punto que la hora (`metro_settings_apply_
+pending_clock()`): arranque y cada vuelta desde USB, dentro de
+`metro_disk_handoff()` (`metro_main.c`).
+
+**Hallazgo propio 1 — el candado se cobraba ANTES del archivo
+compartido.** `metro_screen_lock_init()`/`_run_if_active()` corren
+deliberadamente antes de `metro_disk_handoff()` (D-069: para que
+"actualizando biblioteca" nunca tape el candado). Eso significa que un
+`screen_lock_enabled: 0` que Aura Studio hubiera dejado escrito
+mientras el aparato estaba **apagado** (conectado a la computadora sin
+encender) se aplicaría demasiado tarde: el candado viejo, guardado
+localmente la última vez que el aparato SÍ arrancó, se cobraría primero
+y la salida de emergencia por USB del maestro (§A.2.6, "el PIN viaja en
+claro... la salida de emergencia depende de que sea legible") quedaría
+inalcanzable en ese arranque. Corregido llamando
+`metro_settings_apply_pending_shared()` una vez más, en `metro_main()`,
+antes de `metro_screen_lock_init()` -- idempotente (no hace nada si
+`rev` ya está al día), así que el camino normal no cambia; solo importa
+en el arranque en frío que sigue a una sincronización con el aparato
+apagado. La llamada de siempre dentro de `metro_disk_handoff()` sigue
+cubriendo la vuelta desde USB, que ya reevalúa el candado en la
+siguiente vuelta del bucle principal (`metro_screen_lock_run_if_active()`
+corre al principio de cada iteración).
+
+**Hallazgo propio 2 — `keyclick` nunca sobrevivía un reinicio, desde
+antes de esta ronda.** Verificando el vector A.3 con arranques REALES
+(no solo mismo-sesión, que es como D-071 lo había probado) se encontró
+que la fila "clicker" siempre volvía a "desactivado" al reiniciar, sin
+importar quién la hubiera puesto en activado -- la UI local (D-071) o
+esta ronda's ajustes compartidos. Causa: `metro_apply_hygiene()`
+(`metro_main.c`, M-008, anterior a D-071) todavía forzaba
+`global_settings.keyclick = 0` en **cada** arranque, con el comentario
+"ninguno de estos ajustes está expuesto en la interfaz de Metro
+(todavía)" -- cierto cuando se escribió, falso desde que D-071 agregó
+la fila "clicker". Nadie lo notó porque D-071 solo se verificó
+alternando el valor y mirándolo en la misma sesión, nunca contra un
+reinicio real. Se quitó la línea (el valor por defecto de fábrica de
+Rockbox para `keyclick` ya es 0, así que un aparato nuevo sigue
+arrancando con el clic apagado -- solo deja de deshacer un valor que
+alguien sí guardó a propósito). Las otras cinco claves de
+`global_settings` (brillo, retroiluminación, apagado automático, límite
+de volumen, replaygain) no estaban en la lista de `metro_apply_hygiene()`
+y sí sobrevivían un reinicio de por sí -- confirmado con la misma
+metodología de arranques reales antes de cerrar esta fase.
+
+**Verificación.** `test_shared_settings` nuevo, **70 checks**: el
+vector A.3 literal completo (13 claves parseadas exactas, `rev` 7,
+`clave_futura` preservada y sobreviviendo un round-trip
+parse→serialize→parse), el vector sin cabecera (archivo entero
+rechazado, `out` sin tocar), `brightness: 999` (capturado pero fuera de
+rango con el helper puro, el resto del archivo intacto), valores con
+forma inválida ignorados clave por clave, serialize con buffer
+insuficiente, los tres mapas palabra↔entero, PIN vacío. `test_lang`:
+51 → **61 checks** (`metro_lang_code_to_enum()`/`_from_enum()`,
+round-trip para cada idioma existente). Las 20 suites completas: **0
+fallos**.
+
+Capturas (`docs/screenshots/ajustes-2/`), las cuatro contra
+**arranques reales** (simdisk limpio de `aura.cfg`/`config.cfg` antes
+del primero, cada captura siguiente en un proceso nuevo del
+simulador -- no la misma sesión repintándose): `f2-01-boot-shared.png`
+(arranque con el vector A.3, tema pasa a claro de inmediato),
+`f2-02-general.png`/`f2-03-general-scroll.png` (Ajustes › General:
+idioma se queda en español porque "fr" no es soportado todavía,
+apagado automático 20 min, clicker **activado** -- confirma el
+hallazgo 2 corregido, ajuste de volumen por álbum), `f2-04-pantalla.png`
+(Ajustes › Pantalla: tema amanecer, brillo 44 %, retroiluminación 10 s).
+
+Target y bootloader compilan en 0 errores (mismos warnings
+preexistentes de `-Wmissing-field-initializers`). `.bss`: **8 467 804
+B**, sin cambio sobre el cierre de la Fase 1 -- el módulo nuevo vive en
+`.text`/`.rodata`, no agrega estado estático propio (solo un `long`
+más en `metro_settings_t`, absorbido por relleno de alineación ya
+existente). Techo D-043 8 574 076 B, margen **106 272 B**.
+`make -C firmware/build-sim install` corrido antes de cada captura.
+
+**PARADA 2 — Fase 2 cerrada.** Sigue Fase 3 (idiomas y cirílico,
+D-080/D-081).

@@ -89,7 +89,6 @@ void metro_apply_hygiene(void)
      * disk, never sent anywhere) -- same "decide it for the user"
      * class as every other setting forced here. */
     global_settings.runtimedb = true;
-    global_settings.keyclick = 0;              /* M-008: piezo off by default */
 #ifdef USB_ENABLE_HID
     global_settings.usb_hid = false;
 #endif
@@ -229,6 +228,9 @@ void metro_run_sync_screen_if_needed(void)
 static void metro_disk_handoff(void)
 {
     metro_settings_apply_pending_clock();
+    /* moonlit (D-079, contrato v19): mismo punto y mismo criterio que
+     * la hora -- ver metro_settings_apply_pending_shared(). */
+    metro_settings_apply_pending_shared();
     /* R2-F1/DD-4 (M-054): a fresh disk (first boot, or a USB session
      * that just mounted a different volume) may not have any of the
      * four media folders yet -- ensure they exist before anything
@@ -343,6 +345,21 @@ void metro_main(void)
      * único que corrió antes es el splash. Al desbloquear, el arranque
      * sigue normal y el handoff recoge cualquier marcador que Studio
      * hubiera dejado. */
+    /* moonlit (D-079): las claves compartidas se aplican una vez AQUI,
+     * antes de armar/cobrar el candado -- un screen_lock_enabled: 0
+     * que Studio dejo escrito mientras el aparato estaba APAGADO
+     * (conectado a la computadora sin encender) tiene que ganarle al
+     * "bloqueado" local guardado la ultima vez que este mismo aparato
+     * SI arranco, o la salida de emergencia por USB del maestro SS
+     * A.2.6 quedaria inalcanzable: el candado viejo se cobraria antes
+     * de que metro_disk_handoff() (mas abajo) tuviera oportunidad de
+     * aplicar el archivo nuevo. metro_disk_handoff() la vuelve a
+     * llamar de todos modos -- idempotente (rev ya al dia, no hace
+     * nada) para el camino normal donde nada cambio, y es la unica
+     * llamada real cuando quien acaba de sincronizar es una vuelta
+     * DESDE USB, no un arranque en frio. */
+    metro_settings_apply_pending_shared();
+
     metro_screen_lock_init();
     metro_screen_lock_run_if_active();
 

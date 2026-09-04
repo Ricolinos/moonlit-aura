@@ -298,4 +298,14 @@ int metro_lang_collate(const char *a, const char *b);
  * a mitad de secuencia. */
 void metro_lang_upper(const char *s, char *out, size_t outsz);
 
+/* moonlit (D-079, maestro SS A.1): codigo de dos letras compartido con
+ * Aura y Metro para la clave `language` de `/.aura/settings.cfg`
+ * (ISO 639-1: "es"/"en"/"fr"/"de"/"ru"/"it"). -1 si `code` no es un
+ * idioma que ESTE build todavia soporte -- D-080 (Fase 3) agrega
+ * fr/de/ru/it a esta misma tabla; hasta entonces, un `language: fr`
+ * compartido se reconoce como clave valida (SS A.2.2) pero no cambia
+ * el idioma local. NULL si `lang` no es un valor de enum conocido. */
+int metro_lang_code_to_enum(const char *code);
+const char *metro_lang_code_from_enum(enum metro_language lang);
+
 #endif /* METRO_LANG_H */

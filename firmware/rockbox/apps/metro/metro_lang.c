@@ -636,3 +636,20 @@ int metro_lang_collate(const char *a, const char *b)
      * bytes crudos, para que el orden sea determinista. */
     return strcmp(a, b);
 }
+
+int metro_lang_code_to_enum(const char *code)
+{
+    if (!strcmp(code, "es")) return METRO_LANG_ES;
+    if (!strcmp(code, "en")) return METRO_LANG_EN;
+    return -1;
+}
+
+const char *metro_lang_code_from_enum(enum metro_language lang)
+{
+    switch (lang)
+    {
+    case METRO_LANG_ES: return "es";
+    case METRO_LANG_EN: return "en";
+    default:            return NULL;
+    }
+}

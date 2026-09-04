@@ -372,3 +372,4 @@ metro/moonlit_wheel.c /* moonlit (D-019, D-041, M6): dinamica de rueda de Marea,
 metro/moonlit_screen_marea.c /* moonlit (D-029, D-030, M8): pantalla Marea, portadas izquierda/info derecha */
 metro/moonlit_marea_prefetch.c /* moonlit (D-057): orden de precarga direccional de Marea, modulo puro */
 metro/moonlit_screen_library.c /* moonlit (D-049, D-059): pantalla "preparando biblioteca" (solo tagcache) */
+metro/moonlit_shared_settings.c /* moonlit (D-079): /.aura/settings.cfg, contrato v19, modulo puro host-testable */

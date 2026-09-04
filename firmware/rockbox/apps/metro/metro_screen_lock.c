@@ -403,6 +403,7 @@ bool metro_screen_lock_setup(void)
     strlcpy(metro_settings.screen_lock_pin, first,
              sizeof(metro_settings.screen_lock_pin));
     metro_settings_save();
+    metro_settings_write_shared(); /* moonlit (D-079): claves compartidas */
 
     /* ARMED, no ACTIVE: configurar la clave no debe bloquear el aparato
      * en ese mismo instante -- el dueño acaba de entrar a Ajustes, la
@@ -419,5 +420,6 @@ void metro_screen_lock_clear(void)
     metro_settings.screen_lock = false;
     metro_settings.screen_lock_pin[0] = '\0';
     metro_settings_save();
+    metro_settings_write_shared(); /* moonlit (D-079): claves compartidas */
     s_state = METRO_LOCK_NONE;
 }

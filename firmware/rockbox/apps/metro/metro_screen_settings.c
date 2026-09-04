@@ -321,6 +321,7 @@ static void lock_on_select(void *ctx, int index)
                 (enum metro_lock_require)((metro_settings.screen_lock_require + 1)
                                            % METRO_LOCK_REQUIRE_COUNT);
             metro_settings_save();
+            metro_settings_write_shared(); /* moonlit (D-079): clave compartida */
             break;
         case LOCK_ROW_REMOVE:
         default:
@@ -388,6 +389,7 @@ static void cycle_replaygain(void)
      * arranque. */
     dsp_replaygain_set_settings(&global_settings.replaygain_settings);
     save_global_settings_now();
+    metro_settings_write_shared(); /* moonlit (D-079): clave compartida */
 }
 
 static const char *poweroff_subtitle(void)
@@ -516,6 +518,7 @@ static void general_on_select(void *ctx, int index)
                                 ? METRO_LANG_EN : METRO_LANG_ES);
             metro_settings.language = metro_lang_get();
             metro_settings_save();
+            metro_settings_write_shared(); /* moonlit (D-079): clave compartida */
             break;
 
         case 1:
@@ -545,6 +548,7 @@ static void general_on_select(void *ctx, int index)
              * -- el flush hay que forzarlo igual que en las demas filas
              * que tocan global_settings. */
             call_storage_idle_notifys(true);
+            metro_settings_write_shared(); /* moonlit (D-079): clave compartida */
             break;
 
         case 6:
@@ -587,6 +591,7 @@ static void general_on_select(void *ctx, int index)
             global_settings.poweroff = next;
             set_poweroff_timeout(next);
             save_global_settings_now();
+            metro_settings_write_shared(); /* moonlit (D-079): clave compartida */
             break;
         }
 
@@ -596,6 +601,7 @@ static void general_on_select(void *ctx, int index)
              * clic que dura 10 ms. */
             global_settings.keyclick = global_settings.keyclick ? 0 : 2;
             save_global_settings_now();
+            metro_settings_write_shared(); /* moonlit (D-079): clave compartida */
             break;
 
         case 10:
@@ -620,6 +626,14 @@ static void general_on_select(void *ctx, int index)
                 metro_settings.language = METRO_LANG_ES;
                 metro_settings.animations = METRO_ANIM_DEFAULT;
                 metro_settings.graphics = METRO_GFX_DEFAULT;
+                /* moonlit (D-079, maestro SS A.2.4): "restablecer
+                 * ajustes" tambien vuelve a los valores por defecto de
+                 * las CLAVES COMPARTIDAS -- antes de esta ronda el
+                 * candado y los cuatro ajustes homologados (D-071)
+                 * quedaban fuera de este boton por completo. */
+                metro_settings.screen_lock = false;
+                metro_settings.screen_lock_pin[0] = '\0';
+                metro_settings.screen_lock_require = METRO_LOCK_REQUIRE_HOLD;
                 metro_settings_save();
 
                 metro_theme_set(metro_settings.theme);
@@ -634,6 +648,17 @@ static void general_on_select(void *ctx, int index)
                 s_eq_preset = METRO_EQ_FLAT;
                 apply_eq_preset((enum metro_eq_preset)s_eq_preset);
                 metro_music_set_volume_limit_level(METRO_VOLUME_MAX_LEVEL);
+
+                global_settings.backlight_timeout = 15;
+                backlight_set_timeout(global_settings.backlight_timeout);
+                global_settings.poweroff = 0;
+                set_poweroff_timeout(global_settings.poweroff);
+                global_settings.keyclick = 0;
+                global_settings.replaygain_settings.type = REPLAYGAIN_OFF;
+                dsp_replaygain_set_settings(&global_settings.replaygain_settings);
+                save_global_settings_now();
+
+                metro_settings_write_shared(); /* moonlit (D-079): rev+1 con los defaults */
             }
             break;
     }
@@ -784,6 +809,7 @@ static void display_on_select(void *ctx, int index)
                                  ? METRO_THEME_LIGHT : METRO_THEME_DARK);
             metro_settings.theme = metro_theme_get();
             metro_settings_save();
+            metro_settings_write_shared(); /* moonlit (D-079): "appearance" */
             break;
 
         case 1:
@@ -804,6 +830,7 @@ static void display_on_select(void *ctx, int index)
 
             metro_screen_adjust_run(&spec, brightness_to_step(global_settings.brightness));
             save_global_settings_now(); /* D-071: un solo guardado, al salir */
+            metro_settings_write_shared(); /* moonlit (D-079): clave compartida */
             break;
         }
 
@@ -823,6 +850,7 @@ static void display_on_select(void *ctx, int index)
                 }
             metro_screen_adjust_run(&spec, start);
             save_global_settings_now();
+            metro_settings_write_shared(); /* moonlit (D-079): clave compartida */
             break;
         }
     }
