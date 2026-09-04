@@ -3638,13 +3638,17 @@ replaygain, D-072) · **Fase 6 (D-073), completa**.
    - Tag sugerido `v0.2.0` — **el release lo dispara el dueño**, esta
      sesión no hace tag ni release.
 
-2. **Aviso de la supervisora aún sin aplicar** (llegó durante la Fase 6):
-   el único costo conocido del bloqueo por Hold es el sondeo con la
-   pantalla dormida. Regla de los tres repos: con `!lcd_active()` y el
-   bloqueo **no** armado **no se sondea** (el ícono se redibuja al
-   despertar); con el bloqueo armado sí (`hold_since` lo necesita).
-   **Falta revisar qué hace el bucle de `metro_main.c` con la pantalla
-   dormida** y dejarlo escrito en D-069 o en la lista de hardware.
+2. **Sondeo de Hold con la pantalla dormida — NO hay nada que aplicar.**
+   Llegó como aviso durante la Fase 6 y se cerró en falso: Metro rastreó
+   que `button_hold()` en el S5L8702 es una **lectura de memoria** que
+   actualiza la interrupción del PMU
+   (`button-clickwheel.c:419` → `pmu_holdswitch_locked()`), no una
+   transacción I²C, y el bucle de moonlit ya esperaba `HZ/10` **antes**
+   de D-069 — el sondeo no agregó ni una vuelta. Una puerta
+   `lcd_active()` ahorraría exactamente cero y añadiría una rama que
+   habría que mantener. Lo único que queda es **medir**: "comparar
+   autonomía en reposo con el bloqueo desactivado y activado" va a la
+   lista de hardware, no a una corrección de código.
 
 3. **Fase 8 — fuente de puntuación uniforme (D-074)**, decidida por la
    supervisora tras el addendum de D-066, y **solo si el resto de la
