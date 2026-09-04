@@ -57,4 +57,15 @@ bool metro_screen_photo_viewer_is_current(void);
 void metro_screen_photo_viewer_show(void);
 void metro_screen_photo_viewer_handle(int action, int steps);
 
+/* moonlit (D-082, maestro SS C.2, portado de Metro M-109): true
+ * mientras el visor siga en su ventana de "quietud" de 150 ms tras el
+ * último cambio de foto, o justo una vuelta más allá de eso (el
+ * decode real todavía no ocurrió). metro_main.c la usa para bajar su
+ * espera de entrada a HZ/20 -- igual que ya hace por el hub y la
+ * marquesina -- y para saber cuándo volver a redibujar el visor sin
+ * que llegue ningún botón nuevo, que es como el debounce de verdad
+ * termina de vencer si el usuario deja de tocar la rueda. Se apaga
+ * sola apenas la foto asentada queda decodificada. */
+bool metro_screen_photo_viewer_wants_ticks(void);
+
 #endif /* METRO_SCREEN_PHOTO_VIEWER_H */

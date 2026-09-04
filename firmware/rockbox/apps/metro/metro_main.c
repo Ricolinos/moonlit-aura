@@ -487,12 +487,19 @@ void metro_main(void)
          * desplazando. Se apaga sola en cuanto el texto cabe, el LCD se
          * duerme o las animaciones estan apagadas -- la puerta la
          * decide moonlit_marquee_draw() en cada dibujo, no una pantalla
-         * declarando "yo animo". */
+         * declarando "yo animo".
+         * moonlit (D-082, portado de Metro M-109): y mientras el visor
+         * de fotos este en su ventana de quietud (scrubbing) -- sin
+         * esto, un giro rapido de rueda seguiria notandose recien
+         * 100 ms despues de que el usuario se detiene, no 150 ms; la
+         * espera mas corta es lo que hace que el debounce de la vista
+         * previa se sienta al tacto y no a tirones. */
         int action = metro_input_next(ctx,
                                       ((at_root && metro_screen_hub_wants_ticks()) ||
                                        (at_marea && (moonlit_screen_marea_animating() ||
                                                      moonlit_screen_marea_wants_ticks())) ||
-                                       moonlit_marquee_wants_ticks())
+                                       moonlit_marquee_wants_ticks() ||
+                                       (at_viewer && metro_screen_photo_viewer_wants_ticks()))
                                           ? HZ / 20 : HZ / 10,
                                       &steps);
 
@@ -587,6 +594,19 @@ void metro_main(void)
                 last_hub_tick = current_tick;
                 metro_screen_hub_tick();
             }
+
+            /* moonlit (D-082, portado de Metro M-109): un sondeo mas
+             * del visor de fotos -- es el unico sitio donde el
+             * debounce de 150 ms puede terminar de vencer sin que
+             * llegue ningun boton nuevo (el usuario dejo de girar la
+             * rueda y no volvio a tocar nada). Mientras siga en
+             * ventana de quietud, esto solo refresca la vista previa
+             * (sin decodificar nada); en la vuelta exacta en que el
+             * debounce vence, redraw_current() -> ...show() ya cae al
+             * camino normal (decode real + deslizamiento si
+             * corresponde, ver metro_screen_photo_viewer_show()). */
+            if (at_viewer && metro_screen_photo_viewer_wants_ticks())
+                redraw_current();
 
             /* moonlit (D-067): un cuadro mas de marquesina. Va antes
              * del reparto por pantalla porque la marquesina existe en

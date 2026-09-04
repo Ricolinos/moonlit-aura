@@ -103,6 +103,20 @@ static const struct button_mapping player_mapping[] = {
 static const struct button_mapping viewer_mapping[] = {
     { MACT_PREV,             BUTTON_SCROLL_BACK,        BUTTON_NONE },
     { MACT_NEXT,             BUTTON_SCROLL_FWD,          BUTTON_NONE },
+    /* moonlit (D-082, maestro SS C.4, portado de Metro M-109): la fila
+     * de REPEAT que faltaba. Un giro CONTINUO de la rueda reporta el
+     * mismo wheel_keycode con BUTTON_REPEAT puesto en cuanto pasan
+     * REPEAT_START (300 ms) -- para el driver, es indistinguible de un
+     * boton sostenido (firmware/drivers/button.c +
+     * button-clickwheel.c). Sin esta fila, action_code_worker()
+     * (apps/action.c) no encuentra el codigo con el bit REPEAT puesto
+     * y, como esta tabla termina en LAST_ITEM_IN_LIST (no la variante
+     * __NEXTLIST), la accion caia en MACT_NONE y se descartaba en
+     * silencio -- un giro continuo solo avanzaba UNA foto, la del
+     * primer evento, hasta que la rueda se soltaba y se volvia a
+     * girar. list_mapping[] ya tiene este mismo par, mas abajo. */
+    { MACT_PREV,             BUTTON_SCROLL_BACK | BUTTON_REPEAT, BUTTON_NONE },
+    { MACT_NEXT,             BUTTON_SCROLL_FWD  | BUTTON_REPEAT, BUTTON_NONE },
     /* moonlit (D-072, plan de la ronda): LEFT/RIGHT tambien pasan de
      * foto. En el visor no hay pivotes que torcer, asi que estaban sin
      * mapear -- y son el gesto que cualquiera prueba primero para pasar

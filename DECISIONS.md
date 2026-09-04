@@ -4437,3 +4437,108 @@ intermedia del álbum alemán confirmando ß/ü sin fuente aparte.
 
 **PARADA 3 — Fase 3 cerrada.** Sigue Fase 4 (visor de fotos, porta el
 diff de Metro M-109 cuando exista).
+
+## D-082 — Visor de fotos responsivo: la misma fila de REPEAT que faltaba en Metro, más debounce
+
+**Causa raíz, citada por comparación directa de código (no repetida
+desde cero -- ya la diagnosticó Metro sobre el mismo código heredado,
+M-109, commit `c9f8dbb` de `../Metro-Aura`, solo lectura).**
+`viewer_mapping[]` (`metro_keymap.c`) nunca tuvo la fila `BUTTON_SCROLL_
+{FWD,BACK} | BUTTON_REPEAT` que `hub_mapping[]`, `list_mapping[]`,
+`player_mapping[]` y `lock_mapping[]` sí tienen desde antes. Un giro
+CONTINUO de la rueda hace que el driver (`firmware/drivers/button.c` +
+`button-clickwheel.c`) reporte el MISMO código con el bit `REPEAT`
+puesto en cuanto pasan 300 ms -- indistinguible, para el driver, de un
+botón sostenido. Sin esa fila, `action_code_worker()` (`apps/action.c`)
+no encuentra el código con `REPEAT` puesto y, como la tabla termina en
+`LAST_ITEM_IN_LIST` (no la variante `__NEXTLIST`), la acción caía en
+`MACT_NONE` y se descartaba en silencio: un giro continuo solo avanzaba
+una foto, la del primer evento, hasta soltar la rueda y volver a girar.
+
+**Diagnóstico dinámico, limitación anotada.** El maestro pide reproducir
+con `SCROLL_FWD×5` sin `WAIT` y demostrar la causa antes de tocar nada.
+Se intentó: los tokens de inyección de `uisimulator/common/sim_tasks.c`
+generan un ciclo PRESS+REL discreto por cada `SCROLL_FWD` (confirmado
+viendo `s_index` avanzar en las cinco, incluso ANTES de agregar la
+fila) -- no sintetizan un `BUTTON_REPEAT` de verdad, que depende de que
+el mismo código se siga reportando entre sondeos sin soltarse
+(`REPEAT_START`). El vocabulario de tokens actual no tiene un "hold"
+capaz de disparar esa condición; Metro documentó haber necesitado un
+script aparte para la suya. Se deja anotado en vez de fingir una
+reproducción que el mecanismo disponible no puede dar: la corrección
+se basa en la comparación de código contra las CUATRO tablas hermanas
+que ya tienen la fila y funcionan en producción, más la verificación
+completa del mecanismo de debounce nuevo (abajo), no en un MD5 de un
+burst simulado. Anotado para quien retome `sim_tasks.c`: agregar un
+token de "hold" real (mantener `BUTTON_REPEAT` puesto varias vueltas
+seguidas) cerraría este hueco de diagnóstico para la próxima vez.
+
+**Decisión — la fila, más el debounce del maestro §C.2, portado desde
+Metro adaptado a la arquitectura propia.** `metro_keymap.c`:
+`viewer_mapping[]` gana las dos filas REPEAT. moonlit ya tenía su
+PROPIO mecanismo de deslizamiento entre fotos (`s_slide_dir`, D-072,
+consumido DENTRO de `metro_screen_photo_viewer_show()`) -- distinto de
+la arquitectura de Metro (que externaliza la dirección vía
+`metro_screen_photo_viewer_take_slide()`, llamado desde `metro_main.c`,
+porque M-106/M-109 en Metro sí tienen esa capa); el puerto respeta la
+forma de moonlit en vez de traer la de Metro entera: nuevo
+`s_nav_tick` (reloj de "último cambio de índice"), `METRO_PHOTO_
+SETTLE_TICKS` (150 ms), y `metro_screen_photo_viewer_wants_ticks()`
+(true mientras siga en la ventana de quietud, o mientras la foto
+asentada todavía no esté decodificada). `handle()` sigue moviendo
+`s_index` y armando `s_slide_dir` exactamente como antes (D-072) --
+solo agrega reiniciar `s_nav_tick` bajo el mismo guard de "el índice
+de verdad cambió" que ya protegía el deslizamiento. `show()` revisa la
+ventana de quietud ANTES de tocar `s_slide_dir`: dentro de ella dibuja
+`draw_scrub_preview()` (vista previa barata) y no consume nada; fuera
+de ella, cae al camino de siempre sin cambios. El resultado: un giro
+rápido reinicia el reloj en cada paso (barato, sin decodificar), y
+recién cuando la rueda se detiene 150 ms el redibujo asentado
+decodifica una vez y, si corresponde, desliza -- un solo decode por
+gesto, no uno por paso.
+
+**`draw_scrub_preview()`.** Lee la maestra compartida de 80 px de la
+foto destino (`moonlit_art_master_file_path('p', "photos", ...)` +
+`moonlit_master_art_read()`, LA MISMA que ya llena la cuadrícula desde
+D-072 -- nunca decodifica un JPEG) y la amplía a 240×240 con
+`draw_scaled_centered()` (la misma primitiva que ya dibuja el modo
+"cubrir" de la foto completa, sin una segunda rutina de escalado). Sin
+maestra todavía (constructor en segundo plano no llegó a esta foto) se
+ve solo el nombre y la posición sobre el fondo limpio -- preferible a
+forzar un decode que reintroduciría el bloqueo que este mecanismo
+existe para evitar. A diferencia de Metro (que toma un lock sobre un
+buffer compartido con su hilo constructor, `metro_master_art_lock()`),
+la API de moonlit (`moonlit_master_art_read()`) escribe directo al
+buffer del LLAMADOR sin necesitar lock -- `metro_thumbs.c` ya lee la
+misma maestra así, sin lock, para la cuadrícula (D-072); se sigue ese
+mismo criterio en vez de inventar uno nuevo. `MFONT_CAPTION` de Metro
+no existe en moonlit (siete roles, no ocho) -- la leyenda usa
+`MFONT_LABEL`, el rol que ya cubre subtítulos/valores cortos en el
+resto de la interfaz.
+
+**`metro_main.c`.** Mismos dos puntos de enganche que el resto de las
+puertas de energía del repo (D-053/D-057/D-067): la espera de entrada
+baja a `HZ/20` mientras `at_viewer && metro_screen_photo_viewer_wants_
+ticks()`, y la rama ociosa llama `redraw_current()` bajo la misma
+condición -- así el debounce vence solo por el paso del reloj, sin
+necesitar que llegue un botón nuevo, exactamente igual que la
+marquesina (D-067) o Marea (D-057) ya hacían para sus propias
+ventanas de tiempo.
+
+**Costo.** `.bss`: **8 480 764 B** (+12 800 B sobre el cierre de la
+Fase 3 -- `s_preview_master[80×80]`, un `fb_data` por pixel, medido
+exacto: 80×80×2 = 12 800 en este target de 16 bpp). Techo D-043
+8 574 076 B, margen **93 312 B**.
+
+**Verificación.** Target y bootloader compilan en 0 errores (mismo
+warning preexistente de `-Wmissing-field-initializers`). Las 20 suites
+de host: **0 fallos** (este módulo no es host-testable, depende de
+Rockbox de punta a punta -- `jpeg_load.h`, `bmp.h`, `lcd.h`). Capturas
+en `docs/screenshots/ajustes-2/`: `f4-01-visor-scrubbing.png` (a los
+30 ms del último evento de rueda -- vista previa ampliada de la
+maestra de 80 px, "dreamscape.jpg" y "3 / 16" sobre la franja opaca al
+pie, sin decodificar nada), `f4-02-visor-asentado.png` (mismo destino,
+500 ms después -- la foto completa decodificada, pantalla completa,
+sin la franja de leyenda).
+
+**PARADA 4 — Fase 4 cerrada.** Sigue Fase 5 (cierre de la ronda).

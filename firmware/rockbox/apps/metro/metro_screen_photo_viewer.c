@@ -24,6 +24,7 @@
 #include "file.h"
 #include "jpeg_load.h"
 #include "bmp.h"
+#include "kernel.h" /* moonlit (D-082): current_tick, HZ -- el debounce de scrubbing */
 
 #include "metro_screen_photo_viewer.h"
 #include "metro_screen_list.h"
@@ -34,6 +35,8 @@
 #include "metro_theme.h"
 #include "metro_lang.h"
 #include "metro_keymap.h"
+#include "moonlit_master_art.h" /* moonlit (D-082): moonlit_master_art_read() -- la vista previa de scrubbing */
+#include "moonlit_art_cache.h"  /* moonlit (D-082): moonlit_art_master_file_path() */
 
 #define PHOTOS_DIR "/Photos" /* same local-constant precedent metro_photos.c/metro_video.c already use */
 
@@ -55,9 +58,27 @@ static unsigned char s_scratch[METRO_PHOTO_VIEW_SCRATCH_SIZE];
  * slipped past that cap. */
 #define METRO_PHOTO_LOADING_INDICATOR_SIDE 640
 
+/* moonlit (D-082, maestro SS C.2, portado de Metro M-109): ventana de
+ * "quietud" antes de decodificar de verdad. >= 150 ms sin eventos de
+ * rueda nuevos. HZ = 100 en este target, asi que son exactamente 15
+ * ticks, sin redondeo. */
+#define METRO_PHOTO_SETTLE_TICKS (HZ * 150 / 1000)
+
 static const metro_photo_item_t *s_items;
 static int s_count;
 static int s_index;
+
+/* moonlit (D-082): current_tick del ultimo cambio de s_index (por
+ * rueda o por LEFT/RIGHT). Mientras `current_tick - s_nav_tick` sea
+ * menor que METRO_PHOTO_SETTLE_TICKS, el visor esta "en scrubbing": se
+ * muestra la vista previa barata (draw_scrub_preview()) y NO se
+ * decodifica nada, ni se consume el deslizamiento (s_slide_dir se
+ * consume recien en el redibujo asentado, dentro de
+ * metro_screen_photo_viewer_show()). metro_screen_photo_viewer_push()
+ * lo deja deliberadamente "viejo" -- abrir el visor debe mostrar la
+ * foto de una vez, no la vista previa (que es para scrubbing DENTRO
+ * del visor, no para su apertura). */
+static long s_nav_tick;
 
 static int s_loaded_index = -1;
 static bool s_loaded_ok = false;
@@ -286,6 +307,75 @@ static void draw_scaled_centered(const fb_data *src, int src_w, int src_h,
     }
 }
 
+/* moonlit (D-082, maestro SS C.2, portado de Metro M-109): vista
+ * previa INSTANTANEA mientras la rueda todavia se esta moviendo -- la
+ * maestra compartida de 80 px (contrato v16/D-059, la MISMA que ya
+ * llena la cuadricula, D-072) ampliada a 240x240 (llena el alto de
+ * pantalla, centrada) con el nombre y la posicion debajo.
+ * draw_scaled_centered() ya sabe centrar y ampliar por muestreo
+ * vecino-mas-cercano (es la misma funcion que dibuja el modo "cubrir"
+ * de la foto completa) -- se reusa tal cual, sin una segunda
+ * primitiva de escalado. Nunca decodifica un JPEG: si la maestra
+ * todavia no existe (biblioteca grande, el constructor en segundo
+ * plano no ha llegado a esta foto todavia) se ve solo el texto sobre
+ * el fondo limpio -- preferible a forzar un decode que reintroduciria
+ * el bloqueo que este mecanismo existe para evitar. */
+#define METRO_PHOTO_PREVIEW_SIDE (LCD_HEIGHT) /* 240: llena el alto, dejando aire a los lados */
+
+/* moonlit (D-082): franja de fondo SOLIDO al pie, pintada
+ * explicitamente con lcd_fillrect() antes del texto -- el CLAUDE.md
+ * prohibe conseguir un fondo opaco detras de texto via DRMODE_SOLID
+ * (M-051), asi que cualquier sitio que de verdad necesite texto
+ * legible sobre una imagen lo pinta a mano (mismo patron que la
+ * caption de un tile, metro_draw.c). La vista previa ya llena los
+ * 240 px de alto (METRO_PHOTO_PREVIEW_SIDE == LCD_HEIGHT), asi que no
+ * queda aire debajo donde dibujar el nombre/indice -- tiene que ir
+ * SOBRE la imagen, no despues de ella. */
+#define METRO_PHOTO_PREVIEW_CAPTION_H 40
+
+static fb_data s_preview_master[MOONLIT_MASTER_ART_PHOTO_SIZE * MOONLIT_MASTER_ART_PHOTO_SIZE];
+
+static void draw_preview_caption(void)
+{
+    char buf[METRO_FSUTIL_NAME_LEN + 16];
+    int w, h, y;
+
+    y = LCD_HEIGHT - METRO_PHOTO_PREVIEW_CAPTION_H;
+    lcd_set_foreground(metro_color_bg());
+    lcd_fillrect(0, y, LCD_WIDTH, METRO_PHOTO_PREVIEW_CAPTION_H);
+
+    snprintf(buf, sizeof(buf), "%s", s_items[s_index].filename);
+    lcd_setfont(metro_font_id(MFONT_LABEL));
+    lcd_getstringsize((const unsigned char *)buf, &w, &h);
+    metro_draw_text_cut_right(MFONT_LABEL, (LCD_WIDTH - w) / 2 > 0 ? (LCD_WIDTH - w) / 2 : 4,
+                              y + 4, buf, metro_color_fg(), LCD_WIDTH - 8);
+
+    snprintf(buf, sizeof(buf), "%d / %d", s_index + 1, s_count);
+    lcd_getstringsize((const unsigned char *)buf, &w, &h);
+    metro_draw_text(MFONT_LABEL, (LCD_WIDTH - w) / 2, y + 4 + h + 2,
+                    buf, metro_color_secondary());
+}
+
+static void draw_scrub_preview(void)
+{
+    char master_path[MAX_PATH];
+    char photo_path[MAX_PATH];
+
+    metro_draw_clear();
+
+    snprintf(photo_path, sizeof(photo_path), "%s/%s", PHOTOS_DIR, s_items[s_index].filename);
+    moonlit_art_master_file_path('p', "photos", photo_path, s_items[s_index].mtime,
+                                 master_path, sizeof(master_path));
+
+    if (moonlit_master_art_read(master_path, MOONLIT_MASTER_ART_PHOTO_SIZE, s_preview_master))
+        draw_scaled_centered(s_preview_master, MOONLIT_MASTER_ART_PHOTO_SIZE,
+                             MOONLIT_MASTER_ART_PHOTO_SIZE,
+                             METRO_PHOTO_PREVIEW_SIDE, METRO_PHOTO_PREVIEW_SIDE);
+
+    draw_preview_caption();
+    lcd_update();
+}
+
 static void probe_current(void)
 {
     char path[MAX_PATH];
@@ -388,7 +478,26 @@ bool metro_screen_photo_viewer_push(const metro_photo_item_t *items, int count, 
 
     s_loaded_index = -1;
     s_probed_index = -1;
+    /* moonlit (D-082): "ya paso el tiempo de quietud" desde el primer
+     * dibujo -- abrir el visor debe mostrar la foto de una vez, no la
+     * vista previa (que es para scrubbing DENTRO del visor). */
+    s_nav_tick = current_tick - METRO_PHOTO_SETTLE_TICKS;
     return true;
+}
+
+/* moonlit (D-082, portado de Metro M-109): true mientras haya que
+ * seguir sondeando -- durante el debounce de 150 ms (metro_main.c baja
+ * su espera a HZ/20), y una vuelta MAS despues de que el debounce
+ * termina, para que ese ultimo redibujo dispare el decode real. Se
+ * apaga sola en cuanto la foto asentada queda decodificada: de ahi en
+ * mas no hace falta seguir despertando al bucle principal hasta el
+ * proximo evento de rueda. */
+bool metro_screen_photo_viewer_wants_ticks(void)
+{
+    if (s_count == 0)
+        return false;
+    return (current_tick - s_nav_tick < METRO_PHOTO_SETTLE_TICKS) ||
+           (s_loaded_index != s_index);
 }
 
 bool metro_screen_photo_viewer_is_current(void)
@@ -407,6 +516,25 @@ void metro_screen_photo_viewer_show(void)
 {
     if (s_count == 0)
         return;
+
+    /* moonlit (D-082, maestro SS C.1/C.2, portado de Metro M-109):
+     * mientras la rueda sigue moviendose (o LEFT/RIGHT se siguen
+     * apretando), NINGUN indice intermedio se decodifica -- solo se
+     * dibuja la vista previa barata del destino ACTUAL, y el
+     * deslizamiento armado (s_slide_dir) NO se consume todavia: el
+     * primer redibujo asentado (fuera de esta ventana) es el que
+     * decide la direccion, como si todo el gesto hubiera sido un solo
+     * paso. El decode real de una foto ocurre como mucho una vez por
+     * gesto, cuando el usuario se detiene -- antes de esto, cada paso
+     * de la rueda disparaba su propio decode sincrono en
+     * draw_current_photo(), asi que un giro continuo (incluso una vez
+     * corregido D-082 en metro_keymap.c para que TODOS sus eventos
+     * llegaran) habria seguido sintiendose atascado. */
+    if (current_tick - s_nav_tick < METRO_PHOTO_SETTLE_TICKS)
+    {
+        draw_scrub_preview();
+        return;
+    }
 
     /* moonlit (D-072): si el repintado viene de pasar de foto, entra
      * deslizando. metro_transitions_photo_slide() ya cae solo a un
@@ -466,13 +594,27 @@ void metro_screen_photo_viewer_handle(int action, int steps)
          * horizontal; el dibujo lo hace metro_main.c en su repintado, y
          * metro_screen_photo_viewer_show() lo consume. Se arma aqui y no
          * se dibuja aqui para no tener dos caminos de dibujo del visor
-         * (mismo criterio que CONTINUUM, D-052 C1). */
+         * (mismo criterio que CONTINUUM, D-052 C1).
+         *
+         * moonlit (D-082, portado de Metro M-109): tambien se reinicia
+         * el reloj de quietud -- CADA evento de este tipo mueve
+         * s_index (barato, sin decodificar nada) y reinicia
+         * s_nav_tick; un giro rapido reinicia el reloj en cada paso, asi
+         * que el decode real (dentro de metro_screen_photo_viewer_show())
+         * no ocurre hasta que la rueda se detiene 150 ms. El reloj SOLO
+         * se reinicia si el indice de verdad cambio -- igual que el
+         * guard que ya existia para `s_slide_dir`: sin este guard,
+         * seguir apretando en la primera o la ultima foto (clamp sin
+         * cambio real) mantendria wants_ticks() en true para siempre. */
         case MACT_PREV:
         {
             int new_index = s_index - steps;
             if (new_index < 0) new_index = 0;
             if (new_index != s_index)
+            {
                 s_slide_dir = -1;
+                s_nav_tick = current_tick;
+            }
             s_index = new_index;
             break;
         }
@@ -481,7 +623,10 @@ void metro_screen_photo_viewer_handle(int action, int steps)
             int new_index = s_index + steps;
             if (new_index > s_count - 1) new_index = s_count - 1;
             if (new_index != s_index)
+            {
                 s_slide_dir = 1;
+                s_nav_tick = current_tick;
+            }
             s_index = new_index;
             break;
         }
