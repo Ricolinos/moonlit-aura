@@ -13,7 +13,8 @@
 #           antes del dump -- desde el arranque si no hay `botones`, o
 #           desde que termina de inyectarlos si los hay. Por defecto 150.
 # `botones` lista separada por comas de: SELECT, MENU, SCROLL_FWD,
-#           SCROLL_BACK, PLAY, LEFT, RIGHT -- se inyectan en orden antes
+#           SCROLL_BACK, PLAY, LEFT, RIGHT, mas HOLD (conmuta el
+#           interruptor Hold, moonlit D-069) -- se inyectan en orden antes
 #           de tomar el dump. Ejemplo: "SCROLL_FWD,SCROLL_FWD,SELECT"
 
 set -euo pipefail

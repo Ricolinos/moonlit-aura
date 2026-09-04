@@ -30,6 +30,13 @@
 #include "metro_theme.h"
 #include "metro_lang.h"
 #include "moonlit_elevation.h"
+#include "button.h"  /* button_hold() -- moonlit (D-068) */
+/* moonlit (D-068): SOLO por las metricas de mayusculas
+ * (MOONLIT_FONT_*_CAP_*). Los colores de este archivo siguen saliendo
+ * de metro_color_*()/moonlit_color(), nunca de un macro de aqui --
+ * misma linea que ya siguen metro_transitions.c y
+ * moonlit_screen_marea.c con los tokens de movimiento. */
+#include "moonlit_tokens.h"
 #include "moonlit_translit.h" /* moonlit (D-066): puntuacion tipografica */
 #include "moonlit_marquee.h"  /* moonlit (D-067): texto largo que desborda */
 #include "moonlit_logo.h" /* moonlit (D-016, D-044, M9): creciente 16px en la barra vacia */
@@ -156,15 +163,45 @@ void metro_draw_text_clipped(enum metro_font_role role, int clip_x, int clip_w,
  * outlined regardless of charge level; a negative battery_level()
  * (charge unknown, e.g. running off USB power in the sim) just draws
  * the empty outline with no fill instead of Rockbox's own "--%". */
-/* R5-F4 (M-084): eje de la barra de estado -- ver metro_draw_header(). */
-#define METRO_HEADER_TEXT_Y     4
-#define METRO_HEADER_ICON_Y     3
-#define METRO_HEADER_BATTERY_Y  7
-
+/* moonlit (D-068, maestro SS H): TODO lo de la barra se centra en el
+ * mismo eje -- la mitad de la barra -- por su caja de TINTA, no por su
+ * caja nominal.
+ *
+ * Lo que estaba mal: el texto de 18 px iba en y=4, asi que su caja de
+ * fuente ocupaba 4..22 dentro de una barra de 20 px (tocaba el borde de
+ * abajo y lo desbordaba en 3 px), y su altura de mayusculas quedaba
+ * centrada en y=14 en vez de en y=10. La bateria y los iconos estaban a
+ * medio pixel, pero el texto estaba a cuatro.
+ *
+ * Las tres constantes que hacen falta las MIDE el pipeline, no se
+ * escriben a mano: MOONLIT_FONT_LABEL_CAP_TOP/_CAP_H salen del glifo
+ * 'H' del propio .fnt (design-system/generate.py --header) y la caja de
+ * tinta de cada icono sale de su mascara de cobertura
+ * (moonlit_icons[][].ink_top/.ink_h, --icons). */
 #define METRO_BATTERY_W     18
 #define METRO_BATTERY_H     9
 #define METRO_BATTERY_NUB_W 2
 #define METRO_BATTERY_NUB_H 4
+
+#define METRO_HEADER_CENTER_Y   (METRO_HEADER_HEIGHT / 2)
+
+/* y para que la ALTURA DE MAYUSCULAS del rol quede centrada en el eje. */
+#define METRO_HEADER_TEXT_Y     (METRO_HEADER_CENTER_Y - MOONLIT_FONT_LABEL_CAP_H / 2 - MOONLIT_FONT_LABEL_CAP_TOP)
+
+/* La bateria se dibuja por su cuerpo de 9 px, que ES su caja de tinta. */
+#define METRO_HEADER_BATTERY_Y  (METRO_HEADER_CENTER_Y - METRO_BATTERY_H / 2)
+
+/* moonlit (D-068): y para que la caja de TINTA del icono quede centrada
+ * en el eje de la barra. Un Material Symbol de 16 px dibuja ~10-12 px de
+ * tinta dentro de su celda y no siempre a la misma altura (play_arrow
+ * empieza en la fila 3, el candado en otra), asi que centrar la celda
+ * no alinea nada -- hay que preguntarle a la mascara. */
+static int header_icon_y(enum moonlit_icon_id id)
+{
+    const struct moonlit_icon_mask *m = &moonlit_icons[id][0]; /* 16 px */
+
+    return METRO_HEADER_CENTER_Y - m->ink_h / 2 - m->ink_top;
+}
 
 void metro_draw_battery(int x_right, int y)
 {
@@ -241,12 +278,27 @@ void metro_draw_header(const char *page_title)
      * izquierda del reloj, misma asimetría de color de M-073: play en
      * secundario (lo normal no grita), pausa en acento (es lo que uno
      * busca con la mirada cuando no se oye nada). Sin audio, nada. */
+    /* moonlit (D-068, maestro SS H/SS D.3): el candado a la IZQUIERDA
+     * del transporte, en TODA pantalla que dibuje barra -- el
+     * interruptor Hold del 6G no genera eventos (pmu_holdswitch_locked()
+     * es sondeo, se lee aqui en cada dibujo), y hasta ahora moonlit no
+     * lo reflejaba en ningun lado: se podia tener el aparato bloqueado
+     * sin una sola pista en pantalla. */
+    if (button_hold())
+        metro_widgets_draw_icon(MOONLIT_ICON_LOCK,
+                                 clock_x - 6 - 2 * METRO_WIDGETS_ICON_SIZE - 4,
+                                 header_icon_y(MOONLIT_ICON_LOCK),
+                                 /* secundario, no acento: el acento esta
+                                  * reservado a la pausa (M-073) -- el
+                                  * candado informa, no reclama. */
+                                 metro_color_secondary());
+
     if (status & AUDIO_STATUS_PAUSE)
         metro_widgets_draw_icon(MOONLIT_ICON_PAUSE, clock_x - 6 - METRO_WIDGETS_ICON_SIZE,
-                                METRO_HEADER_ICON_Y, metro_color_accent());
+                                header_icon_y(MOONLIT_ICON_PAUSE), metro_color_accent());
     else if (status & AUDIO_STATUS_PLAY)
         metro_widgets_draw_icon(MOONLIT_ICON_PLAY_ARROW, clock_x - 6 - METRO_WIDGETS_ICON_SIZE,
-                                METRO_HEADER_ICON_Y, metro_color_secondary());
+                                header_icon_y(MOONLIT_ICON_PLAY_ARROW), metro_color_secondary());
 
     metro_draw_battery(LCD_WIDTH - 4, METRO_HEADER_BATTERY_Y);
 }
@@ -435,7 +487,13 @@ void metro_draw_tile(int x, int y, int size, const char *label)
     if (!initial[0])
         initial[0] = ' ';
 
-    lcd_set_foreground(metro_color_accent());
+    /* moonlit (D-070, maestro SS F): el relleno de respaldo usa
+     * `primary_container`, NO el acento puro. El acento puro es del
+     * estado activo -- y el marco de seleccion de metro_draw_tiles() es
+     * justo eso. Mientras los dos usaron el mismo color, seleccionar un
+     * album sin caratula no se veia: el marco desaparecia dentro del
+     * relleno. */
+    lcd_set_foreground(moonlit_color(MROLE_PRIMARY_CONTAINER));
     lcd_fillrect(x, y, size, size);
 
     /* A blank label (metro_widgets_draw_empty_state()'s plain accent
@@ -447,7 +505,7 @@ void metro_draw_tile(int x, int y, int size, const char *label)
     {
         lcd_setfont(metro_font_id(MFONT_DISPLAY));
         lcd_getstringsize((const unsigned char *)initial, &w, &h);
-        lcd_set_foreground(metro_color_bg());
+        lcd_set_foreground(moonlit_color(MROLE_ON_PRIMARY_CONTAINER)); /* D-070 */
         lcd_set_drawmode(DRMODE_FG); /* M-051 -- see metro_draw_text() */
         lcd_putsxy(x + (size - w) / 2, y + (size - h) / 2, (const unsigned char *)initial);
     }
@@ -553,9 +611,18 @@ void metro_draw_tiles(const struct metro_pivot *pivot, int first, int sel,
         if (index == sel)
         {
             int b;
-            lcd_set_foreground(metro_color_accent());
+
+            /* moonlit (D-070, maestro SS F): 3 px de `primary` MAS un
+             * anillo interior de 1 px en `surface`. El anillo es lo que
+             * separa el marco de la imagen que hay debajo: sin el, una
+             * caratula clara y el acento se tocan y el marco se pierde
+             * en el borde de la propia caratula. */
+            lcd_set_foreground(moonlit_color(MROLE_PRIMARY));
             for (b = 0; b < 3; b++)
                 lcd_drawrect(x + b, y + b, METRO_TILE_SIZE - 2 * b, METRO_TILE_SIZE - 2 * b);
+
+            lcd_set_foreground(moonlit_color(MROLE_SURFACE));
+            lcd_drawrect(x + 3, y + 3, METRO_TILE_SIZE - 6, METRO_TILE_SIZE - 6);
         }
     }
 

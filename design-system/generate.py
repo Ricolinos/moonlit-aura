@@ -174,6 +174,22 @@ def generate_header(tokens):
     lines.append(f"#define MOONLIT_MOTION_MARQUEE_LOOP_GAP_PX {motion['marquee_loop_gap_px']}")
     lines.append("")
 
+    lines.append("/* D-068: altura de mayusculas por rol, medida sobre el glifo 'H'")
+    lines.append(" * del .fnt generado. CAP_TOP = filas en blanco sobre la mayuscula")
+    lines.append(" * dentro de la caja de la fuente; CAP_H = alto de la mayuscula.")
+    lines.append(" * Para centrar en `c`: y = c - CAP_H/2 - CAP_TOP. */")
+    for role_name, role in tokens["type_scale"].items():
+        if role_name == "comment":
+            continue
+        fnt = FONTS_OUT / font_filename(role_name, role)
+        if not fnt.exists():
+            die(f"falta {fnt} -- corre --fonts antes que --header (D-068)")
+        cap_top, cap_h = fnt_cap_box(fnt)
+        macro = role_name.upper()
+        lines.append(f"#define MOONLIT_FONT_{macro}_CAP_TOP {cap_top}")
+        lines.append(f"#define MOONLIT_FONT_{macro}_CAP_H {cap_h}")
+    lines.append("")
+
     color = tokens["color"]
     light_delta = elevation["light_edge_delta"]
     shadow_delta = elevation["shadow_edge_delta"]
@@ -254,6 +270,67 @@ FONT_SIZE_EXCEPTIONS = {
 }
 
 RB12_HEADER = struct.Struct("<4sHHHHiiiiii")
+
+# D-068 (maestro SS H): la barra de estado se alinea por la ALTURA DE
+# MAYUSCULAS del texto, no por font->height (que incluye el descendente
+# y hunde las mayusculas). Se mide sobre el glifo 'H' del propio .fnt,
+# mecanicamente, cada vez que se regenera el header -- nunca a ojo ni
+# con un numero copiado.
+#
+# Formato del bitmap (firmware/font.c): 4 bits por pixel cuando
+# depth != 0, fila-contigua, `width` pixeles por fila, nibble BAJO
+# primero, y el valor esta INVERTIDO -- 0 es tinta opaca, 15 es fondo
+# (lo confirma el volcado del glifo: leerlo sin invertir da una 'H'
+# en negativo). El desplazamiento del glifo sale de la tabla de
+# offsets, que empieza tras el bitmap ALINEADO a 16 o 32 bits segun
+# bits_size.
+def fnt_cap_box(path, ch="H"):
+    data = path.read_bytes()
+    (magic, maxwidth, height, ascent, depth, firstchar, defaultchar,
+     size, bits_size, noffset, nwidth) = RB12_HEADER.unpack(data[:RB12_HEADER.size])
+    if magic != b"RB12":
+        die(f"{path}: cabecera invalida")
+    if not depth:
+        die(f"{path}: se esperaba una fuente antialiaseada (depth != 0)")
+
+    long_off = bits_size >= 0xFFDB
+    off = RB12_HEADER.size + bits_size
+    off = (off + 3) & ~3 if long_off else (off + 1) & ~1
+    off_start = off
+    w_start = off + noffset * (4 if long_off else 2)
+    widths = data[w_start:w_start + nwidth]
+    if w_start + nwidth != len(data):
+        die(f"{path}: la tabla de anchos no termina donde el archivo "
+            f"({w_start + nwidth} vs {len(data)}) -- el desplazamiento no "
+            f"coincide con font.c")
+
+    idx = ord(ch) - firstchar
+    if idx < 0 or idx >= size or not widths[idx]:
+        die(f"{path}: no hay glifo '{ch}' para medir la altura de mayusculas")
+    if long_off:
+        goff = struct.unpack_from("<I", data, off_start + idx * 4)[0]
+    else:
+        goff = struct.unpack_from("<H", data, off_start + idx * 2)[0]
+
+    gw = widths[idx]
+    base = RB12_HEADER.size + goff
+    top = bot = None
+    for row in range(height):
+        ink = False
+        for col in range(gw):
+            n = row * gw + col
+            byte = data[base + n // 2]
+            nib = (byte & 0x0F) if (n % 2 == 0) else (byte >> 4)
+            if (15 - nib) > 0:
+                ink = True
+                break
+        if ink:
+            if top is None:
+                top = row
+            bot = row
+    if top is None:
+        die(f"{path}: el glifo '{ch}' salio sin tinta")
+    return top, bot - top + 1
 
 
 def ensure_convttf():
@@ -394,6 +471,32 @@ ICON_SUPERSAMPLE = 16
 # menos significa que el icono se binarizo en algun paso del pipeline.
 MIN_INK_TONES = 4
 
+# D-068 (maestro SS H): la caja de TINTA -- primera y ultima fila con
+# algun pixel de cobertura -- de una mascara de 8 bits fila-contigua. Es
+# lo que hay que centrar en la barra de estado: un Material Symbol de
+# 16 px dibuja ~12 px de tinta dentro de su celda, asi que centrar la
+# CELDA deja el simbolo desplazado respecto del texto y de la bateria.
+# Umbral > 60/255, EL MISMO que usa check_tones.py sobre una captura
+# (D-006). Que coincidan no es cosmetico: con el umbral en > 0 la
+# mascara cuenta filas con 1 % de cobertura que en pantalla no se ven, y
+# entonces el centro que calcula el firmware y el que mide la captura
+# discrepan medio pixel -- se detecto asi, con check_tones.py --align
+# fallando por 1.5 px sobre el candado.
+ICON_INK_THRESHOLD = 60
+
+
+def _ink_rows(data, w, h):
+    top = None
+    bot = None
+    for row in range(h):
+        if any(data[row * w + col] > ICON_INK_THRESHOLD for col in range(w)):
+            if top is None:
+                top = row
+            bot = row
+    if top is None:
+        return (0, 0)
+    return (top, bot - top + 1)
+
 
 def _rasterize_icon_alpha(svg_path, size_px):
     hi = size_px * ICON_SUPERSAMPLE
@@ -442,7 +545,8 @@ def generate_icons(tokens):
             rows.append((name, size_px, len(tones), ok))
             if not ok:
                 fail.append((name, size_px, len(tones)))
-            per_size.append((size_px, size_px, size_px, data))
+            per_size.append((size_px, size_px, size_px, data,
+                              _ink_rows(data, size_px, size_px)))
         entries.append((name, per_size))
 
     print(f"{'icono':<24} {'px':>4} {'tonos':>6}  ")
@@ -469,7 +573,7 @@ def generate_icons(tokens):
         "",
     ]
     for name, per_size in entries:
-        for size_px, w, h, data in per_size:
+        for size_px, w, h, data, _ink in per_size:
             arr_name = f"moonlit_icon_{name}_{size_px}_cov"
             lines.append(f"static const uint8_t {arr_name}[{w * h}] = {{")
             for y in range(h):
@@ -481,9 +585,9 @@ def generate_icons(tokens):
     lines.append(f"const struct moonlit_icon_mask moonlit_icons[MOONLIT_ICON_COUNT][MOONLIT_ICON_SIZE_COUNT] = {{")
     for name, per_size in entries:
         parts = []
-        for size_px, w, h, _data in per_size:
+        for size_px, w, h, _data, (ink_top, ink_h) in per_size:
             arr_name = f"moonlit_icon_{name}_{size_px}_cov"
-            parts.append(f"{{ {w}, {h}, {arr_name} }}")
+            parts.append(f"{{ {w}, {h}, {ink_top}, {ink_h}, {arr_name} }}")
         lines.append(f"    /* {name} */")
         lines.append(f"    {{ {', '.join(parts)} }},")
     lines.append("};")

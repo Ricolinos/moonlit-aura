@@ -570,3 +570,13 @@ Ver `DECISIONS.md` D-059 para el resto (`apps/metro/moonlit_master_art.{c,h}`,
 - `apps/SOURCES`: se agrega la entrada `metro/moonlit_marquee.c` —
   marquesina de texto largo (maestro §G), con el cálculo de
   desplazamiento host-testable. Comentario inline `moonlit (D-067)`.
+
+- `uisimulator/common/sim_tasks.c`: token **`HOLD`** en
+  `METRO_SIM_BUTTONS` (comentario inline `moonlit (D-069)`). El
+  interruptor Hold del iPod 6G **no es un botón** y no se puede postear
+  a la cola: es una variable que `button_hold()` sondea
+  (`hold_button_state`, la misma que conmuta la tecla `h` del
+  simulador). Sin este token, todo el comportamiento de bloqueo por Hold
+  quedaría verificado a mano y ninguna captura headless podría probarlo.
+  Mismo mecanismo que Metro M-104, portado tras leerlo de
+  `../Metro-Aura` (solo lectura).

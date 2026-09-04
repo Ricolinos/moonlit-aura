@@ -3203,3 +3203,100 @@ clave más el estado; bajo el techo D-043 de 8 574 076, margen
 **Pendiente de hardware**: que 5 000 ms de barrido se lean cómodos en el
 iPod con un título de 40 caracteres, y que el repintado a `HZ/20` de una
 marquesina no se note en la batería. Van a la lista de la ronda.
+
+## D-068 — La barra de estado se alinea por la caja de tinta, medida por el pipeline
+
+**El defecto** (maestro §H). El texto de 18 px de la barra iba en `y=4`:
+su caja de fuente ocupaba **4..22 dentro de una barra de 20 px** —tocaba
+el borde inferior y lo desbordaba en 3 px— y su altura de mayúsculas
+quedaba centrada en **y=14** en vez de en el eje de la barra, **y=10**.
+La batería y los íconos estaban a medio píxel; el texto, a cuatro.
+
+**La regla**: todo se centra en `alto/2` por su **caja de tinta**, no por
+su caja nominal. Y las tres medidas que eso necesita las produce el
+pipeline, no la mano:
+
+1. **Texto — altura de mayúsculas.** `generate.py --header` emite
+   `MOONLIT_FONT_<ROL>_CAP_TOP/_CAP_H` midiendo el glifo **`H` del propio
+   `.fnt`**. Decodificar ese bitmap tiene tres trampas, las tres
+   documentadas en el código: 4 bits por píxel fila-contigua, **nibble
+   bajo primero**, y el valor **invertido** (0 = tinta opaca, 15 =
+   fondo). Se descubrió volcando el glifo como arte ASCII: leído sin
+   invertir sale una 'H' en negativo. `text_y = 10 − CAP_H/2 − CAP_TOP`.
+2. **Íconos — caja de tinta de la máscara.** `generate.py --icons` emite
+   `ink_top`/`ink_h` por ícono y talla dentro de `struct
+   moonlit_icon_mask`. Hacía falta por ícono, no una constante: un
+   Material Symbol de 16 px dibuja entre 8 y 15 px de tinta según el
+   símbolo (`play_arrow` 4..11, `lock` 0..14), así que centrar la
+   **celda** no alinea nada.
+3. **Batería** — su cuerpo de 9 px ya **es** su caja de tinta.
+
+**El umbral de tinta tiene que ser el mismo en los dos lados, y no lo
+era.** La máscara contaba cualquier cobertura > 0; la captura,
+luminancia > 60/255. Con eso el candado salía medio píxel descuadrado y
+`check_tones.py --align` fallaba por 1.5 px — la herramienta tenía razón
+y el generador estaba midiendo otra cosa. El generador pasa a usar el
+mismo > 60/255.
+
+Y hubo que corregir el criterio de la herramienta también: "tinta" no es
+"píxel claro" sino **"píxel que se aparta del fondo de la barra"**. Un
+umbral absoluto de luminancia mide brillo — con el esquema `dawn` (fondo
+claro, tinta oscura) daría justo al revés, y con un ícono en secundario
+sobre `surface_container_lowest` dejaba fuera filas que sí se ven. El
+fondo se deduce de la propia captura (el color más repetido de la barra)
+y cuenta como tinta lo que se aparta de él más de 24 de luminancia.
+
+**`check_tones.py --align`** (modo nuevo): agrupa las columnas con tinta
+de la barra en elementos, mide la caja de tinta de cada uno y **falla**
+si sus centros difieren más de 1 px.
+
+| captura | dispersión | |
+|---|---|---|
+| `f3-canciones.png` (barra vieja) | **3.0 px** | FALLA |
+| `f4-barra-candado.png` (barra nueva) | **1.0 px** | OK |
+
+Que falle sobre una captura anterior es lo que demuestra que la
+herramienta mide algo. La captura vieja además enseña el otro síntoma:
+la tinta del texto llegaba a la fila **19**, la última de la barra.
+
+**Matiz que queda documentado en la propia herramienta**: el firmware
+centra por altura de **mayúsculas** y la herramienta mide **tinta**. En
+un título con acentos ("música") la tilde sube por encima de la
+mayúscula, así que la tinta queda medio píxel más arriba. Es esperado —
+la tolerancia de 1 px existe para eso, y no hay que "corregir" el código
+para que dé 0.0.
+
+**Ícono de candado en la barra** (§H, §D.2): a la izquierda del
+transporte, en **toda** pantalla con barra, leyendo `button_hold()` en
+cada dibujo — el interruptor Hold del 6G no genera eventos
+(`pmu_holdswitch_locked()` es sondeo). En **secundario**, no en acento:
+el acento está reservado a la pausa (M-073), y el candado informa, no
+reclama. Hasta ahora moonlit no lo reflejaba en ningún lado: se podía
+tener el aparato bloqueado sin una sola pista en pantalla.
+
+## D-070 — El acento puro es del estado activo; el respaldo usa su contenedor
+
+**El defecto** (maestro §F): `metro_draw_tile()` rellenaba el tile de
+respaldo con `metro_color_accent()` y `metro_draw_tiles()` dibujaba el
+marco de selección **con ese mismo color**. Seleccionar un álbum sin
+carátula no se veía: el marco desaparecía dentro del relleno.
+
+**Decisión**: el relleno de respaldo pasa a `primary_container` con la
+inicial en `on_primary_container` (los mismos roles que D-065 hornea en
+el monograma de Marea, así que un álbum sin carátula se ve igual en la
+cuadrícula y en Marea); el marco de selección se queda con `primary`
+puro, 3 px, **más un anillo interior de 1 px en `surface`**.
+
+El anillo no es adorno: separa el marco de la imagen que hay debajo.
+Se ve en `f4-tiles-con-arte.png`, que selecciona a propósito la fixture
+de contraste más difícil que existe en el repo —la carátula casi blanca
+de *Analog Dreams* (R2-F1/DD-2)—: sin el anillo, un borde claro sobre
+una carátula casi blanca se pierde en el borde de la propia carátula.
+
+**Verificación**: `f4-tiles-albumes.png` (tile de respaldo seleccionado,
+marco visible sobre el relleno) y `f4-tiles-con-arte.png` (marco visible
+sobre la carátula más pálida). Build target y simulador en 0 errores, 0
+warnings nuevos; 18 suites en verde; `.bss` **8 461 404**, sin cambio
+frente a D-067 (ninguna estática nueva: el ink box viaja en la tabla de
+íconos, que es `.rodata`), bajo el techo D-043 con **112 672 B** de
+margen.

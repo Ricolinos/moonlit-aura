@@ -74,6 +74,14 @@ enum moonlit_icon_id {
 struct moonlit_icon_mask {
     int width;
     int height;
+    /* moonlit (D-068, maestro SS H): caja de TINTA dentro de la celda --
+     * primera fila con cobertura y cuantas filas ocupa. Un Material
+     * Symbol de 16 px dibuja ~12 px de tinta centrados en su celda, asi
+     * que alinear la CELDA con el texto y la bateria deja el simbolo
+     * desplazado. La miden en generacion (design-system/generate.py
+     * --icons), nunca a ojo. */
+    int ink_top;
+    int ink_h;
     const uint8_t *cov;
 };
 

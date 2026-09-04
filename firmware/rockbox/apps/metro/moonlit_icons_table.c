@@ -1753,43 +1753,43 @@ static const uint8_t moonlit_icon_usb_40_cov[1600] = {
 
 const struct moonlit_icon_mask moonlit_icons[MOONLIT_ICON_COUNT][MOONLIT_ICON_SIZE_COUNT] = {
     /* play_arrow */
-    { { 16, 16, moonlit_icon_play_arrow_16_cov }, { 24, 24, moonlit_icon_play_arrow_24_cov }, { 40, 40, moonlit_icon_play_arrow_40_cov } },
+    { { 16, 16, 4, 8, moonlit_icon_play_arrow_16_cov }, { 24, 24, 6, 12, moonlit_icon_play_arrow_24_cov }, { 40, 40, 10, 20, moonlit_icon_play_arrow_40_cov } },
     /* pause */
-    { { 16, 16, moonlit_icon_pause_16_cov }, { 24, 24, moonlit_icon_pause_24_cov }, { 40, 40, moonlit_icon_pause_40_cov } },
+    { { 16, 16, 3, 10, moonlit_icon_pause_16_cov }, { 24, 24, 4, 16, moonlit_icon_pause_24_cov }, { 40, 40, 7, 26, moonlit_icon_pause_40_cov } },
     /* skip_next */
-    { { 16, 16, moonlit_icon_skip_next_16_cov }, { 24, 24, moonlit_icon_skip_next_24_cov }, { 40, 40, moonlit_icon_skip_next_40_cov } },
+    { { 16, 16, 4, 8, moonlit_icon_skip_next_16_cov }, { 24, 24, 6, 12, moonlit_icon_skip_next_24_cov }, { 40, 40, 10, 20, moonlit_icon_skip_next_40_cov } },
     /* skip_previous */
-    { { 16, 16, moonlit_icon_skip_previous_16_cov }, { 24, 24, moonlit_icon_skip_previous_24_cov }, { 40, 40, moonlit_icon_skip_previous_40_cov } },
+    { { 16, 16, 4, 8, moonlit_icon_skip_previous_16_cov }, { 24, 24, 6, 12, moonlit_icon_skip_previous_24_cov }, { 40, 40, 10, 20, moonlit_icon_skip_previous_40_cov } },
     /* repeat */
-    { { 16, 16, moonlit_icon_repeat_16_cov }, { 24, 24, moonlit_icon_repeat_24_cov }, { 40, 40, moonlit_icon_repeat_40_cov } },
+    { { 16, 16, 1, 14, moonlit_icon_repeat_16_cov }, { 24, 24, 2, 20, moonlit_icon_repeat_24_cov }, { 40, 40, 4, 32, moonlit_icon_repeat_40_cov } },
     /* shuffle */
-    { { 16, 16, moonlit_icon_shuffle_16_cov }, { 24, 24, moonlit_icon_shuffle_24_cov }, { 40, 40, moonlit_icon_shuffle_40_cov } },
+    { { 16, 16, 2, 12, moonlit_icon_shuffle_16_cov }, { 24, 24, 4, 16, moonlit_icon_shuffle_24_cov }, { 40, 40, 6, 28, moonlit_icon_shuffle_40_cov } },
     /* volume_up */
-    { { 16, 16, moonlit_icon_volume_up_16_cov }, { 24, 24, moonlit_icon_volume_up_24_cov }, { 40, 40, moonlit_icon_volume_up_40_cov } },
+    { { 16, 16, 2, 12, moonlit_icon_volume_up_16_cov }, { 24, 24, 3, 17, moonlit_icon_volume_up_24_cov }, { 40, 40, 6, 28, moonlit_icon_volume_up_40_cov } },
     /* favorite */
-    { { 16, 16, moonlit_icon_favorite_16_cov }, { 24, 24, moonlit_icon_favorite_24_cov }, { 40, 40, moonlit_icon_favorite_40_cov } },
+    { { 16, 16, 2, 12, moonlit_icon_favorite_16_cov }, { 24, 24, 2, 19, moonlit_icon_favorite_24_cov }, { 40, 40, 4, 30, moonlit_icon_favorite_40_cov } },
     /* sync */
-    { { 16, 16, moonlit_icon_sync_16_cov }, { 24, 24, moonlit_icon_sync_24_cov }, { 40, 40, moonlit_icon_sync_40_cov } },
+    { { 16, 16, 2, 12, moonlit_icon_sync_16_cov }, { 24, 24, 4, 16, moonlit_icon_sync_24_cov }, { 40, 40, 6, 28, moonlit_icon_sync_40_cov } },
     /* album */
-    { { 16, 16, moonlit_icon_album_16_cov }, { 24, 24, moonlit_icon_album_24_cov }, { 40, 40, moonlit_icon_album_40_cov } },
+    { { 16, 16, 1, 14, moonlit_icon_album_16_cov }, { 24, 24, 2, 20, moonlit_icon_album_24_cov }, { 40, 40, 3, 34, moonlit_icon_album_40_cov } },
     /* person */
-    { { 16, 16, moonlit_icon_person_16_cov }, { 24, 24, moonlit_icon_person_24_cov }, { 40, 40, moonlit_icon_person_40_cov } },
+    { { 16, 16, 2, 12, moonlit_icon_person_16_cov }, { 24, 24, 4, 16, moonlit_icon_person_24_cov }, { 40, 40, 6, 28, moonlit_icon_person_40_cov } },
     /* queue_music */
-    { { 16, 16, moonlit_icon_queue_music_16_cov }, { 24, 24, moonlit_icon_queue_music_24_cov }, { 40, 40, moonlit_icon_queue_music_40_cov } },
+    { { 16, 16, 4, 10, moonlit_icon_queue_music_16_cov }, { 24, 24, 6, 14, moonlit_icon_queue_music_24_cov }, { 40, 40, 10, 24, moonlit_icon_queue_music_40_cov } },
     /* photo */
-    { { 16, 16, moonlit_icon_photo_16_cov }, { 24, 24, moonlit_icon_photo_24_cov }, { 40, 40, moonlit_icon_photo_40_cov } },
+    { { 16, 16, 2, 12, moonlit_icon_photo_16_cov }, { 24, 24, 3, 18, moonlit_icon_photo_24_cov }, { 40, 40, 5, 30, moonlit_icon_photo_40_cov } },
     /* movie */
-    { { 16, 16, moonlit_icon_movie_16_cov }, { 24, 24, moonlit_icon_movie_24_cov }, { 40, 40, moonlit_icon_movie_40_cov } },
+    { { 16, 16, 2, 12, moonlit_icon_movie_16_cov }, { 24, 24, 4, 16, moonlit_icon_movie_24_cov }, { 40, 40, 6, 28, moonlit_icon_movie_40_cov } },
     /* settings */
-    { { 16, 16, moonlit_icon_settings_16_cov }, { 24, 24, moonlit_icon_settings_24_cov }, { 40, 40, moonlit_icon_settings_40_cov } },
+    { { 16, 16, 1, 14, moonlit_icon_settings_16_cov }, { 24, 24, 2, 20, moonlit_icon_settings_24_cov }, { 40, 40, 3, 34, moonlit_icon_settings_40_cov } },
     /* info */
-    { { 16, 16, moonlit_icon_info_16_cov }, { 24, 24, moonlit_icon_info_24_cov }, { 40, 40, moonlit_icon_info_40_cov } },
+    { { 16, 16, 1, 14, moonlit_icon_info_16_cov }, { 24, 24, 2, 20, moonlit_icon_info_24_cov }, { 40, 40, 3, 34, moonlit_icon_info_40_cov } },
     /* lock */
-    { { 16, 16, moonlit_icon_lock_16_cov }, { 24, 24, moonlit_icon_lock_24_cov }, { 40, 40, moonlit_icon_lock_40_cov } },
+    { { 16, 16, 0, 15, moonlit_icon_lock_16_cov }, { 24, 24, 1, 21, moonlit_icon_lock_24_cov }, { 40, 40, 1, 36, moonlit_icon_lock_40_cov } },
     /* battery_full */
-    { { 16, 16, moonlit_icon_battery_full_16_cov }, { 24, 24, moonlit_icon_battery_full_24_cov }, { 40, 40, moonlit_icon_battery_full_40_cov } },
+    { { 16, 16, 1, 14, moonlit_icon_battery_full_16_cov }, { 24, 24, 2, 20, moonlit_icon_battery_full_24_cov }, { 40, 40, 3, 34, moonlit_icon_battery_full_40_cov } },
     /* battery_charging_full */
-    { { 16, 16, moonlit_icon_battery_charging_full_16_cov }, { 24, 24, moonlit_icon_battery_charging_full_24_cov }, { 40, 40, moonlit_icon_battery_charging_full_40_cov } },
+    { { 16, 16, 1, 14, moonlit_icon_battery_charging_full_16_cov }, { 24, 24, 2, 20, moonlit_icon_battery_charging_full_24_cov }, { 40, 40, 3, 34, moonlit_icon_battery_charging_full_40_cov } },
     /* usb */
-    { { 16, 16, moonlit_icon_usb_16_cov }, { 24, 24, moonlit_icon_usb_24_cov }, { 40, 40, moonlit_icon_usb_40_cov } },
+    { { 16, 16, 2, 13, moonlit_icon_usb_16_cov }, { 24, 24, 2, 20, moonlit_icon_usb_24_cov }, { 40, 40, 4, 33, moonlit_icon_usb_40_cov } },
 };

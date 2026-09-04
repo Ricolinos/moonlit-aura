@@ -46,6 +46,25 @@
 #define MOONLIT_MOTION_MARQUEE_SCROLL_MS 5000
 #define MOONLIT_MOTION_MARQUEE_LOOP_GAP_PX 24
 
+/* D-068: altura de mayusculas por rol, medida sobre el glifo 'H'
+ * del .fnt generado. CAP_TOP = filas en blanco sobre la mayuscula
+ * dentro de la caja de la fuente; CAP_H = alto de la mayuscula.
+ * Para centrar en `c`: y = c - CAP_H/2 - CAP_TOP. */
+#define MOONLIT_FONT_DISPLAY_CAP_TOP 7
+#define MOONLIT_FONT_DISPLAY_CAP_H 26
+#define MOONLIT_FONT_TITLE_CAP_TOP 4
+#define MOONLIT_FONT_TITLE_CAP_H 19
+#define MOONLIT_FONT_HEADLINE_CAP_TOP 4
+#define MOONLIT_FONT_HEADLINE_CAP_H 14
+#define MOONLIT_FONT_LIST_CAP_TOP 5
+#define MOONLIT_FONT_LIST_CAP_H 12
+#define MOONLIT_FONT_LIST_SEL_CAP_TOP 5
+#define MOONLIT_FONT_LIST_SEL_CAP_H 12
+#define MOONLIT_FONT_BODY_CAP_TOP 4
+#define MOONLIT_FONT_BODY_CAP_H 11
+#define MOONLIT_FONT_LABEL_CAP_TOP 5
+#define MOONLIT_FONT_LABEL_CAP_H 10
+
 /* Esquema night -- 16 roles MD3 (D-028) */
 #define MOONLIT_NIGHT_PRIMARY LCD_RGBPACK(169, 199, 232)
 #define MOONLIT_NIGHT_PRIMARY_RGB24 0xA9C7E8

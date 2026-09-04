@@ -22,6 +22,24 @@ Uso:
       Luminancia relativa WCAG (la misma formula que
       design-system/generate.py --contrast). Falla si cualquiera de las
       dos comparaciones no se cumple.
+
+  check_tones.py --align <captura.png> [--bar-h 20] [--tol 1]
+      moonlit (D-068, maestro SS H). Mide la caja de TINTA de cada
+      elemento de la barra de estado sobre una captura del simulador y
+      exige que sus centros verticales coincidan dentro de --tol
+      pixeles. Un elemento = un grupo de columnas contiguas con tinta
+      dentro de la barra, separado del siguiente por al menos
+      --gap columnas en blanco (4 por defecto). Es la unica forma de
+      comprobar la alineacion sin mirarla: el ojo no distingue 1.5 px
+      de desfase, y era justo el error que tenia el texto (4 px).
+
+      OJO al comparar con el codigo: el firmware centra el texto por su
+      ALTURA DE MAYUSCULAS (D-068) y esta herramienta mide la caja de
+      TINTA. En un titulo con acentos ("musica") la tilde sube por
+      encima de la mayuscula, asi que la tinta queda medio pixel mas
+      arriba que la caja de mayusculas. Es esperado: no "corrijas" el
+      codigo para que la herramienta de 0.0 -- la tolerancia de 1 px
+      existe justo para eso.
 """
 import argparse
 import sys
@@ -87,6 +105,84 @@ def check_edge(image, row, x0, x1, interior_dx):
     return False
 
 
+INK_LUMA = 60  # D-006: > 60/255 cuenta como trazo visible
+
+# --align (D-068): "tinta" NO es "pixel claro" sino "pixel que se
+# distingue del fondo de la barra". Un umbral absoluto de luminancia
+# mide brillo, no marca: con el esquema `dawn` (fondo claro, tinta
+# oscura) daria justo al reves, y con un icono en secundario sobre
+# surface_container_lowest deja fuera filas que SI se ven. El fondo se
+# deduce de la propia captura -- el color mas repetido dentro de la
+# barra -- y cuenta como tinta lo que se aparta de el.
+ALIGN_INK_DELTA = 24
+
+
+def _luma(px):
+    r, g, b = px[:3]
+    return (r * 299 + g * 587 + b * 114) // 1000
+
+
+def cmd_align(image, bar_h, tol, gap, min_w):
+    """Caja de tinta de cada grupo de columnas con tinta dentro de la barra."""
+    from collections import Counter
+
+    w, h = image.size
+    px = image.convert("RGB").load()
+    bar_h = min(bar_h, h)
+
+    counts = Counter(px[x, y] for x in range(w) for y in range(bar_h))
+    bg = counts.most_common(1)[0][0]
+    bg_luma = _luma(bg)
+    print(f"  fondo de la barra {bg} (luma {bg_luma}), "
+          f"tinta = |luma - fondo| > {ALIGN_INK_DELTA}")
+
+    def is_ink(x, y):
+        return abs(_luma(px[x, y]) - bg_luma) > ALIGN_INK_DELTA
+
+    ink_col = []
+    for x in range(w):
+        ink_col.append(any(is_ink(x, y) for y in range(bar_h)))
+
+    groups = []
+    x = 0
+    while x < w:
+        if not ink_col[x]:
+            x += 1
+            continue
+        x0 = x
+        blanks = 0
+        while x < w and blanks < gap:
+            x += 1
+            if x < w and ink_col[x]:
+                blanks = 0
+            else:
+                blanks += 1
+        x1 = x - blanks
+        if x1 - x0 >= min_w:
+            groups.append((x0, x1))
+
+    if len(groups) < 2:
+        die(f"solo se detectaron {len(groups)} elemento(s) en la barra -- "
+            f"la captura no parece de una pantalla con barra de estado")
+
+    rows_of = []
+    print(f"== alineacion de la barra de estado (alto {bar_h} px, "
+          f"tolerancia +-{tol} px) ==")
+    for x0, x1 in groups:
+        rows = [y for y in range(bar_h)
+                if any(is_ink(x, y) for x in range(x0, x1))]
+        top, bot = rows[0], rows[-1]
+        center = (top + bot) / 2.0
+        rows_of.append(center)
+        print(f"  x {x0:>3}..{x1:<3}  tinta y {top:>2}..{bot:<2}  centro {center:>5.1f}")
+
+    spread = max(rows_of) - min(rows_of)
+    print(f"  dispersion de centros: {spread:.1f} px")
+    if spread > tol:
+        die(f"los centros de la barra difieren {spread:.1f} px (tope {tol})")
+    print("check_tones: la barra esta alineada.")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("image")
@@ -99,6 +195,16 @@ def main():
     parser.add_argument("--row", type=int, help="--edge: fila Y a muestrear")
     parser.add_argument("--x0", type=int, help="--edge: columna del borde izquierdo/superior (EDGE_LIGHT)")
     parser.add_argument("--x1", type=int, help="--edge: columna del borde derecho/inferior (EDGE_SHADOW)")
+    parser.add_argument("--align", action="store_true",
+                         help="mide la alineacion vertical de la barra de estado (D-068)")
+    parser.add_argument("--bar-h", type=int, default=20,
+                         help="--align: alto de la barra en px (20)")
+    parser.add_argument("--tol", type=float, default=1.0,
+                         help="--align: dispersion maxima de centros en px (1)")
+    parser.add_argument("--gap", type=int, default=4,
+                         help="--align: columnas en blanco que separan dos elementos (4)")
+    parser.add_argument("--min-w", type=int, default=3,
+                         help="--align: ancho minimo de un elemento en px (3)")
     parser.add_argument("--interior-dx", type=int, default=12,
                          help="--edge: distancia desde cada borde hacia el centro para el pixel 'interior' (default 12)")
     args = parser.parse_args()
@@ -116,6 +222,10 @@ def main():
         ok = check_edge(img, args.row, args.x0, args.x1, args.interior_dx)
         if not ok:
             sys.exit(1)
+        return
+
+    if args.align:
+        cmd_align(img, args.bar_h, args.tol, args.gap, args.min_w)
         return
 
     region = None

@@ -47,6 +47,8 @@
  *   METRO_SIM_BUTTONS=SELECT,MENU,SCROLL_FWD,... -> inyecta esta secuencia
  *                                   de botones (uno de: SELECT, MENU,
  *                                   SCROLL_FWD, SCROLL_BACK, PLAY, LEFT,
+ *                                   HOLD (conmuta el interruptor Hold,
+ *                                   moonlit D-069),
  *                                   RIGHT) directamente en la cola de
  *                                   botones antes de tomar el dump.
  *                                   WAIT pausa ~1s sin postear boton;
@@ -98,6 +100,13 @@ static long autodump_settle_ticks = 0;
  * F9-shutdown.png and any future verification of code that reacts to
  * SYS_POWEROFF. */
 #define METRO_INJECT_POWEROFF_CODE (-3L)
+/* Token "HOLD" en METRO_SIM_BUTTONS -- moonlit (D-069), mismo mecanismo
+ * que Metro M-104: el interruptor Hold del 6G NO es un boton y no se
+ * puede postear a la cola; es una variable que button_hold() sondea
+ * (hold_button_state, la misma que conmuta la tecla `h` del simulador).
+ * Sin este token, todo el comportamiento de bloqueo por Hold quedaria
+ * "verificado a mano" y ninguna captura headless podria probarlo. */
+#define METRO_INJECT_HOLD_CODE     (-4L)
 
 static long inject_codes[METRO_MAX_INJECT_BUTTONS];
 static int inject_count = 0;
@@ -117,6 +126,7 @@ static long aura_button_name_to_code(const char *name)
     if (!strcmp(name, "WAIT"))        return METRO_INJECT_WAIT_CODE;
     if (!strcmp(name, "USB_INSERT"))  return METRO_INJECT_USB_CODE;
     if (!strcmp(name, "POWEROFF"))    return METRO_INJECT_POWEROFF_CODE;
+    if (!strcmp(name, "HOLD"))        return METRO_INJECT_HOLD_CODE;
     return BUTTON_NONE;
 }
 
@@ -204,6 +214,20 @@ void sim_thread(void)
             else if (inject_codes[inject_pos] == METRO_INJECT_POWEROFF_CODE)
             {
                 queue_broadcast(SYS_POWEROFF, 0);
+                inject_pos++;
+                inject_next_tick = current_tick + METRO_INJECT_WAIT_TICKS;
+                if (inject_pos == inject_count && autodump_settle_ticks >= 0)
+                {
+                    autodump_pending = true;
+                    autodump_tick = current_tick + METRO_INJECT_WAIT_TICKS + autodump_settle_ticks;
+                }
+            }
+            else if (inject_codes[inject_pos] == METRO_INJECT_HOLD_CODE)
+            {
+                /* moonlit (D-069): conmuta el interruptor Hold, no
+                 * postea nada -- ver METRO_INJECT_HOLD_CODE. */
+                extern bool hold_button_state;
+                hold_button_state = !hold_button_state;
                 inject_pos++;
                 inject_next_tick = current_tick + METRO_INJECT_WAIT_TICKS;
                 if (inject_pos == inject_count && autodump_settle_ticks >= 0)
