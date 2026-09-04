@@ -3079,6 +3079,65 @@ propósito, para que sirva también de monograma (D-065). En el simulador:
   buffer justo (nunca corta a mitad de secuencia) y la coherencia de la
   tabla.
 
+### D-066, addendum — la fuente de puntuación aparte: medida, y por qué NO se implementa en dos roles
+
+La supervisora pidió explorar la única variante que respeta el formato
+RB12 y que el dueño pidió literalmente ("construirlos desde la fuente
+correcta"): un `.fnt` **extra por rol** con el rango contiguo
+**8208–8482** (U+2010–U+2122), dibujado por tramos solo cuando una
+cadena trae un codepoint de ese bloque. Criterio escrito de antemano:
+implementar si dos roles caben en ≤ 25 KB de RAM y ≤ 2 ranuras.
+
+**Medido con `convttf` de verdad, los siete roles:**
+
+| rol | archivo | `size` | tablas |
+|---|---|---|---|
+| display 40 | 13 242 B | 272 | 816 B |
+| title 28 | 7 468 B | 272 | 816 B |
+| headline 22 | 4 570 B | 272 | 816 B |
+| list 20 | 7 527 B | 275 | 825 B |
+| list_sel 20 | 7 857 B | 275 | 825 B |
+| body 18 | 5 949 B | 275 | 825 B |
+| label 18 | 6 131 B | 275 | 825 B |
+| **7 roles** | **52 744 B** | | **5 748 B** |
+
+Los dos roles del criterio (headline 22 + list 20): **12 097 B en disco,
+1 641 B de tablas, 2 ranuras**. El criterio **se cumple con holgura** —
+1.6 KB contra un tope de 25 KB.
+
+**Y aun así no se implementa así, por dos hechos que el criterio no
+tenía delante:**
+
+1. **La inconsistencia no es hipotética, es de una sola pantalla.**
+   "Ahora suena" dibuja el álbum en `MFONT_LIST` (20) y el título en
+   `MFONT_TITLE` (28). Con los dos roles del criterio, el álbum saldría
+   con comilla curva y el título del mismo disco con comilla recta,
+   **uno debajo del otro**. Eso es peor que la transliteración uniforme:
+   parece un error de codificación, no una decisión.
+2. **La versión uniforme no cabe en las ranuras.** `MAXUSERFONTS` = 12
+   (`firmware/export/font.h:51`) y moonlit ya carga 7. Los seis roles
+   que muestran metadatos (todos menos `display`, que solo dibuja
+   nombres de pivote) serían 13; los siete, 14. Para que sea uniforme
+   hay que subir `MAXUSERFONTS` a 16 — un cambio en un header de Rockbox
+   que cuesta **16 B** de `.bss` (`buflib_allocations[MAXFONTS]`, 4 B
+   por ranura) y su entrada en `MODIFICATIONS.md`.
+
+**Estado: medido y NO implementado en esta ronda.** La versión que vale
+la pena es la uniforme (seis roles + `MAXUSERFONTS` a 16: ~44 KB de
+disco, ~4.9 KB de tablas, 16 B de `.bss`), y su costo real no está en
+esos números sino en el **dibujo por tramos dentro de
+`metro_draw_text()`**: partir la cadena en tramos por bloque de
+codepoint, avanzar la x por el ancho medido de cada tramo, y que todo
+eso siga cuadrando con el viewport de recorte, con la medición de la
+marquesina (D-067) y con la transliteración como respaldo. Es el camino
+de texto más caliente del firmware y un error ahí se ve en todas las
+pantallas a la vez.
+
+La transliteración ya cierra el **defecto reportado** (el dueño veía el
+carácter de reemplazo). Lo que queda es estético: `'` en vez de `’`. Se
+deja como decisión propia para una ronda siguiente, con los números ya
+hechos y el criterio claro: **uniforme o nada**.
+
 ## D-067 — Marquesina: el texto que no cabe se mueve, y solo ese
 
 **Referencia** (maestro §G, `aura_patterns.c`/`aura_marquee.c` leídos de
