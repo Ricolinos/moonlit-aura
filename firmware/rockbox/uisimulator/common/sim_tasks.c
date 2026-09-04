@@ -53,7 +53,12 @@
  *                                   botones antes de tomar el dump.
  *                                   WAIT pausa ~1s sin postear boton;
  *                                   USB_INSERT llama sim_trigger_usb(true)
- *                                   (M-039, F9) en vez de un boton
+ *                                   (M-039, F9) en vez de un boton;
+ *                                   sufijo "+HOLD" en cualquiera de los
+ *                                   de arriba (p.ej. SCROLL_FWD+HOLD) ->
+ *                                   pulsacion sostenida, postea REPEAT
+ *                                   antes del REL (D-082, portado de
+ *                                   Metro M-101)
  * Ver firmware/tools/sim_screenshot.sh */
 #include <stdlib.h>
 #include <string.h>
@@ -107,11 +112,28 @@ static long autodump_settle_ticks = 0;
  * Sin este token, todo el comportamiento de bloqueo por Hold quedaria
  * "verificado a mano" y ninguna captura headless podria probarlo. */
 #define METRO_INJECT_HOLD_CODE     (-4L)
+/* Sufijo "+HOLD" en cualquier nombre de boton de METRO_SIM_BUTTONS
+ * (p.ej. "SCROLL_FWD+HOLD") -- moonlit (D-082), portado de Metro
+ * M-101 (../Metro-Aura, solo lectura). El injector solo sabia hacer
+ * press-then-release, asi que ningun gesto de "boton sostenido hasta
+ * pasar el umbral de repeticion" (el caso real que dispara
+ * BUTTON_REPEAT en el driver del 6G -- button.c + button-clickwheel.c)
+ * se podia reproducir de forma headless; era la limitacion documentada
+ * en D-082 para el bug M-109 del visor de fotos. Con el sufijo la
+ * secuencia posteada es press -> BUTTON_REPEAT -> BUTTON_REL, exactamente
+ * lo que el driver produce al pasar ese umbral: el REL posterior ya no
+ * casa con el mapeo corto porque su prebutton exige que el ultimo boton
+ * posteado haya sido el codigo a secas. Herramienta de pruebas, solo
+ * compila en el simulador, sin impacto de hardware. */
+#define METRO_INJECT_HOLD_SUFFIX   "+HOLD"
 
 static long inject_codes[METRO_MAX_INJECT_BUTTONS];
+static bool inject_hold[METRO_MAX_INJECT_BUTTONS];
 static int inject_count = 0;
 static int inject_pos = 0;
-static bool inject_release_pending = false;
+/* 0 = falta postear la pulsacion, 1 = falta el REPEAT (solo si la
+ * entrada trae el sufijo +HOLD), 2 = falta el REL. */
+static int inject_phase = 0;
 static long inject_next_tick = 0;
 
 static long aura_button_name_to_code(const char *name)
@@ -139,9 +161,22 @@ static void aura_parse_inject_buttons(const char *spec)
     tok = strtok_r(buf, ",", &saveptr);
     while (tok && inject_count < METRO_MAX_INJECT_BUTTONS)
     {
-        long code = aura_button_name_to_code(tok);
+        /* moonlit (D-082, portado de Metro M-101): "<BOTON>+HOLD" ->
+         * pulsacion sostenida. */
+        size_t tlen = strlen(tok);
+        size_t slen = sizeof(METRO_INJECT_HOLD_SUFFIX) - 1;
+        bool hold = (tlen > slen &&
+                     !strcmp(tok + tlen - slen, METRO_INJECT_HOLD_SUFFIX));
+        long code;
+
+        if (hold)
+            tok[tlen - slen] = '\0';
+        code = aura_button_name_to_code(tok);
         if (code != BUTTON_NONE)
+        {
+            inject_hold[inject_count] = hold && code > 0;
             inject_codes[inject_count++] = code;
+        }
         tok = strtok_r(NULL, ",", &saveptr);
     }
 }
@@ -236,16 +271,25 @@ void sim_thread(void)
                     autodump_tick = current_tick + METRO_INJECT_WAIT_TICKS + autodump_settle_ticks;
                 }
             }
-            else if (!inject_release_pending)
+            else if (inject_phase == 0)
             {
                 button_queue_post(inject_codes[inject_pos], 0);
-                inject_release_pending = true;
+                inject_phase = inject_hold[inject_pos] ? 1 : 2;
+                inject_next_tick = current_tick + METRO_INJECT_RELEASE_GAP;
+            }
+            else if (inject_phase == 1)
+            {
+                /* moonlit (D-082, portado de Metro M-101): el REPEAT
+                 * que el driver postearia al pasar el umbral de
+                 * repeticion de una pulsacion sostenida. */
+                button_queue_post(inject_codes[inject_pos] | BUTTON_REPEAT, 0);
+                inject_phase = 2;
                 inject_next_tick = current_tick + METRO_INJECT_RELEASE_GAP;
             }
             else
             {
                 button_queue_post(inject_codes[inject_pos] | BUTTON_REL, 0);
-                inject_release_pending = false;
+                inject_phase = 0;
                 inject_pos++;
                 inject_next_tick = current_tick + METRO_INJECT_PRESS_GAP;
 

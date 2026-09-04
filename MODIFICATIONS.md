@@ -634,3 +634,14 @@ Ver `DECISIONS.md` D-059 para el resto (`apps/metro/moonlit_master_art.{c,h}`,
 - `apps/SOURCES`: se agrega la entrada `metro/moonlit_shared_settings.c`
   — módulo puro para `/.aura/settings.cfg` (contrato v19), comentario
   inline `moonlit (D-079)`.
+
+- `uisimulator/common/sim_tasks.c`: sufijo **`+HOLD`** en cualquier
+  nombre de botón de `METRO_SIM_BUTTONS` (p.ej. `SCROLL_FWD+HOLD`),
+  comentario inline `moonlit (D-082)`. El injector solo sabía hacer
+  press-then-release; sin esto no había forma headless de reproducir
+  una pulsación sostenida hasta pasar el umbral de repetición del
+  driver (300 ms, `BUTTON_REPEAT`) — la limitación exacta que dejó sin
+  repro automatizado el bug M-109 del visor de fotos. Con el sufijo la
+  secuencia posteada es press → `BUTTON_REPEAT` → `BUTTON_REL`, lo que
+  el driver produce de verdad. Mismo mecanismo que Metro M-101, portado
+  tras leerlo de `../Metro-Aura` (solo lectura).

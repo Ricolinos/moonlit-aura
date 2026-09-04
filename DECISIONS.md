@@ -4455,23 +4455,40 @@ no encuentra el código con `REPEAT` puesto y, como la tabla termina en
 `MACT_NONE` y se descartaba en silencio: un giro continuo solo avanzaba
 una foto, la del primer evento, hasta soltar la rueda y volver a girar.
 
-**Diagnóstico dinámico, limitación anotada.** El maestro pide reproducir
-con `SCROLL_FWD×5` sin `WAIT` y demostrar la causa antes de tocar nada.
-Se intentó: los tokens de inyección de `uisimulator/common/sim_tasks.c`
-generan un ciclo PRESS+REL discreto por cada `SCROLL_FWD` (confirmado
-viendo `s_index` avanzar en las cinco, incluso ANTES de agregar la
-fila) -- no sintetizan un `BUTTON_REPEAT` de verdad, que depende de que
-el mismo código se siga reportando entre sondeos sin soltarse
-(`REPEAT_START`). El vocabulario de tokens actual no tiene un "hold"
-capaz de disparar esa condición; Metro documentó haber necesitado un
-script aparte para la suya. Se deja anotado en vez de fingir una
-reproducción que el mecanismo disponible no puede dar: la corrección
-se basa en la comparación de código contra las CUATRO tablas hermanas
-que ya tienen la fila y funcionan en producción, más la verificación
-completa del mecanismo de debounce nuevo (abajo), no en un MD5 de un
-burst simulado. Anotado para quien retome `sim_tasks.c`: agregar un
-token de "hold" real (mantener `BUTTON_REPEAT` puesto varias vueltas
-seguidas) cerraría este hueco de diagnóstico para la próxima vez.
+**Diagnóstico dinámico, reproducido.** El intento inicial con
+`SCROLL_FWD×5` sin `WAIT` no sirvió: los tokens de inyección de
+`uisimulator/common/sim_tasks.c` generaban un ciclo PRESS+REL discreto
+por cada `SCROLL_FWD` -- no sintetizaban un `BUTTON_REPEAT` de verdad,
+que depende de que el mismo código se siga reportando entre sondeos sin
+soltarse (`REPEAT_START`, 300 ms). Se cerró el hueco portando el
+mecanismo que Metro ya tenía para esto (M-101, `../Metro-Aura`, solo
+lectura): un sufijo `+HOLD` sobre cualquier botón de `METRO_SIM_BUTTONS`
+(p.ej. `SCROLL_FWD+HOLD`) hace que el injector postee press ->
+`BUTTON_REPEAT` -> release en vez de solo press+release -- exactamente
+la secuencia que produce el driver real al pasar el umbral. Portado a
+la arquitectura propia de `sim_tasks.c` (`inject_phase` de 3 estados en
+vez del `inject_release_pending` booleano que había antes, `inject_hold[]`
+paralelo a `inject_codes[]`); comentario inline `moonlit (D-082)`,
+entrada nueva en `MODIFICATIONS.md`.
+
+Con el token, la reproducción real: desde el arranque, `SCROLL_FWD,
+SCROLL_FWD, SELECT, SELECT` entra al visor en `beach.jpg` (índice 0 de
+"Todas"); una vez asentado, un solo `SCROLL_FWD+HOLD` es el burst a
+probar. **Revirtiendo solo las dos filas REPEAT** (comentadas
+temporalmente, reconstruido, sin tocar nada más): el burst deja el
+visor en `diagram.jpg`, **"2 / 16"** -- únicamente el press inicial
+cuenta; el REPEAT se descarta en silencio, la rueda "sostenida" se
+comporta como una sola pulsada. **Con la fila restaurada** (mismo
+burst, mismo build salvo esa línea): el visor llega a `dreamscape.jpg`,
+**"3 / 16"** -- press + REPEAT cuentan los dos, que es el
+comportamiento correcto de un giro continuo. Capturas:
+`f4-03-repro-m109-sin-repeat.png` (base, bug reproducido) y
+`f4-04-repro-m109-con-repeat.png` (con la fila, corregido) en
+`docs/screenshots/ajustes-2/`. Mismo criterio que usó Metro para cerrar
+M-109: comparar el destino alcanzado por el mismo burst con y sin la
+fila, no un MD5 (aquí más simple de leer: el nombre de archivo y el
+contador "n / total" que el propio `draw_preview_caption()` ya pinta
+durante el scrub bastan como evidencia, sin instrumentación aparte).
 
 **Decisión — la fila, más el debounce del maestro §C.2, portado desde
 Metro adaptado a la arquitectura propia.** `metro_keymap.c`:
@@ -4539,6 +4556,12 @@ en `docs/screenshots/ajustes-2/`: `f4-01-visor-scrubbing.png` (a los
 maestra de 80 px, "dreamscape.jpg" y "3 / 16" sobre la franja opaca al
 pie, sin decodificar nada), `f4-02-visor-asentado.png` (mismo destino,
 500 ms después -- la foto completa decodificada, pantalla completa,
-sin la franja de leyenda).
+sin la franja de leyenda), `f4-03-repro-m109-sin-repeat.png` /
+`f4-04-repro-m109-con-repeat.png` (reproducción del bug M-109 y su
+cierre, ver diagnóstico dinámico arriba).
+
+Suite de host completa tras el puerto del sufijo `+HOLD` a
+`sim_tasks.c`: 20 suites, **0 fallos** (ninguna de las nuevas líneas es
+host-testable -- viven en el simulador, guardadas por `SIMULATOR`).
 
 **PARADA 4 — Fase 4 cerrada.** Sigue Fase 5 (cierre de la ronda).
