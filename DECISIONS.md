@@ -3534,3 +3534,125 @@ legales, estáticas a propósito y no en la pila —el tope de marco de
 `stack_report.py`—, más el presupuesto de la rejilla), bajo el techo
 D-043 de 8 574 076 con **106 464 B** de margen; `stack_report.py` OK,
 5 528 B (45.0 %).
+
+## D-073 — El bootloader deja de arrancar en negro, y la marca no salta
+
+**Encargo**: maestro §B. Desde D-050 el **firmware** pinta el creciente
+desde su primer cuadro, pero el **bootloader** seguía arrancando en
+negro absoluto (`verbose = false`). Es ~1 s de pantalla vacía y, sobre
+todo, el bootloader es la pieza que se flashea en NOR y la única que
+corre **antes de que exista un sistema de archivos**: el único sitio
+donde se puede citar el origen del código sin depender del disco.
+
+**La pantalla**: el creciente centrado en los dos ejes + dos leyendas
+`FONT_SYSFIXED` en `on_surface_variant`, la última a 14 px del borde
+inferior, interlineado 12: `moonlit - arranque <rbversion>` y
+`Basado en Rockbox - GPL v2 - rockbox.org`. La versión es la del
+**bootloader**, que es lo único que él conoce. Sin retardo artificial.
+
+**Que la marca no salte no es un offset copiado a mano.**
+`generate.py --bootloader-crop` calcula dónde cae la tinta del creciente
+en pantalla cuando lo dibuja el firmware —centro del lienzo de 320×98 en
+la pantalla, más la posición del creciente en el lienzo, más la caja de
+tinta dentro del creciente: **(134, 94)**— y **resuelve** los márgenes
+del recorte para que el centrado con **división entera** del bootloader
+(`(LCD_WIDTH - crop_w) / 2`) caiga en ese mismo píxel. Después
+recalcula ese centrado y **aborta antes de escribir el archivo** si no
+coincide. Si alguien cambia el tamaño del creciente o del lienzo, esto
+falla en generación en vez de dejar una marca que salta.
+
+**El solver es el de Metro (M-107), no el de Aura (D-347), y era
+necesario.** Aura ensancha el margen lejano 0 o 1 px con piso de 4;
+Metro busca el **par más simétrico** con piso 2. Con el creciente el de
+Aura habría abortado: la caja de tinta mide **45×52** dentro de un
+cuadro de 72 y no está centrada en él —una luna es asimétrica por
+definición—, así que el objetivo (134) no es el centro de pantalla para
+45 px de tinta (137). El par mínimo posible es **izq 2 / der 8**
+(asimetría 6, y no hay ninguno mejor: comprobado recorriendo el espacio
+de soluciones). En vertical sale simétrico, 2/2.
+
+Resultado: `bootwordmark.55x56x16.bmp`, **9 462 B** — muy por debajo del
+presupuesto de 32 KB de bitmap que fija §B.1.
+
+**Tamaño del bootloader**: 95 592 → **102 024 B**. `MOVE_AREA`
+(`IRAM1_SIZE - IM3HDR_SZ` = 0x1F800 = 129 024 B) queda al **79.1 %**,
+con **27 000 B libres**. Bajo el tope de 150 KB de §B.1.
+
+**Lo que NO cambia**: `verbose` sigue en `false`;
+`error()`/`fatal_error()`, la batería crítica y el modo USB del
+bootloader escriben igual que siempre — `draw_boot_screen()` restaura el
+primer plano a blanco antes de volver, para no teñir esos mensajes.
+
+**`MODIFICATIONS.md`**: deja de ser cierto que «nada en `bootloader/`
+(BOOT-1 intacto)», como decía la entrada de D-050. Anotado explícitamente.
+
+**Verificación**: `build_target.sh --bootloader` enlaza en **0 errores,
+0 warnings**; maqueta de aprobación en
+`docs/screenshots/ronda-pulido/bootloader-maqueta.png`, dibujada con los
+**glifos reales de sysfont** leídos de `fonts/08-Schumacher-Clean.bdf` —
+una maqueta con una fuente parecida sería justo lo que no sirve: lo que
+se aprueba tiene que ser lo que se va a ver. El simulador **no** ejecuta
+el bootloader, así que la pantalla real queda para la lista de hardware
+(y es lo que hay que mirar antes de flashear).
+
+---
+
+# REANUDAR (2026-09-04 05:40) — dónde se quedó la ronda "pulido"
+
+Pausa por cuota, pedida por la sesión supervisora. El árbol queda
+**limpio y en verde**: `build_target.sh` (firmware + bootloader) exit 0
+con 0 warnings nuevos, 18 suites host en verde, `.bss` **8 467 612**
+bajo el techo D-043 (margen **106 464 B**), `stack_report.py` OK.
+
+**Cerrado**: Fase 0 (D-061) · Fase 1 (D-062 con dos addenda, D-063,
+D-064) · Fase 2 (D-065) · Fase 3 (D-066 con addendum, D-067 con
+addendum) · Fase 4 (D-068, D-069, D-070) · Fase 5 (D-071 con addendum de
+replaygain, D-072) · **Fase 6 (D-073), completa**.
+
+**Lo que queda, en orden:**
+
+1. **Fase 7 — cierre.** No empezada. Falta:
+   - `package_dist.sh` **sin** `--release-tag`, comprobando que
+     `stack_report.py` corre en verde dentro de él.
+   - Reproducibilidad: la nota de Aura D-348 dice que la regla
+     `$(DEPFILE) dep:` de `tools/root.make` no tiene prerrequisitos, así
+     que `make.dep` nunca se refresca; estándar de los tres repos:
+     **siempre `make dep` antes de `make`**, y con `--release-tag`
+     borrar y reconfigurar el directorio de build. **Pendiente de
+     aplicar en `package_dist.sh`.** (El build limpio de este repo ya se
+     verificó en el addendum 2 de D-062: limpio e incremental dan
+     `text`/`data`/`bss` idénticos y `rockbox.bin` difiere solo en los
+     22 bytes de `RBVERSION`.)
+   - Sección **"Lista de verificación en hardware — ronda pulido"** en
+     este archivo, juntando los pendientes ya anotados en cada decisión:
+     pila real y marca de agua (D-062), pantalla USB tras apagar los
+     skins (D-062 addendum), purga en un disco con miles de entradas
+     (D-063), SELECT sostenido (D-064), 60 cuadros de Marea contra el
+     techo de 33 ms y que el peor caso no cambió (D-065), barrido de
+     marquesina y su costo en batería (D-067), alineación de la barra en
+     el panel real (D-068), rebotes del interruptor Hold y
+     retroiluminación con la pantalla en reposo (D-069), **autonomía en
+     reposo con el bloqueo desactivado vs. activado** (aviso de la
+     supervisora, ver abajo), y la pantalla real del bootloader antes de
+     flashear (D-073).
+   - Tag sugerido `v0.2.0` — **el release lo dispara el dueño**, esta
+     sesión no hace tag ni release.
+
+2. **Aviso de la supervisora aún sin aplicar** (llegó durante la Fase 6):
+   el único costo conocido del bloqueo por Hold es el sondeo con la
+   pantalla dormida. Regla de los tres repos: con `!lcd_active()` y el
+   bloqueo **no** armado **no se sondea** (el ícono se redibuja al
+   despertar); con el bloqueo armado sí (`hold_since` lo necesita).
+   **Falta revisar qué hace el bucle de `metro_main.c` con la pantalla
+   dormida** y dejarlo escrito en D-069 o en la lista de hardware.
+
+3. **Fase 8 — fuente de puntuación uniforme (D-074)**, decidida por la
+   supervisora tras el addendum de D-066, y **solo si el resto de la
+   ronda está cerrado y en verde**: seis roles con `.fnt` de puntuación
+   aparte (rango 8208–8482), `MAXUSERFONTS` 12→16 en `firmware/export/font.h`
+   (marca `moonlit` + `MODIFICATIONS.md`), dibujo por tramos en
+   `metro_draw_text()` con el partidor como módulo puro y test host, y
+   `metro_draw_text_width()` coherente con el dibujo. Números ya medidos
+   en el addendum de D-066 (~44 KB de disco, ~4.9 KB de tablas, 16 B de
+   `.bss`). Si no cabe en la sesión, queda como primer ítem de la ronda
+   siguiente **con esos números**.

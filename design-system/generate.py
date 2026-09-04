@@ -810,6 +810,203 @@ def generate_bootlogo(tokens):
     print(f"==> {BOOTLOGO_OUT.relative_to(ROOT.parent)}; reporte en {BOOTLOGO_TONES_OUT.relative_to(ROOT.parent)}")
 
 
+# --- D-073: recorte del creciente para el bootloader ------------------
+#
+# El bootloader corre desde IRAM y no puede cargar un lienzo de 320x98
+# (BOOTLOGO_W x BOOTLOGO_H): lo que se compila en el es SOLO la caja de
+# tinta del creciente mas unos margenes. Pero el recorte tiene que caer
+# EN EL MISMO PIXEL en que show_logo_boot() (apps/main.c, D-050) pinta el
+# creciente cuando el firmware toma el control -- si no, la marca da un
+# salto en el handoff, que es justo lo que esta pantalla existe para
+# evitar.
+#
+# La cuenta, y por que hace falta un solver:
+#   - el firmware centra el lienzo de 320x98 en la pantalla y dentro de
+#     el el creciente esta en (x0, y0); la tinta empieza en (ink_x, ink_y)
+#     dentro del creciente. Objetivo = suma de las tres cosas.
+#   - el bootloader centra el RECORTE con division ENTERA:
+#     (LCD_W - crop_w) / 2. Segun la paridad de crop_w eso cae medio
+#     pixel a un lado, asi que no hay un solo par de margenes que sirva:
+#     hay que buscarlo.
+#
+# Aura (D-347) ensancha el margen lejano 0 o 1 px con piso de 4. Metro
+# (M-107) encontro que ese solver ABORTA con una marca cuya caja de
+# tinta deja aire asimetrico, y lo cambio por buscar el par de margenes
+# mas SIMETRICO con piso 2. Se usa el de Metro: el creciente tiene
+# justamente esa forma (una luna es asimetrica por definicion).
+BOOT_CROP_OUT_DIR = ROOT.parent / "firmware" / "rockbox" / "apps" / "bitmaps" / "native"
+BOOT_CROP_MOCKUP = ROOT.parent / "docs" / "screenshots" / "ronda-pulido" / "bootloader-maqueta.png"
+BOOT_CROP_MARGIN_MIN = 2
+LCD_W, LCD_H = 320, 240
+
+
+def _ink_box(alpha, w, h):
+    xs = [x for y in range(h) for x in range(w) if alpha[y * w + x] > 0]
+    ys = [y for y in range(h) for x in range(w) if alpha[y * w + x] > 0]
+    if not xs:
+        die("el creciente salio sin tinta")
+    return min(xs), min(ys), max(xs) - min(xs) + 1, max(ys) - min(ys) + 1
+
+
+def _solve_margins(target, ink_len, screen_len, name):
+    """Par de margenes (antes, despues) tal que centrar el recorte con
+    division ENTERA deje la tinta empezando en `target`. Se devuelve el
+    par mas simetrico -- el que menos deforma el recorte."""
+    best = None
+    for before in range(BOOT_CROP_MARGIN_MIN, 64):
+        for after in range(BOOT_CROP_MARGIN_MIN, 64):
+            crop = before + ink_len + after
+            if crop > screen_len:
+                continue
+            if (screen_len - crop) // 2 + before != target:
+                continue
+            skew = abs(before - after)
+            if best is None or skew < best[0]:
+                best = (skew, before, after)
+    if best is None:
+        die(f"no hay margenes >= {BOOT_CROP_MARGIN_MIN} px que centren el "
+            f"recorte en {name} = {target} (tinta {ink_len} px)")
+    return best[1], best[2]
+
+
+# Glifos REALES de sysfont (FONT_SYSFIXED, 6x8) leidos del BDF de
+# Rockbox. La maqueta existe para aprobar la pantalla ANTES de flashear
+# un bootloader, asi que dibujarla con una fuente parecida seria
+# justamente lo que no sirve: lo que se aprueba tiene que ser lo que se
+# va a ver.
+SYSFONT_BDF = ROOT.parent / "firmware" / "rockbox" / "fonts" / "08-Schumacher-Clean.bdf"
+
+
+def _load_sysfont():
+    glyphs = {}
+    cur = None
+    bbx = None
+    bitmap = None
+    for raw in SYSFONT_BDF.read_text(errors="replace").splitlines():
+        line = raw.strip()
+        if line.startswith("ENCODING "):
+            cur = int(line.split()[1])
+        elif line.startswith("BBX "):
+            bbx = [int(v) for v in line.split()[1:5]]
+        elif line == "BITMAP":
+            bitmap = []
+        elif line == "ENDCHAR":
+            if cur is not None and cur >= 0 and bbx and bitmap is not None:
+                glyphs[cur] = (bbx, bitmap)
+            cur, bbx, bitmap = None, None, None
+        elif bitmap is not None and line and all(c in "0123456789ABCDEFabcdef" for c in line):
+            bitmap.append(int(line, 16) << (0 if len(line) <= 2 else 0))
+    if not glyphs:
+        die(f"no se pudieron leer glifos de {SYSFONT_BDF}")
+    return glyphs
+
+
+def _draw_sysfont_text(px, w, h, text, x, y, color, glyphs, ascent=6):
+    """Devuelve el ancho dibujado. Avance fijo de 6 px (FONT_SYSFIXED)."""
+    adv = 6
+    for i, ch in enumerate(text):
+        g = glyphs.get(ord(ch))
+        if g is None:
+            continue
+        (bw, bh, bx, by), rows = g
+        for ry, bits in enumerate(rows):
+            for rx in range(bw):
+                if bits & (1 << (7 - rx)):
+                    gx = x + i * adv + bx + rx
+                    gy = y + (ascent - by - bh) + ry
+                    if 0 <= gx < w and 0 <= gy < h:
+                        px[gx, gy] = color
+    return len(text) * adv
+
+
+def _boot_mockup(tokens, crop_img, ml, mt, ink_w, ink_h, crop_w, crop_h):
+    """Maqueta 320x240 de la pantalla de arranque, para aprobarla antes
+    de flashear. Fondo y tinta salen de los mismos tokens que el bitmap;
+    las leyendas, de los glifos reales de sysfont."""
+    bg = hex_to_rgb(tokens["color"]["night"]["surface"])
+    legend = hex_to_rgb(tokens["color"]["night"]["on_surface_variant"])
+    glyphs = _load_sysfont()
+
+    img = Image.new("RGB", (LCD_W, LCD_H), bg)
+    px = img.load()
+
+    cx = (LCD_W - crop_w) // 2
+    cy = (LCD_H - crop_h) // 2
+    img.paste(crop_img, (cx, cy))
+
+    line2 = "Basado en Rockbox - GPL v2 - rockbox.org"
+    line1 = "moonlit - arranque <rbversion>"
+    y2 = LCD_H - 14
+    y1 = y2 - 12
+    for text, y in ((line1, y1), (line2, y2)):
+        wpx = len(text) * 6
+        _draw_sysfont_text(px, LCD_W, LCD_H, text, (LCD_W - wpx) // 2, y,
+                           legend, glyphs)
+
+    BOOT_CROP_MOCKUP.parent.mkdir(parents=True, exist_ok=True)
+    img.save(BOOT_CROP_MOCKUP, format="PNG")
+    print(f"   maqueta: {BOOT_CROP_MOCKUP.relative_to(ROOT.parent)}")
+
+
+def generate_bootloader_crop(tokens):
+    print("==> Generando apps/bitmaps/native/bootwordmark.*.bmp (D-073)")
+    if Image is None:
+        die("falta el modulo Pillow -- crea el venv del design system")
+
+    crescent_svg = LOGO_VENDOR_DIR / "moonlit-crescent.svg"
+    bg = hex_to_rgb(tokens["color"]["night"]["surface"])
+    ink = hex_to_rgb(tokens["color"]["night"]["on_surface"])
+    size = BOOTLOGO_CRESCENT_PX
+    alpha = _rasterize_alpha(crescent_svg, size, size)
+
+    ink_x, ink_y, ink_w, ink_h = _ink_box(alpha, size, size)
+
+    # Donde acaba la tinta en pantalla cuando dibuja el FIRMWARE.
+    canvas_x = (BOOTLOGO_W - size) // 2
+    canvas_y = (BOOTLOGO_H - size) // 2
+    screen_x = (LCD_W - BOOTLOGO_W) // 2 + canvas_x + ink_x
+    screen_y = (LCD_H - BOOTLOGO_H) // 2 + canvas_y + ink_y
+
+    ml, mr = _solve_margins(screen_x, ink_w, LCD_W, "x")
+    mt, mb = _solve_margins(screen_y, ink_h, LCD_H, "y")
+    crop_w = ml + ink_w + mr
+    crop_h = mt + ink_h + mb
+
+    # La comprobacion que hace que esto sea una garantia y no una
+    # esperanza: se recalcula el centrado ENTERO del bootloader y se
+    # exige el pixel exacto. Si alguien cambia el tamano del creciente o
+    # el lienzo, esto aborta en vez de dejar una marca que salta.
+    got_x = (LCD_W - crop_w) // 2 + ml
+    got_y = (LCD_H - crop_h) // 2 + mt
+    if (got_x, got_y) != (screen_x, screen_y):
+        die(f"el recorte no cae donde el firmware: ({got_x}, {got_y}) != "
+            f"({screen_x}, {screen_y})")
+
+    img = Image.new("RGB", (crop_w, crop_h), bg)
+    px = img.load()
+    for y in range(ink_h):
+        for x in range(ink_w):
+            a = alpha[(ink_y + y) * size + (ink_x + x)]
+            if a == 0:
+                continue
+            px[ml + x, mt + y] = tuple(
+                bg[c] + ((ink[c] - bg[c]) * a) // 255 for c in range(3))
+
+    out = BOOT_CROP_OUT_DIR / f"bootwordmark.{crop_w}x{crop_h}x16.bmp"
+    for old_file in BOOT_CROP_OUT_DIR.glob("bootwordmark.*.bmp"):
+        if old_file != out:
+            old_file.unlink()
+    img.save(out, format="BMP")
+
+    print(f"   caja de tinta del creciente: {ink_w}x{ink_h} en ({ink_x}, {ink_y})")
+    print(f"   la tinta cae en pantalla en ({screen_x}, {screen_y}) -- firmware y bootloader")
+    print(f"   margenes: izq {ml} der {mr} arr {mt} aba {mb}  (asimetria {abs(ml-mr)}/{abs(mt-mb)})")
+    print(f"   {out.relative_to(ROOT.parent)}  ({crop_w}x{crop_h}, {out.stat().st_size} B)")
+
+    _boot_mockup(tokens, img, ml, mt, ink_w, ink_h, crop_w, crop_h)
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--header", action="store_true", help="genera apps/metro/moonlit_tokens.h")
@@ -818,10 +1015,14 @@ def main():
     parser.add_argument("--icons", action="store_true", help="genera apps/metro/moonlit_icons_table.c")
     parser.add_argument("--logo", action="store_true", help="genera apps/metro/moonlit_logo_table.c")
     parser.add_argument("--bootlogo", action="store_true", help="genera apps/bitmaps/native/rockboxlogo.320x98x16.bmp (D-050)")
+    parser.add_argument("--bootloader-crop", action="store_true",
+                         help="genera apps/bitmaps/native/bootwordmark.*.bmp + la maqueta (D-073)")
     args = parser.parse_args()
 
-    if not (args.header or args.contrast or args.fonts or args.icons or args.logo or args.bootlogo):
-        parser.error("nada que hacer: pasa --header, --contrast, --fonts, --icons, --logo y/o --bootlogo")
+    if not (args.header or args.contrast or args.fonts or args.icons or args.logo
+            or args.bootlogo or args.bootloader_crop):
+        parser.error("nada que hacer: pasa --header, --contrast, --fonts, --icons, "
+                     "--logo, --bootlogo y/o --bootloader-crop")
 
     tokens = json.loads(TOKENS_PATH.read_text())
 
@@ -837,6 +1038,8 @@ def main():
         generate_logo(tokens)
     if args.bootlogo:
         generate_bootlogo(tokens)
+    if args.bootloader_crop:
+        generate_bootloader_crop(tokens)
 
     print("==> listo")
 

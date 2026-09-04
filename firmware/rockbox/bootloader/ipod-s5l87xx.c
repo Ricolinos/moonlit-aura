@@ -81,6 +81,75 @@ extern uint32_t start_loc;
 
 extern int line;
 
+#ifdef IPOD_6G
+/* moonlit (D-073, maestro SS B): pantalla de arranque del bootloader.
+ *
+ * Desde D-050 el firmware pinta el creciente desde su primer cuadro,
+ * pero el BOOTLOADER seguia arrancando en negro absoluto (D-06x,
+ * verbose = false). Eso deja ~1 s de pantalla vacia y, sobre todo, no
+ * dice nada de la frontera GPL: el bootloader es la pieza que se flashea
+ * en NOR y la unica que corre antes de que exista un sistema de
+ * archivos, asi que es el unico sitio donde se puede citar el origen del
+ * codigo sin depender del disco.
+ *
+ * El bitmap es el MISMO creciente del rockboxlogo del firmware,
+ * recortado a su caja de tinta (design-system/generate.py
+ * --bootloader-crop) para no meter un lienzo de 320x98 en la IRAM del
+ * bootloader. Centrarlo en los dos ejes lo pone en el pixel EXACTO donde
+ * lo pinta show_logo_boot() (apps/main.c, D-050): el generador resuelve
+ * los margenes para que el centrado con DIVISION ENTERA de aqui abajo
+ * caiga en ese pixel, y ABORTA antes de escribir el archivo si no lo
+ * consigue. Por eso el paso bootloader -> firmware no tiene salto: solo
+ * desaparecen las leyendas de abajo. */
+#include "bitmaps/bootwordmark.h"
+
+/* Gris de las leyendas. Literal RGB a proposito, excepcion documentada
+ * igual que la del fondo en D-050: este archivo no enlaza la paleta de
+ * moonlit (apps/metro/ no existe en el build del bootloader). Es
+ * design-system/tokens.json color.night.on_surface_variant, el mismo
+ * valor del que sale la maqueta de aprobacion. */
+#define MOONLIT_BOOT_LEGEND_COLOR   LCD_RGBPACK(0x9a, 0x9a, 0xa6)
+#define MOONLIT_BOOT_BG_COLOR       LCD_RGBPACK(0x14, 0x16, 0x1f)
+#define MOONLIT_BOOT_LEGEND_BOTTOM  14  /* ultima linea, al borde inferior */
+#define MOONLIT_BOOT_LEGEND_SPACING 12  /* interlineado entre las dos */
+
+static void draw_boot_legend(int y, const char *text)
+{
+    int w, h;
+
+    lcd_getstringsize((const unsigned char *)text, &w, &h);
+    lcd_putsxy((LCD_WIDTH - w) / 2, y, (const unsigned char *)text);
+}
+
+static void draw_boot_screen(void)
+{
+    char buf[64];
+    int y2 = LCD_HEIGHT - MOONLIT_BOOT_LEGEND_BOTTOM;
+    int y1 = y2 - MOONLIT_BOOT_LEGEND_SPACING;
+
+    lcd_set_background(MOONLIT_BOOT_BG_COLOR);
+    lcd_clear_display();
+
+    lcd_bmp(&bm_bootwordmark,
+            (LCD_WIDTH - BMPWIDTH_bootwordmark) / 2,
+            (LCD_HEIGHT - BMPHEIGHT_bootwordmark) / 2);
+
+    lcd_set_foreground(MOONLIT_BOOT_LEGEND_COLOR);
+    /* La version es la del BOOTLOADER, que es lo unico que el conoce --
+     * el firmware se actualiza aparte y muestra la suya en "Acerca de"
+     * (D-064). */
+    snprintf(buf, sizeof(buf), "moonlit - arranque %s", rbversion);
+    draw_boot_legend(y1, buf);
+    draw_boot_legend(y2, "Basado en Rockbox - GPL v2 - rockbox.org");
+
+    /* Blanco otra vez: error()/fatal_error() y el modo USB del
+     * bootloader escriben despues de esto y tienen que seguir
+     * leyendose como siempre. */
+    lcd_set_foreground(LCD_WHITE);
+    lcd_update();
+}
+#endif /* IPOD_6G */
+
 #ifndef S5L87XX_DEVELOPMENT_BOOTLOADER
 #ifdef HAVE_BOOTLOADER_USB_MODE
 static void usb_mode(void)
@@ -862,6 +931,14 @@ void main(void)
 
     printf("Rockbox boot loader");
     printf("Version: %s", rbversion);
+
+#ifdef IPOD_6G
+    /* moonlit (D-073): despues de lcd_setfont(FONT_SYSFIXED) y ANTES de
+     * backlight_init(), para que lo primero que se ve al encenderse la
+     * retroiluminacion sea ya la marca y no un cuadro en negro. Sin
+     * retardo artificial: la pantalla dura lo que tarde load_firmware(). */
+    draw_boot_screen();
+#endif
 
     backlight_init(); /* Turns on the backlight */
 

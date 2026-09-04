@@ -567,6 +567,33 @@ Ver `DECISIONS.md` D-059 para el resto (`apps/metro/moonlit_master_art.{c,h}`,
   suspensivos, espacio duro), módulo puro host-testable. Comentario
   inline `moonlit (D-066)`.
 
+### moonlit v0.2.0 — bootloader (2026-09-04, D-073)
+
+- `bootloader/ipod-s5l87xx.c`: bloque nuevo `#ifdef IPOD_6G` con
+  `draw_boot_screen()` —creciente centrado + dos leyendas
+  `FONT_SYSFIXED` en gris—, llamado justo después de
+  `lcd_setfont(FONT_SYSFIXED)` y **antes** de `backlight_init()`, para
+  que lo primero que se vea al encenderse la retroiluminación sea ya la
+  marca. Comentario inline `moonlit (D-073)`. Deja de ser cierto que
+  «nada en `bootloader/` (BOOT-1 intacto)», como decía la entrada de
+  D-050: **este archivo pasa a estar modificado**. `verbose` sigue en
+  `false` y `error()`/`fatal_error()`/batería crítica/modo USB del
+  bootloader escriben como siempre (la función restaura el primer plano
+  a blanco antes de volver). Sin retardo artificial: la pantalla dura lo
+  que tarde `load_firmware()`.
+
+- `apps/bitmaps/native/SOURCES`: entrada nueva
+  `bootwordmark.55x56x16.bmp` bajo
+  `#if defined(BOOTLOADER) && defined(IPOD_6G)`. Nombre propio (no
+  `rockboxlogo`) para no tocar `bitmaps.make` ni el bitmap del firmware.
+
+- `apps/bitmaps/native/bootwordmark.55x56x16.bmp`: **generado**
+  (`design-system/generate.py --bootloader-crop`), nunca a mano. Es el
+  recorte del mismo creciente de 72 px del `rockboxlogo`, a su caja de
+  tinta más los márgenes que hacen que el centrado con división entera
+  del bootloader caiga en el **mismo píxel** en que lo pinta
+  `show_logo_boot()`.
+
 - `apps/SOURCES`: se agrega la entrada `metro/moonlit_marquee.c` —
   marquesina de texto largo (maestro §G), con el cálculo de
   desplazamiento host-testable. Comentario inline `moonlit (D-067)`.

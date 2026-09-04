@@ -83,3 +83,11 @@ usblogo.104x27x1.bmp
 #endif
 
 #endif /* BOOTLOADER */
+
+/* moonlit (D-073, maestro SS B): recorte del creciente para la pantalla
+ * de arranque del BOOTLOADER. Nombre propio (no rockboxlogo) para no
+ * tocar bitmaps.make ni el bitmap del firmware. Solo se compila en el
+ * build del bootloader del 6G: en el firmware no lo usa nadie. */
+#if defined(BOOTLOADER) && defined(IPOD_6G)
+bootwordmark.55x56x16.bmp
+#endif
