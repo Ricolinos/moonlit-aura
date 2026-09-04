@@ -1,5 +1,14 @@
 # Contrato entre `moonlit-aura` y Aura Studio
 
+**Versión 5 — 2026-09-03 (D-062/D-063).** Cambios respecto a v4:
+referencia al contrato canónico **v18** (redactado por Aura-Firmware en
+paralelo); §A.11 gana `format.txt` (versión de formato del árbol de
+caché derivada, con purga única al arrancar) y la clave de álbum pasa a
+llevar el `mtime` de la `cover.jpg` hermana además del de la pista
+representativa; §A.10 hereda esa misma clave. Studio no toca ni borra
+`format.txt` por separado — sigue valiendo la regla de "borra el
+directorio entero al forzar un rebuild".
+
 **Versión 4 — 2026-08-26 (v0.1.5, D-059).** Cambios respecto a v3:
 referencia al contrato canónico **v16** (caché maestra de imagen
 compartida entre las tres familias, redactado por Aura-Firmware en
@@ -116,7 +125,9 @@ en Studio que aquí se requieren (§C) **no** se ejecutan desde este repo
    (v15, D-055, C30): `.mth` de 80×80 `fb_data` crudo, formato idéntico
    en Metro y moonlit. Clave de álbum `a-<crc32 de la ruta de la pista
    representativa>.<tag_mtime>` — estable a través de rebuilds; fotos y
-   artistas conservan `<archivo>.<mtime>`. Studio ignora el directorio
+   artistas conservan `<archivo>.<mtime>`. **v18 (D-063):** ese
+   `<tag_mtime>` es ahora `max(mtime de la pista representativa, mtime
+   de la `cover.jpg` hermana si existe)`. Studio ignora el directorio
    salvo para borrarlo al forzar rebuild. Desde D-059 esta miniatura se
    DERIVA de la caché maestra de §A.11 (reducción entera 130→80) en vez
    de decodificar el JPEG por separado — mismo formato en disco, distinto
@@ -140,6 +151,24 @@ en Studio que aquí se requieren (§C) **no** se ejecutan desde este repo
    trabajo al cargar (moonlit: 130→120 para Marea, 130→80 para la
    rejilla de §A.10) — nunca al revés. Studio ignora el directorio
    salvo para borrarlo al forzar un rebuild (junto con §A.9/§A.10).
+
+   **v18 (D-063), versión de formato y purga.** `/.aura/art/format.txt`
+   contiene un entero decimal (v18: `2`). Al arrancar, cada familia lo
+   lee; si falta o el valor es menor que el suyo, borra las cachés
+   DERIVADAS —`/.aura/art/{albums,artists,photos}`, las miniaturas
+   compartidas de §A.10 y la caché privada `moonlitcache/`— y escribe su
+   versión. moonlit borra por sufijo conocido (`.art`, `.none`, `.mth`,
+   `.pfraw`), nunca el directorio entero: son directorios compartidos y
+   un barrido ciego podría llevarse algo de otra familia. Studio nunca
+   lo toca ni lo borra por separado (igual que el resto de `/.aura/art`).
+   Cierra lo que las claves no pueden: un tile mal derivado por una
+   versión anterior del código sobrevive para siempre porque su clave no
+   cambió.
+
+   **v18 (D-063), clave de álbum.** El `<mtime>` de `a-<crc32>.<mtime>`
+   es `max(mtime de la pista representativa, mtime de la `cover.jpg`
+   hermana si existe)`: una carátula reescrita sin tocar la pista
+   invalida la maestra (hipótesis (a) de D-055/D-056).
 
 Todo lo demás (C1–C31 de `docs/COMPAT_STUDIO.md`) se hereda de Metro-Aura
 sin cambios de formato.

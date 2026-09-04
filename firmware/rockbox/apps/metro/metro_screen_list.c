@@ -34,7 +34,8 @@
 #include "metro_music.h" /* R4/FA-8: metro_music_playpause() */
 #include "moonlit_palette.h" /* moonlit (D-011, M4): divisores outline_variant */
 #include "moonlit_elevation.h" /* moonlit (D-044, M9): tarjeta de fila de "Acerca de" */
-#include "moonlit_logo.h" /* moonlit (D-016, D-044, M9): creciente 64px + wordmark de "Acerca de" */
+#include "moonlit_logo.h" /* moonlit (D-016, D-044, M9, D-064): creciente + wordmark de "Acerca de" */
+#include "metro_screen_about.h" /* moonlit (D-062): fila de diagnostico de la pila */
 
 static metro_nav_t s_nav;
 
@@ -49,31 +50,83 @@ static metro_nav_t s_nav;
  * que arranca mas abajo, sin cascada FEATHER ni divisores de fila:
  * perdida aceptada, "Acerca de" ya asume scroll para su contenido
  * largo (créditos, conteos de biblioteca). */
-#define METRO_ABOUT_HERO_Y         76
-#define METRO_ABOUT_HERO_GAP       8
-#define METRO_ABOUT_ROWS_FIRST_Y   160
+/* moonlit (D-064): el hero deja de ser un bloque fijo de 64px que se
+ * come 84 px de alto y deja sitio para DOS filas -- el defecto que el
+ * plan de la ronda localizo: la navegacion movia la seleccion con
+ * METRO_DRAW_ROWS_VISIBLE (5) mientras el dibujo solo tenia sitio para
+ * 2, asi que en los desplazamientos relativos 3 y 4 la seleccion se
+ * salia de la pantalla y habia filas de "Acerca de" (creditos,
+ * licencias) que NUNCA se veian.
+ *
+ * Ahora el hero es compacto (creciente de 40 px + wordmark en una sola
+ * linea de 40 px) y es la "fila -1" de la lista: solo se dibuja
+ * mientras la ventana esta arriba del todo (first == 0), y en cuanto
+ * el usuario baja desaparece y las filas usan toda la pantalla. El
+ * numero de filas visibles se DERIVA de esa geometria en
+ * about_visible_rows() -- nunca de METRO_DRAW_ROWS_VISIBLE -- y el
+ * mismo numero lo usan el dibujo y la navegacion.
+ *
+ * D-016 decia "el wordmark solo se dibuja junto al creciente de 64px";
+ * este hero es la segunda pareja admitida (40 px), ver D-064. */
+#define METRO_ABOUT_HERO_Y         80
+#define METRO_ABOUT_HERO_SIZE      MOONLIT_LOGO_CRESCENT_SIZE_40
+#define METRO_ABOUT_HERO_GAP       8   /* creciente <-> wordmark */
+#define METRO_ABOUT_HERO_BOTTOM    4   /* hero <-> primera fila */
+#define METRO_ABOUT_ROWS_FIRST_Y   80
 #define METRO_ABOUT_ROW_PITCH      METRO_DRAW_ROW_PITCH
+
+/* Una fila "asomando" cuenta como asomando de verdad solo si se le ve
+ * al menos esto de texto; si no, no se dibuja (un sliver de 4 px es
+ * ruido, no una pista de que hay mas lista). */
+#define METRO_ABOUT_PEEK_MIN       12
 
 static void draw_about_hero(void)
 {
     int wordmark_y = METRO_ABOUT_HERO_Y +
-                      (MOONLIT_LOGO_CRESCENT_SIZE_64 - MOONLIT_LOGO_WORDMARK_HEIGHT) / 2;
+                      (METRO_ABOUT_HERO_SIZE - MOONLIT_LOGO_WORDMARK_HEIGHT) / 2;
 
-    moonlit_logo_draw_crescent(MOONLIT_LOGO_CRESCENT_SIZE_64, METRO_DRAW_LEFT_X,
+    moonlit_logo_draw_crescent(METRO_ABOUT_HERO_SIZE, METRO_DRAW_LEFT_X,
                                METRO_ABOUT_HERO_Y, metro_color_fg());
-    moonlit_logo_draw_wordmark(METRO_DRAW_LEFT_X + MOONLIT_LOGO_CRESCENT_SIZE_64 +
+    moonlit_logo_draw_wordmark(METRO_DRAW_LEFT_X + METRO_ABOUT_HERO_SIZE +
                                METRO_ABOUT_HERO_GAP, wordmark_y, metro_color_fg());
+}
+
+/* El hero solo esta cuando la ventana no se ha movido. */
+static bool about_hero_visible(int first)
+{
+    return first == 0;
+}
+
+static int about_rows_first_y(int first)
+{
+    if (!about_hero_visible(first))
+        return METRO_ABOUT_ROWS_FIRST_Y;
+
+    return METRO_ABOUT_HERO_Y + METRO_ABOUT_HERO_SIZE + METRO_ABOUT_HERO_BOTTOM;
+}
+
+/* Filas COMPLETAS que caben, derivadas de la geometria real (nunca de
+ * METRO_DRAW_ROWS_VISIBLE): 4 con el hero puesto (124/152/180/208), 5
+ * sin el (80/108/136/164/192). Es el numero que usan por igual el
+ * bucle de dibujo y metro_nav_move_sel(). */
+static int about_visible_rows(int first)
+{
+    return (LCD_HEIGHT - about_rows_first_y(first)) / METRO_ABOUT_ROW_PITCH;
 }
 
 static void draw_about_rows(const struct metro_pivot *pivot, int first, int sel)
 {
     int count = pivot->count(pivot->ctx);
-    int i, y = METRO_ABOUT_ROWS_FIRST_Y;
+    int visible = about_visible_rows(first);
+    int i, y = about_rows_first_y(first);
 
-    for (i = first; i < count && i < first + METRO_DRAW_ROWS_VISIBLE + 1; i++)
+    for (i = first; i < count && i < first + visible + 1; i++)
     {
         struct metro_row row;
         bool selected = (i == sel);
+
+        if (y + METRO_ABOUT_PEEK_MIN > LCD_HEIGHT)
+            break;
 
         pivot->get_row(pivot->ctx, i, &row);
 
@@ -216,7 +269,8 @@ void metro_screen_list_show(void)
     {
         /* moonlit (D-016, D-044, M9): geometria propia -- ver el
          * comentario junto a draw_about_hero() mas arriba. */
-        draw_about_hero();
+        if (about_hero_visible(metro_nav_first_visible(&s_nav)))
+            draw_about_hero();
         draw_about_rows(pivot, metro_nav_first_visible(&s_nav), metro_nav_sel(&s_nav));
     }
     else if (pivot->count(pivot->ctx) == 0)
@@ -317,9 +371,17 @@ void metro_screen_list_handle(int action, int steps)
             {
             int prev_first = metro_nav_first_visible(&s_nav);
             int prev_sel = metro_nav_sel(&s_nav);
+            /* moonlit (D-064): "Acerca de" tiene su propia geometria, y
+             * por lo tanto su propio numero de filas visibles -- que
+             * ademas cambia cuando el hero se va (4 -> 5). Pasar aqui
+             * la constante global era el bug: la seleccion se movia a
+             * filas que el dibujo nunca ponia en pantalla. */
+            int visible = (pivot->name == LANG_PIVOT_ABOUT)
+                              ? about_visible_rows(prev_first)
+                              : METRO_DRAW_ROWS_VISIBLE;
 
             metro_nav_move_sel(&s_nav, action == MACT_PREV ? -steps : steps,
-                                count, METRO_DRAW_ROWS_VISIBLE);
+                                count, visible);
             if (steps == 1)
                 run_selection_rise(pivot, prev_first, prev_sel);
             }
@@ -388,6 +450,19 @@ void metro_screen_list_handle(int action, int steps)
                         metro_transitions_arm_continuum(from_title, from_y);
                 }
             }
+            break;
+        /* moonlit (D-062 §E.4): SELECT sostenido sobre la fila de version
+         * de "Acerca de" revela/oculta la marca de agua de la pila del
+         * hilo principal. En cualquier otra lista o fila no hace nada:
+         * hasta ahora SELECT sostenido tampoco hacia nada en LIST (el
+         * REL posterior no dispara MACT_SELECT porque su prerrequisito
+         * es BUTTON_SELECT y el ultimo boton pasa a ser
+         * BUTTON_SELECT|BUTTON_REPEAT), asi que no le quita el gesto a
+         * nadie -- mismo patron que MACT_TOGGLE_SHUFFLE en PLAYER. */
+        case MACT_SELECT_HOLD:
+            if (pivot->name == LANG_PIVOT_ABOUT &&
+                metro_screen_about_row_is_version(metro_nav_sel(&s_nav)))
+                metro_screen_about_toggle_diag();
             break;
         case MACT_BACK:
             metro_screen_list_pop();

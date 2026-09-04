@@ -294,6 +294,14 @@ void metro_main(void)
      * /.aura/thumbs/ by rename, once. Disk is up (settings just loaded). */
     if (metro_settings_migrate_shared_thumbs())
         moonlit_art_request_gc(); /* pre-D-055 key scheme: sweep the old names once */
+    /* moonlit (D-063, contrato v18): antes que nada lea o escriba una
+     * maestra, y antes de que el constructor exista (lo crea
+     * moonlit_master_art_builder_poll(), mas abajo en la vuelta ociosa):
+     * si /.aura/art/format.txt falta o es de una version anterior, las
+     * caches derivadas se borran y el constructor las rehace. Sin
+     * pantalla: lo que se borra son archivos por sufijo conocido en
+     * tres directorios planos, no un recorrido de biblioteca. */
+    metro_settings_purge_stale_art_caches();
     metro_fonts_init();
     /* R2-F1/DD-1 (M-051): DRMODE_FG is the drawmode every apps/metro/
      * text draw expects -- metro_draw_text()/metro_draw_text_cut_right()

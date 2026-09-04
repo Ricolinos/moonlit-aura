@@ -94,7 +94,12 @@ SECTIONS
        *(.stack)
        stackbegin = .;
        _stackbegin = .;
-       . += 0x2000;
+       /* moonlit (D-062): 8 KB -> 12 KB. El hilo `main` desbordaba en
+        * caminos reales de UI (Aura AF D-343: `gui_usb_screen_run ->
+        * settings_apply -> skin_data_load`, ~9.5 KB). Cabe: la IRAM de
+        * core son 48 KB (0xC000) y con +0x1000 el ultimo simbolo,
+        * _fiqstackend, queda en 0xb530. */
+       . += 0x3000;
        stackend = .;
        _stackend = .;
        _irqstackbegin = .;

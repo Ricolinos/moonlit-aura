@@ -40,6 +40,7 @@
 #include "crc32.h"  /* crc_32() -- moonlit (D-055) art keys */
 
 #include "metro_music.h"
+#include "metro_fsutil.h" /* moonlit (D-063): clave de album v18 */
 #include "metro_lang.h"
 #include "metro_sync.h"
 #include "metro_settings.h"
@@ -619,6 +620,13 @@ void metro_music_album_art_key_reset(void)
  * by reading tagcache.c's build_lookup_list()/get_next()/get_index()
  * (no host stub exists for tagcache -- this file is not host-testable,
  * same as moonlit_art_cache.c, see its header comment). */
+/* moonlit (D-063): el nombre que el contrato (CONTRATO-moonlit-studio.md
+ * §D.1, "colocacion de caratulas") fija para la caratula de carpeta que
+ * escribe Studio. Rockbox tolera mas nombres via find_albumart(), pero
+ * la clave v18 solo tiene que invalidarse cuando cambia LA que Studio
+ * gestiona. */
+#define METRO_MUSIC_COVER_NAME "cover.jpg"
+
 bool metro_music_album_art_source(int32_t album_seek, char *key, size_t keysz,
                                   char *track_path, size_t pathsz)
 {
@@ -640,6 +648,31 @@ bool metro_music_album_art_source(int32_t album_seek, char *key, size_t keysz,
     tagcache_search_finish(&tcs);
     if (mtime < 0)
         mtime = 0;
+
+    /* moonlit (D-063, contrato v18): el <mtime> de la clave es el MAYOR
+     * entre el de la pista representativa y el de la `cover.jpg`
+     * hermana. Sin esto, reescribir la caratula de un album sin tocar
+     * ni un archivo de audio dejaba la clave igual, y la maestra vieja
+     * (o su marcador `.none`) sobrevivia para siempre -- la hipotesis
+     * (a) que D-055/D-056 dejaron abierta y que el maestro §A.2 cierra.
+     *
+     * Cuesta una lectura de directorio por album en la resolucion de
+     * clave (Rockbox no expone stat() de un archivo suelto): el
+     * recorrido para en la primera coincidencia y la clave ya esta
+     * memoizada aguas arriba para la UI (metro_music_album_art_key(),
+     * D-055); el constructor de fondo la paga una vez por album y por
+     * pasada. */
+    {
+        char dir[MAX_PATH];
+        long cover_mtime;
+
+        if (metro_fsutil_parent_dir(track_path, dir, sizeof(dir)))
+        {
+            cover_mtime = metro_fsutil_mtime_in_dir(dir, METRO_MUSIC_COVER_NAME);
+            if (cover_mtime > mtime)
+                mtime = cover_mtime;
+        }
+    }
 
     crc = crc_32(track_path, strlen(track_path), 0xffffffff);
     snprintf(key, keysz, "a-%08lx.%ld", (unsigned long)crc, mtime);

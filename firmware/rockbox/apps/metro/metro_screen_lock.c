@@ -22,6 +22,10 @@
 
 #include "lcd.h"
 #include "misc.h"
+/* moonlit (D-062): strlcpy() se usaba abajo sin declarar -- warning
+ * preexistente que solo salia a la luz al recompilar este archivo
+ * (dependia de un cambio en metro_settings.h para hacerlo). */
+#include "string-extra.h"
 
 #include "metro_screen_lock.h"
 #include "metro_screen_usb.h"

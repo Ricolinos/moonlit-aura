@@ -101,6 +101,15 @@ echo "==> Versión: $VERSION"
 echo "==> Compilando firmware + bootloader (build_target.sh)"
 "$ROOT_DIR/firmware/tools/build_target.sh"
 
+# moonlit (D-062, maestro §E.3): antes de empaquetar, el reporte de pila
+# sobre el .elf recién enlazado. Falla -- y detiene el empaquetado, por
+# el `set -e` de arriba -- si una función de apps/metro/ crece por
+# encima del tope sin estar declarada, o si el peor camino estático
+# desde main supera el 75 % de la pila. Segundos: solo desensambla.
+echo "==> Reporte de pila (stack_report.py)"
+"$ROOT_DIR/firmware/tools/stack_report.py" --quiet \
+  --objdump "$TC_BIN/arm-elf-eabi-objdump" --nm "$TC_BIN/arm-elf-eabi-nm"
+
 echo "==> Empaquetando el árbol .rockbox/ real (make zip: códecs, rocks, viewers.config, codepages, langs)"
 (cd "$BUILD_DIR" && PATH="$TC_BIN:$PATH" make zip ${VERSION:+VERSION="$VERSION"})
 

@@ -43,6 +43,11 @@ enum metro_action {
     MACT_SELECT,                              /* SELECT (short): enter/activate */
     MACT_BACK,                                /* MENU (short): go back one level */
     MACT_HOME,                                /* MENU (held): go straight to the hub */
+    /* moonlit (D-062 §E.4): SELECT sostenido en una lista. Hoy solo lo
+     * usa "Acerca de" (revela la fila de diagnostico de la pila sobre
+     * la fila de version); en cualquier otra lista se ignora. Antes de
+     * esto, SELECT sostenido en LIST no producia NINGUNA accion. */
+    MACT_SELECT_HOLD,
 
     /* F5: PLAYER context only (Now Playing) -- PLAN_MAESTRO.md S2.3. */
     MACT_VOL_UP,                               /* wheel fwd: volume up */

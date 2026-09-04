@@ -527,3 +527,16 @@ Ver `DECISIONS.md` D-059 para el resto (`apps/metro/moonlit_master_art.{c,h}`,
 `apps/metro/metro_screen_hub.c`, `apps/metro/metro_main.c`,
 `apps/metro/metro_lang.{c,h}`, `apps/metro/test/`, todo dentro de
 `apps/metro/`).
+
+### moonlit v0.2.0 (2026-09-03, D-062)
+
+- `firmware/target/arm/s5l8702/app.lds` sección `.stack`: la pila del hilo
+  `main` pasa de `. += 0x2000` (8 KB) a `. += 0x3000` (12 KB), con
+  comentario inline `moonlit (D-062)`. Motivo: el hilo `main` de las tres
+  familias comparte este script de enlace y hay caminos reales de UI que
+  se acercan o superan los 8 KB (Aura AF D-343 documentó
+  `gui_usb_screen_run → settings_apply → skin_data_load`, ~9.5 KB, sin
+  corregir aguas arriba). Cabe en la IRAM de core (48 KB, `IRAMSIZE`):
+  los símbolos posteriores se desplazan 0x1000 y el último,
+  `_fiqstackend`, queda en `0xb530` (antes `0xa530`), por debajo del
+  límite `0xC000`. Verificado en `firmware/build-ipod6g/rockbox.map`.

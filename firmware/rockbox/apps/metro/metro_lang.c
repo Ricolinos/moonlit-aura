@@ -190,6 +190,11 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_LIBRARY_PREPARING] = "preparando biblioteca",
     [LANG_LIBRARY_PHASE_DB]  = "construyendo la base de música",
     [LANG_LIBRARY_COUNT_FMT] = "%d de %d",
+
+    /* moonlit (D-062, D-064) */
+    [LANG_ABOUT_VERSION_FMT] = "versión %s",
+    [LANG_ABOUT_STACK_FMT]   = "pila principal %d %%",
+    [LANG_ABOUT_STACK_NA]    = "pila principal n/d",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -355,6 +360,11 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_LIBRARY_PREPARING] = "preparing library",
     [LANG_LIBRARY_PHASE_DB]  = "building the music database",
     [LANG_LIBRARY_COUNT_FMT] = "%d of %d",
+
+    /* moonlit (D-062, D-064) */
+    [LANG_ABOUT_VERSION_FMT] = "version %s",
+    [LANG_ABOUT_STACK_FMT]   = "main stack %d %%",
+    [LANG_ABOUT_STACK_NA]    = "main stack n/a",
 };
 
 void metro_lang_set(enum metro_language lang)

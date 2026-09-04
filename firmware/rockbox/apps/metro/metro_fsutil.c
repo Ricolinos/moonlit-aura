@@ -129,3 +129,37 @@ int metro_fsutil_list_by_ext_mtime(const char *dir, const char *const *exts, int
 
     return n;
 }
+
+/* moonlit (D-063, contrato v18): ver metro_fsutil.h. Sale en la primera
+ * coincidencia -- no ordena ni acumula nada, no toca s_scan. */
+long metro_fsutil_mtime_in_dir(const char *dir, const char *name)
+{
+    DIR *d;
+    struct DIRENT *entry;
+    long mtime = -1;
+
+    if (!dir || !name || !name[0])
+        return -1;
+
+    d = opendir(dir);
+    if (!d)
+        return -1;
+
+    while ((entry = readdir(d)) != NULL)
+    {
+        struct dirinfo info;
+
+        if (strcasecmp(entry->d_name, name))
+            continue;
+
+        info = dir_get_info(d, entry);
+        if (info.attribute & ATTR_DIRECTORY)
+            continue; /* "cover.jpg/" existe en algunos discos (M-053) */
+
+        mtime = (long)info.mtime;
+        break;
+    }
+    closedir(d);
+
+    return mtime;
+}

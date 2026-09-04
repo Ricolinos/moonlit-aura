@@ -37,6 +37,8 @@
 #include "metro_settings.h"
 #include "metro_sync.h" /* marcador de sync al cambiar de firmware -- M-090 */
 #include "metro_firmware_families.h" /* moonlit (D-047): tabla de hermanas */
+#include "moonlit_art.h"         /* moonlit_art_sweep() -- moonlit (D-063) */
+#include "moonlit_master_art.h"  /* format.txt -- moonlit (D-063) */
 
 #define METRO_DIR      ROCKBOX_DIR "/aura"
 #define METRO_CFG_PATH METRO_DIR "/aura.cfg"
@@ -315,6 +317,75 @@ void metro_settings_shared_thumbs_dir(const char *subdir, char *out, size_t outs
 void metro_settings_shared_art_dir(const char *subdir, char *out, size_t outsz)
 {
     snprintf(out, outsz, "%s/%s", AURA_SHARED_ART_DIR, subdir);
+}
+
+/* moonlit (D-063, contrato v18): la version de formato del arbol de
+ * caratulas derivadas. Solo este archivo escribe la ruta (regla de
+ * rutas de CLAUDE.md); el formato del archivo vive en
+ * moonlit_master_art.c. */
+#define AURA_SHARED_ART_FORMAT_FILE AURA_SHARED_ART_DIR "/format.txt"
+
+static bool purge_none(const char *stem, void *ctx)
+{
+    (void)stem;
+    (void)ctx;
+    return false; /* nada se conserva */
+}
+
+/* Borra de `dir` todo archivo con uno de los sufijos de cache derivada.
+ * Deliberadamente por sufijo y no un "borra todo el arbol": estos
+ * directorios son COMPARTIDOS (/.aura/art, /.aura/thumbs) y un barrido
+ * ciego podria llevarse algo que escribio otra familia o Studio. */
+static int purge_derived_dir(const char *dir)
+{
+    static const char *const suffixes[] = { ".art", ".none", ".mth", ".pfraw" };
+    unsigned i;
+    int n = 0;
+
+    for (i = 0; i < sizeof(suffixes) / sizeof(suffixes[0]); i++)
+        n += moonlit_art_sweep(dir, suffixes[i], purge_none, NULL);
+    return n;
+}
+
+bool metro_settings_purge_stale_art_caches(void)
+{
+    static const char *const subdirs[] = { "albums", "artists", "photos" };
+    char path[MAX_PATH];
+    unsigned i;
+    int removed = 0;
+    int version;
+
+    if (!dir_exists(AURA_SHARED_ART_DIR))
+    {
+        /* Nada que purgar todavia; deja el sello puesto igual para que
+         * el primer arranque no cuente como "version 0" mas adelante. */
+        moonlit_master_art_ensure_dir(AURA_SHARED_ART_DIR);
+        moonlit_master_art_format_write(AURA_SHARED_ART_FORMAT_FILE,
+                                        MOONLIT_MASTER_ART_FORMAT_VERSION);
+        return false;
+    }
+
+    version = moonlit_master_art_format_read(AURA_SHARED_ART_FORMAT_FILE);
+    if (version >= MOONLIT_MASTER_ART_FORMAT_VERSION)
+        return false;
+
+    for (i = 0; i < sizeof(subdirs) / sizeof(subdirs[0]); i++)
+    {
+        metro_settings_shared_art_dir(subdirs[i], path, sizeof(path));
+        removed += purge_derived_dir(path);
+        metro_settings_shared_thumbs_dir(subdirs[i], path, sizeof(path));
+        removed += purge_derived_dir(path);
+        metro_settings_metro_cache_dir(subdirs[i], path, sizeof(path));
+        removed += purge_derived_dir(path);
+    }
+    /* moonlitcache/art: el .pfraw privado de antes de D-059. Ya no se
+     * escribe, pero un disco actualizado desde v0.1.4 todavia lo tiene. */
+    metro_settings_metro_cache_dir("art", path, sizeof(path));
+    removed += purge_derived_dir(path);
+
+    moonlit_master_art_format_write(AURA_SHARED_ART_FORMAT_FILE,
+                                    MOONLIT_MASTER_ART_FORMAT_VERSION);
+    return removed > 0;
 }
 
 bool metro_settings_migrate_shared_thumbs(void)

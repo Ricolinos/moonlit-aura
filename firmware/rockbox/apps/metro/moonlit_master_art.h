@@ -108,6 +108,25 @@ bool moonlit_master_art_is_resolved(const char *art_path, int size);
  * same walk metro_thumbs.c's ensure_cache_dir() does for /.aura/thumbs). */
 void moonlit_master_art_ensure_dir(const char *dir);
 
+/* --- version de formato de la cache (contrato v18, D-063) --------------- */
+
+/* `/.aura/art/format.txt` lleva un entero decimal: la version de
+ * formato de TODO el arbol de caratulas derivadas. Las tres familias lo
+ * leen al arrancar; la que encuentre un valor menor que el suyo (o el
+ * archivo ausente) purga las cachés derivadas y escribe el suyo. Studio
+ * nunca lo toca. Sirve para lo que las claves no pueden arreglar solas:
+ * un tile mal derivado por una version anterior del codigo sobrevive
+ * para siempre aunque el codigo ya este corregido, porque su clave no
+ * cambio. La ruta la compone metro_settings.c (regla de rutas de
+ * CLAUDE.md); aqui solo vive el formato del archivo. */
+#define MOONLIT_MASTER_ART_FORMAT_VERSION 2
+
+/* Entero del archivo, o 0 si falta, esta vacio o no es un numero. */
+int moonlit_master_art_format_read(const char *path);
+
+/* Escribe "<version>\n". false si no pudo. */
+bool moonlit_master_art_format_write(const char *path, int version);
+
 /* --- pure pixel ops (integer only, no FPU) ------------------------------ */
 
 /* Fill-and-center-crop resample of a `sw` x `sh` row-major RGB565

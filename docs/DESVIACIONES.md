@@ -829,3 +829,59 @@ texto de destino y, por lo tanto, cuántos escalones tiene la escalera.
 **Nota de numeración**: el plan llamaba prospectivamente "R3-5" a esta
 entrada; los números se asignan en orden real de ejecución y R3-5/R3-6
 ya los consumieron hallazgos de R3-F5 y R3-F7.
+
+---
+
+## RP-1 — Ronda "pulido": el hero de "Acerca de" no puede ir en y=28..68 (esa es la banda de pivotes)
+
+**Plan decía** (`../docs/plans/PLAN-moonlit-ronda-pulido.md` Fase 1.3):
+hero compacto "creciente 40 px + wordmark alineados en una sola línea de
+40 px de alto (**y=28..68**), primera fila en y=80".
+
+**Qué se encontró**: y=28..68 es exactamente la banda de los pivotes —
+`METRO_PIVOT_Y` = 28 (`metro_draw.c`) con `MFONT_DISPLAY` de 40 px. Ahí
+se dibujan "general · pantalla · acerca de", que es **cómo se navega**
+entre los tres pivotes de Ajustes con LEFT/RIGHT. Un hero encima habría
+borrado esa navegación en la única pantalla donde el usuario más la
+necesita (es la más larga).
+
+**Qué se hizo**: el hero vive en el área de contenido, en y=80 cuando la
+ventana está arriba del todo, y se desplaza con la lista como "fila −1"
+(desaparece al bajar). Las posiciones de fila que pedía el plan se
+cumplen **exactamente** —80/108/136/164/192 más una asomando en 220— en
+cuanto el hero se va, que es el estado en el que el plan las pedía.
+Con el hero puesto son 4 filas (124/152/180/208), derivadas de la
+geometría por `about_visible_rows()`.
+
+**Impacto en el plan**: ninguno en el criterio de "hecho" de la Fase 1
+(cinco filas completas, todas las filas alcanzables, `visible_rows`
+derivado de la geometría real y compartido entre dibujo y navegación).
+Ver `DECISIONS.md` D-064.
+
+---
+
+## RP-2 — Ronda "pulido": la regla "ninguna función sobre 1 024 B" no es aplicable como regla ciega en `apps/metro/`
+
+**Plan decía** (maestro §E.3): `stack_report.py` **falla** si una función
+de `apps/<familia>/` supera 1 024 B de marco.
+
+**Qué se encontró**: ocho funciones de `apps/metro/` la superan por dos
+idiomas de Rockbox, no por descuido — `struct tagcache_search` en la
+pila (~1.2 KB; volverla estática rompería el anidamiento entre el hilo
+de UI y el hilo constructor de D-059, que abren búsquedas a la vez) y
+varios `char path[MAX_PATH]` (260 B cada uno). Una de ellas, `run_pass`,
+ni siquiera corre en la pila que el reporte mide: vive en el hilo
+constructor, con la suya (`DEFAULT_STACK_SIZE + 0x2000`). Ninguna de las
+ocho aparece en el peor camino reportado.
+
+**Qué se hizo**: no se subió el tope (dejaría pasar crecimiento nuevo) ni
+se dejó fallando (bloquearía `package_dist.sh`). Se agregó `BIG_FRAMES`,
+una lista **declarada** —cada entrada con su motivo, impresa una por una
+en el reporte, con aviso cuando una entrada queda obsoleta— con el mismo
+criterio auditable que la `GUARDED_EDGES` que ya traía la herramienta de
+Aura. Cualquier función **nueva** por encima del tope sigue fallando.
+
+**Impacto**: la copia canónica de la herramienta vive en
+`../Aura-Firmware/firmware/tools/stack_report.py` (AF D-345) y no se
+toca desde aquí; el mecanismo se le propone a esa sesión vía la
+supervisora. Ver `DECISIONS.md` D-062.

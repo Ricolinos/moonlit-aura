@@ -26,8 +26,19 @@
 #ifndef METRO_SCREEN_ABOUT_H
 #define METRO_SCREEN_ABOUT_H
 
+#include <stdbool.h>
+
 #include "metro_page.h"
 
 extern const struct metro_pivot metro_screen_about_pivot;
+
+/* moonlit (D-062 §E.4, D-064): la fila de version es fija (indice 1,
+ * justo bajo el nombre del aparato) y es el ancla de la fila oculta de
+ * diagnostico -- SELECT sostenido sobre ella revela/oculta la marca de
+ * agua de la pila del hilo principal. En el simulador la fila esta
+ * siempre visible (ahi no hay marca de agua que leer, pero si hay
+ * geometria que verificar). */
+bool metro_screen_about_row_is_version(int index);
+void metro_screen_about_toggle_diag(void);
 
 #endif /* METRO_SCREEN_ABOUT_H */

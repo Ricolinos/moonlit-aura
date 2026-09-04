@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include "../moonlit_master_art.h"
 
 static int failures = 0;
@@ -271,6 +272,48 @@ static void test_real_sizes_preserve_flat_and_gradient(void)
     CHECK(ok);
 }
 
+/* moonlit (D-063, contrato v18): el sello de version del arbol de
+ * caratulas derivadas. Lo que importa es que un archivo AUSENTE, VACIO
+ * o con basura cuente como "version 0" -- ahi es donde se decide si hay
+ * purga, y un falso "ya estas al dia" dejaria tiles rotos para
+ * siempre. */
+static void test_format_version(void)
+{
+    const char *path = "build/format.txt";
+    int fd;
+
+    remove(path);
+    CHECK(moonlit_master_art_format_read(path) == 0); /* ausente */
+
+    CHECK(moonlit_master_art_format_write(path, MOONLIT_MASTER_ART_FORMAT_VERSION));
+    CHECK(moonlit_master_art_format_read(path) == MOONLIT_MASTER_ART_FORMAT_VERSION);
+
+    CHECK(moonlit_master_art_format_write(path, 1));
+    CHECK(moonlit_master_art_format_read(path) == 1);
+    CHECK(moonlit_master_art_format_read(path) < MOONLIT_MASTER_ART_FORMAT_VERSION);
+
+    /* Vacio y basura: version 0, es decir, purga. */
+    fd = creat(path, 0666);
+    CHECK(fd >= 0);
+    close(fd);
+    CHECK(moonlit_master_art_format_read(path) == 0);
+
+    fd = creat(path, 0666);
+    CHECK(fd >= 0);
+    CHECK(write(fd, "no-soy-un-numero\n", 17) == 17);
+    close(fd);
+    CHECK(moonlit_master_art_format_read(path) == 0);
+
+    /* Un numero con cola (salto de linea, espacios) si cuenta. */
+    fd = creat(path, 0666);
+    CHECK(fd >= 0);
+    CHECK(write(fd, "2\n", 2) == 2);
+    close(fd);
+    CHECK(moonlit_master_art_format_read(path) == 2);
+
+    remove(path);
+}
+
 int main(void)
 {
     mkdir("build", 0777);
@@ -283,6 +326,7 @@ int main(void)
     test_cover_crop_landscape();
     test_cover_crop_portrait_downscale();
     test_real_sizes_preserve_flat_and_gradient();
+    test_format_version();
 
     printf("test_master_art: %d/%d checks OK\n", checks - failures, checks);
     if (failures)

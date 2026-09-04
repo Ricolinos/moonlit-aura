@@ -20,11 +20,70 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <string.h>
+#include "string-extra.h" /* strlcpy -- moonlit (D-062) */
+
+#include "version.h"  /* rbversion -- moonlit (D-064) */
+#include "thread.h"   /* thread_self()/thread_get_debug_info() -- moonlit (D-062) */
 
 #include "metro_screen_about.h"
 #include "metro_device.h"
 #include "metro_manifest.h"
 #include "metro_lang.h"
+
+/* moonlit (D-062 §E.4): la marca de agua de la pila del hilo principal
+ * es la unica forma de que el dueno confirme EN HARDWARE que el
+ * aumento de 8 a 12 KB (app.lds, D-062) alcanza, sin esperar otro
+ * panic. Rockbox ya la calcula para su menu de depuracion
+ * (thread_get_debug_info() -> stack_usage, un porcentaje: cuenta las
+ * palabras que ya no valen DEADBEEF). Ese campo solo existe cuando los
+ * hilos son los del kernel propio; el simulador usa hilos SDL con la
+ * pila del sistema operativo, asi que ahi la fila se dibuja igual --
+ * la geometria de "Acerca de" se verifica en el simulador -- pero con
+ * "n/d" en vez de un numero inventado.
+ *
+ * La fila esta OCULTA por omision: SELECT sostenido sobre la fila de
+ * version la revela (metro_screen_list.c). Es diagnostico, no
+ * informacion de producto. En el simulador arranca visible. */
+#ifdef SIMULATOR
+static bool s_diag = true;
+#else
+static bool s_diag = false;
+#endif
+
+#define ABOUT_ROW_DEVICE  0
+#define ABOUT_ROW_VERSION 1
+
+bool metro_screen_about_row_is_version(int index)
+{
+    return index == ABOUT_ROW_VERSION;
+}
+
+void metro_screen_about_toggle_diag(void)
+{
+    s_diag = !s_diag;
+}
+
+/* Cuantas filas de cabecera hay antes de los conteos: nombre del
+ * aparato + version + (diagnostico). */
+static int head_row_count(void)
+{
+    return 2 + (s_diag ? 1 : 0);
+}
+
+static void stack_row_text(char *buf, size_t bufsz)
+{
+#ifndef HAVE_SDL_THREADS
+    struct thread_debug_info info;
+
+    if (thread_get_debug_info(thread_self(), &info) > 0)
+    {
+        snprintf(buf, bufsz, metro_lang_str(LANG_ABOUT_STACK_FMT),
+                 (int)info.stack_usage);
+        return;
+    }
+#endif
+    strlcpy(buf, metro_lang_str(LANG_ABOUT_STACK_NA), bufsz);
+}
 
 /* moonlit H1 (D-002): credits block after "based on rockbox" -- one
  * About row per '\n'-separated line of LANG_ABOUT_CREDITS_BODY (the
@@ -92,7 +151,9 @@ static int about_count(void *ctx)
 {
     const metro_manifest_t *m = metro_manifest_cached();
     (void)ctx;
-    return 2 + (m ? synced_row_count(m) : 1) + credits_line_count();
+    /* cabecera + conteos + "basado en rockbox" + creditos */
+    return head_row_count() + (m ? synced_row_count(m) : 1) + 1 +
+           credits_line_count();
 }
 
 static void about_get_row(void *ctx, int index, struct metro_row *out)
@@ -107,10 +168,30 @@ static void about_get_row(void *ctx, int index, struct metro_row *out)
     out->subtitle = NULL;
     out->kind = METRO_ROW_ACTION;
 
-    if (index == 0)
+    if (index == ABOUT_ROW_DEVICE)
     {
         name = metro_device_name();
         out->title = name ? name : metro_lang_str(LANG_ABOUT_DEVICE_DEFAULT);
+        return;
+    }
+
+    /* moonlit (D-064): la version del firmware -- el maestro §B.2 la da
+     * por sentada ("el firmware muestra su propia version en Acerca
+     * de") y no estaba. `rbversion` es la cadena que ya genera el build
+     * (genversion.sh), la misma que package_dist.sh fija al tag en un
+     * release; no hay __DATE__/__TIME__ de por medio (D-048). */
+    if (index == ABOUT_ROW_VERSION)
+    {
+        snprintf(buf, sizeof(buf), metro_lang_str(LANG_ABOUT_VERSION_FMT),
+                 rbversion);
+        out->title = buf;
+        return;
+    }
+
+    if (s_diag && index == ABOUT_ROW_VERSION + 1)
+    {
+        stack_row_text(buf, sizeof(buf));
+        out->title = buf;
         return;
     }
 
@@ -119,7 +200,7 @@ static void about_get_row(void *ctx, int index, struct metro_row *out)
 
     if (!synced)
     {
-        if (index == 1)
+        if (index == head_row_count())
         {
             out->title = metro_lang_str(LANG_ABOUT_NOT_SYNCED);
             return;
@@ -132,7 +213,7 @@ static void about_get_row(void *ctx, int index, struct metro_row *out)
          * counts, then playlists, then video breakdown, then photo
          * breakdown, each breakdown only if the manifest actually
          * carries it. */
-        int row = 1;
+        int row = head_row_count();
 
         if (index == row++)
         {
@@ -203,7 +284,7 @@ static void about_get_row(void *ctx, int index, struct metro_row *out)
     }
 
     {
-        int base = 1 + (synced ? synced_row_count(&m) : 1);
+        int base = head_row_count() + (synced ? synced_row_count(&m) : 1);
         if (index == base)
         {
             out->title = metro_lang_str(LANG_ABOUT_BASED_ON_ROCKBOX);

@@ -198,6 +198,54 @@ void moonlit_master_art_ensure_dir(const char *dir)
         mkdir(dir);
 }
 
+/* --- version de formato (contrato v18, D-063) --------------------------- */
+
+int moonlit_master_art_format_read(const char *path)
+{
+    char buf[16];
+    int fd, n, i, v = 0;
+    bool digit = false;
+
+    fd = open(path, O_RDONLY);
+    if (fd < 0)
+        return 0;
+    n = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    if (n <= 0)
+        return 0;
+    buf[n] = '\0';
+
+    for (i = 0; buf[i] >= '0' && buf[i] <= '9'; i++)
+    {
+        v = v * 10 + (buf[i] - '0');
+        digit = true;
+        if (v > 1000000)
+            return 0; /* basura: trata el archivo como ausente */
+    }
+    return digit ? v : 0;
+}
+
+bool moonlit_master_art_format_write(const char *path, int version)
+{
+    char buf[16];
+    int fd, len;
+
+    len = snprintf(buf, sizeof(buf), "%d\n", version);
+    if (len <= 0 || len >= (int)sizeof(buf))
+        return false;
+
+    fd = creat(path, 0666);
+    if (fd < 0)
+        return false;
+    if (write(fd, buf, len) != len)
+    {
+        close(fd);
+        return false;
+    }
+    close(fd);
+    return true;
+}
+
 /* --- pixels ------------------------------------------------------------- */
 
 /* Same RGB565 accessors as moonlit_art.c's mask_corners (replicated

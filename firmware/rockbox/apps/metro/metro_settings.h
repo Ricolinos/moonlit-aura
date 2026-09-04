@@ -159,6 +159,17 @@ bool metro_settings_migrate_shared_thumbs(void); /* true if anything was renamed
  * creates it. */
 void metro_settings_shared_art_dir(const char *subdir, char *out, size_t outsz);
 
+/* moonlit (D-063, contrato v18): al arrancar, compara
+ * /.aura/art/format.txt con MOONLIT_MASTER_ART_FORMAT_VERSION. Si falta
+ * o es menor, borra las caches DERIVADAS de las tres fuentes
+ * (/.aura/art, /.aura/thumbs y moonlitcache/, por sufijo conocido) y
+ * escribe la version nueva. Devuelve true si borro algo -- el
+ * constructor de fondo (D-059) las vuelve a generar. Cierra el caso que
+ * ninguna clave puede cerrar: un tile mal derivado por codigo anterior
+ * sobrevive aunque el codigo ya este corregido, porque su clave no
+ * cambio. Se llama UNA vez, antes de arrancar el constructor. */
+bool metro_settings_purge_stale_art_caches(void);
+
 /* R3-F3/DD-6 (M-064): .../aura/artist_images.cfg (Studio's index) and
  * .../aura/artists/ (Studio's own source photo cache, the directory
  * artist_images.cfg's filenames resolve into) -- CONTRATO-firmware-studio.md

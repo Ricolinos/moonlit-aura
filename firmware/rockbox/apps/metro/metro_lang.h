@@ -204,6 +204,13 @@ enum metro_lang_id {
     LANG_LIBRARY_PHASE_DB,
     LANG_LIBRARY_COUNT_FMT,
 
+    /* moonlit (D-062, D-064): fila de version de "Acerca de" y la fila
+     * de diagnostico que revela SELECT sostenido sobre ella (marca de
+     * agua de la pila del hilo principal). */
+    LANG_ABOUT_VERSION_FMT,
+    LANG_ABOUT_STACK_FMT,
+    LANG_ABOUT_STACK_NA,
+
     LANG_COUNT
 };
 

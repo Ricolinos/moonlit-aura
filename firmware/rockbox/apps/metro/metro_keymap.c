@@ -46,6 +46,11 @@ static const struct button_mapping list_mapping[] = {
     { MACT_PIVOT_PREV, BUTTON_LEFT  | BUTTON_REL,          BUTTON_LEFT  },
     { MACT_PIVOT_NEXT, BUTTON_RIGHT | BUTTON_REL,          BUTTON_RIGHT },
     { MACT_SELECT,     BUTTON_SELECT | BUTTON_REL,         BUTTON_SELECT },
+    /* moonlit (D-062 §E.4): mismo par que MACT_OPTIONS/MACT_TOGGLE_SHUFFLE
+     * en player_mapping[] -- cuando el REPEAT dispara, el REL posterior
+     * ya no cumple su prerrequisito (BUTTON_SELECT) y MACT_SELECT no se
+     * dispara detras. */
+    { MACT_SELECT_HOLD, BUTTON_SELECT | BUTTON_REPEAT,     BUTTON_NONE },
     { MACT_BACK,       BUTTON_MENU | BUTTON_REL,           BUTTON_MENU },
     { MACT_HOME,       BUTTON_MENU | BUTTON_REPEAT,        BUTTON_NONE },
     /* R4/FA-8 (M-071): igual que en el hub. Deliberadamente NO se

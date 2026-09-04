@@ -2440,3 +2440,276 @@ Esto **no** reabre lo que D-059 cerró. Lo que ahí bloqueaba aparecía solo, si
 - Simulador (build limpio + `make install`), recorrido real con inyección de botones: la fila **"actualizar biblioteca"** aparece en Ajustes › general; el aviso muestra la pregunta y **la advertencia completa** en tres líneas, sin encimarse (captura); al aceptar corre la base y sigue con **"preparando carátulas 83/312"** bajo "actualizando biblioteca…" (captura), y la pantalla **se cierra sola** devolviendo a Ajustes. Con la caché maestra de álbumes vaciada antes de la corrida, se reconstruyeron las **312** maestras.
 - A diferencia de Aura (D-344) y Metro (M-100), aquí la captura del progreso **no** necesitó ralentizar nada: la biblioteca del simulador de moonlit tiene 312 álbumes y la fase dura lo suficiente para observarla con el volcado automático.
 - **Límite documentado**: no se probó en hardware, ni el disparo por marcador de un sync de Studio real (exige Mac + iPod); los dos entran por el mismo `finish_ok()`, que es el punto modificado.
+
+---
+
+# v0.2.0 — ronda "pulido" (D-062…)
+
+## D-062 — Pila del hilo principal de 8 a 12 KB, y una herramienta que lo vigile
+
+**Encargo** (`PLAN-ronda-3-firmwares-maestro.md` §E, plan hijo Fase 1).
+El panic que motiva la ronda es de Aura (`Stkov main`, `sp` 528 B por
+debajo del inicio de una pila de 8 KB), pero **los tres firmwares
+comparten `app.lds`**: el mismo desbordamiento es alcanzable aquí en
+cuanto un camino de UI se estire lo suficiente. La corrección de raíz se
+aplica a las tres familias.
+
+**Lo que se cambió.** `firmware/target/arm/s5l8702/app.lds`, sección
+`.stack`: `. += 0x2000` → `. += 0x3000`. Archivo de Rockbox fuera de
+`apps/metro/` → anotado en `MODIFICATIONS.md` en la misma pasada, con
+comentario inline `moonlit (D-062)`.
+
+**Que cabe no es una estimación, es el `.map`.** IRAM de core = 48 KB
+(`IRAMSIZE`, `0xC000`). Antes: `stackbegin` 0x07d30, `stackend` 0x09d30,
+`_fiqstackend` **0x0a530**. Después: `stackend` 0x0ad30,
+`_fiqstackend` **0x0b530** — 2 768 B libres hasta 0xC000. Enlaza sin
+error (`build_target.sh`, exit 0, firmware y bootloader).
+
+**La medida que justifica los 4 KB.** `firmware/tools/stack_report.py`
+(abajo) estima el peor camino estático desde `main` en **7 688 B**. Con
+la pila vieja de 8 192 B eso es el **93.8 %** — sin margen para el
+inlining de un compilador distinto ni para una rama que la herramienta
+no puede seguir (llamadas por puntero). Con 12 288 B baja al **62.6 %**,
+por debajo del tope del 75 % que fija §E.3. El camino que manda no es
+de `apps/metro/` sino de Rockbox base, y termina donde ya lo había
+localizado AF D-343: `skin_get_gwps → skin_load → skin_data_load →
+font_load_ex → glyph_cache_load` (2 088 B él solo) y de ahí a la pila de
+FAT/ATA.
+
+**`firmware/tools/stack_report.py` — portada, no reescrita.** Es la
+herramienta de `../Aura-Firmware/firmware/tools/` (AF D-345), el repo
+canónico según §E.3, con tres adaptaciones y ninguna más: el grupo
+propio pasa de `apps/aura/` a `apps/metro/`, la raíz propia de
+`aura_main` a `metro_main`, y el toolchain sale de `RBDEV_TOOLCHAIN`
+(M-002). Mide el **desensamblado del binario que se publica**
+(`objdump -d`, prólogos `push`/`sub sp`) en vez de recompilar con
+`-fstack-usage` — desviación ya documentada y justificada en la propia
+herramienta por Aura; se conserva `--su-dir` como contraste opcional.
+Corre en `package_dist.sh` **antes** de empaquetar, con `--quiet`, y
+detiene el empaquetado si falla (`set -e`).
+
+Dos diferencias deliberadas respecto a la copia de Aura, ambas porque
+copiarlas tal cual habría dado un número FALSO en este repo:
+
+1. **`GUARDED_EDGES` se vacía.** Aura corta la arista
+   `skin_get_gwps → skin_load` apoyándose en que AF D-345 vació
+   `settings_apply_skins()`. moonlit **no** tiene ese cambio: que
+   `apps/metro/` tenga prohibido el skin engine (CLAUDE.md) no borra la
+   arista de `apps/settings.c` de Rockbox base. Contarla es lo correcto
+   — y de hecho es el camino que domina el reporte.
+2. **`BIG_FRAMES`, lista declarada de marcos grandes** (mecanismo nuevo,
+   propuesto también para la copia canónica de Aura). La regla de §E.3
+   "ninguna función de `apps/<familia>/` sobre 1 024 B" es inalcanzable
+   como regla ciega aquí: ocho funciones la superan por dos idiomas de
+   Rockbox, no por descuido — `struct tagcache_search` en la pila
+   (~1.2 KB; volverla estática rompería el anidamiento entre el hilo de
+   UI y el hilo constructor de D-059, que abren búsquedas a la vez) y
+   varios `char path[MAX_PATH]` (260 B c/u). En vez de subir el tope
+   (que dejaría pasar crecimiento nuevo) o de fallar siempre (que
+   bloquearía el empaquetado), cada excepción se declara **con su
+   motivo**, el reporte las imprime una por una, y una entrada obsoleta
+   se señala para que se quite. Cualquier función **nueva** por encima
+   del tope sigue fallando, que es para lo que sirve la regla.
+   Declaradas: `run_pass` (corre en el hilo constructor, con su propia
+   pila `DEFAULT_STACK_SIZE + 0x2000` — no en la de 12 KB que este
+   reporte mide), `run_search`, `insert_matching_tracks`,
+   `metro_music_song_count_of_album`, `metro_music_recent_albums`,
+   `moonlit_art_load_for_album`, `import_ratings`, `write_marker`.
+   Ninguna está en el peor camino reportado.
+
+**§E.4 — marca de agua de la pila en "Acerca de".** Es la única forma
+de que el dueño confirme en hardware que 12 KB alcanzan sin esperar otro
+panic. Rockbox ya la calcula para su menú de depuración
+(`thread_get_debug_info()` → `stack_usage`, porcentaje: cuenta las
+palabras que ya no valen `DEADBEEF`). La fila está **oculta**: SELECT
+sostenido sobre la fila de versión la revela/oculta
+(`MACT_SELECT_HOLD`, acción nueva en `MCTX_LIST`). El par
+`{SELECT|REL, prereq SELECT}` + `{SELECT|REPEAT, prereq NONE}` es el
+mismo que ya usan `MACT_OPTIONS`/`MACT_TOGGLE_SHUFFLE` en `MCTX_PLAYER`:
+cuando dispara el REPEAT, el REL posterior ya no cumple su
+prerrequisito y `MACT_SELECT` no se dispara detrás. Antes de este
+cambio, SELECT sostenido en una lista no producía **ninguna** acción,
+así que no le quita el gesto a nadie. En el simulador la fila arranca
+visible (`#ifdef SIMULATOR`) y muestra "pila principal n/d": ahí los
+hilos son de SDL y el campo no existe (`HAVE_SDL_THREADS`) — se dibuja
+igual porque lo que el simulador verifica es la geometría, y un número
+inventado sería peor que decir que no se sabe.
+
+**Warning latente corregido de paso.** `metro_screen_lock.c:340` usaba
+`strlcpy()` sin declararla (`-Wimplicit-function-declaration`). No era
+visible porque el archivo llevaba tiempo sin recompilarse; el cambio de
+`metro_settings.h` de D-063 lo forzó. Se agrega `#include
+"string-extra.h"`.
+
+**Verificación.**
+- `RBDEV_TOOLCHAIN=… build_target.sh`: exit 0 (firmware + bootloader),
+  **cero warnings nuevos** (solo los preexistentes
+  `-Wmissing-field-initializers` de `metro_screen_hub.c`/
+  `metro_screen_settings.c` y `-Wformat-truncation`).
+- `stack_report.py --quiet`: `OK -- peor camino 7688 B (62.6 % de
+  12288 B), ninguna funcion de apps/metro/ sobre 1024 B fuera de las 8
+  declaradas.` Exit 0.
+- `.bss` (`arm-elf-eabi-size rockbox.elf`): **8 460 732**. Los +4 096 B
+  frente a D-061 (8 456 636) **son la pila misma**: `.stack` es
+  `NOLOAD` en IRAM y `size` la cuenta dentro de `bss`. No hay ni una
+  estática nueva por este cambio. Bajo el techo D-043 de 8 574 076, con
+  **113 344 B de margen**.
+- Sin probar en hardware: la marca de agua real (el simulador no la
+  tiene) y que 12 KB basten en el iPod del dueño. Va a la lista de
+  verificación de la ronda.
+
+## D-063 — Caché de carátulas con versión de formato y clave de álbum v18
+
+**Encargo** (maestro §A.2/§A.3, plan hijo Fase 1.2). Dos agujeros que
+las claves actuales no pueden tapar solas:
+
+1. Un tile mal derivado por una versión anterior del código **sobrevive
+   para siempre** aunque el código ya esté corregido: su clave no
+   cambió, así que nadie lo vuelve a generar.
+2. Una `cover.jpg` reescrita sin tocar ningún archivo de audio **no
+   cambia la clave** (`a-<crc32 ruta pista>.<tag_mtime>`), así que la
+   maestra vieja —o peor, su marcador `.none`— queda pegada. Es la
+   hipótesis (a) que D-055/D-056 dejaron abierta.
+
+**Decisión 1 — `/.aura/art/format.txt` (contrato v18).** Un entero
+decimal, hoy `2`. Al arrancar, `metro_settings_purge_stale_art_caches()`
+lo lee; si falta o es menor que `MOONLIT_MASTER_ART_FORMAT_VERSION`,
+borra las cachés **derivadas** y escribe la versión nueva. El
+constructor de fondo (D-059) las rehace. Studio nunca lo toca.
+
+Se borra **por sufijo conocido** (`.art`, `.none`, `.mth`, `.pfraw`) en
+`/.aura/art/{albums,artists,photos}`, `/.aura/thumbs/{…}` y
+`moonlitcache/{albums,artists,photos,art}`, reutilizando
+`moonlit_art_sweep()` (D-056, host-testable) con un `keep` que no
+conserva nada — **no** un borrado recursivo del árbol: `/.aura/art` y
+`/.aura/thumbs` son directorios COMPARTIDOS con Aura y Metro, y un
+barrido ciego podría llevarse algo que escribió otra familia. El
+`.pfraw` entra en la lista aunque D-059 lo retiró: un disco actualizado
+desde v0.1.4 todavía lo tiene.
+
+Dónde vive cada mitad, según la regla de rutas de CLAUDE.md: el
+**formato del archivo** (`_format_read()`/`_format_write()`) en
+`moonlit_master_art.c`, que es el módulo del formato en disco y es
+host-testable; la **ruta** y la orquestación de la purga en
+`metro_settings.c`, el único archivo que puede escribir `/.aura/…`.
+
+Se llama desde `metro_main()` justo después de
+`metro_settings_migrate_shared_thumbs()` y **antes** de que exista el
+hilo constructor (lo crea `moonlit_master_art_builder_poll()`, más
+abajo en la vuelta ociosa). Sin pantalla: lo que recorre son tres
+directorios planos borrando por sufijo, no la biblioteca.
+
+**Decisión 2 — clave de álbum v18.** El `<mtime>` de
+`a-<crc32>.<mtime>` pasa a ser `max(mtime de la pista representativa,
+mtime de la `cover.jpg` hermana si existe)`. Cuesta **una lectura de
+directorio por álbum** en la resolución de clave: Rockbox no expone un
+`stat()` de un archivo suelto, así que `metro_fsutil_mtime_in_dir()`
+hace `opendir()` + `readdir()` hasta la primera coincidencia
+(comparación sin distinguir mayúsculas, como el FAT) y sale. La UI la
+paga una sola vez por álbum gracias al memo de D-055; el constructor,
+una vez por álbum y por pasada.
+
+La parte pura —de qué carpeta hermana hablamos— es
+`metro_fsutil_parent_dir()`, `static inline` en el header por el mismo
+motivo que `metro_fsutil_is_hidden_name()`: así la cubre el arnés de
+host sin arrastrar dependencias de Rockbox.
+
+**Contrato.** `CONTRATO-moonlit-studio.md` pasa a **v5**, referenciando
+el canónico v18: §A.11 gana el párrafo de versión de formato y purga
+más el de la clave; §A.10 hereda la clave nueva.
+
+**Verificación (simulador, `make install` hecho por `build_sim.sh`).**
+- Estado previo: 21 `.art` + 307 `.none`, **sin** `format.txt`.
+- Primer arranque: `format.txt` = `2` y el árbol purgado — a los 400
+  ticks va en 5 `.art` + 43 `.none`, reconstruyendo.
+  (`docs/screenshots/ronda-pulido/f1-purga-01-primera.png`)
+- Segundo arranque: `format.txt` sigue en `2` y **no** se purga nada.
+- Pasada completa (3 000 ticks): **21 `.art` + 307 `.none`** — el mismo
+  estado exacto que D-059 documentó. La purga no pierde nada, solo lo
+  rehace.
+- Clave v18, evidencia directa en la fixture: en
+  `Music/Wheel & Click/Analog Dreams/`, las pistas tienen mtime
+  1787718315 y `cover.jpg` 1787718316; la maestra escrita es
+  `a-031b464b.**1787718316**.art` — el mtime de la carátula, no el de la
+  pista. Con v17 habría sido `.1787718315`.
+- Invalidación, la prueba que cierra la hipótesis (a): `touch` de esa
+  `cover.jpg` a 2027-01-01 **sin tocar ninguna pista** → la pasada
+  siguiente escribe `a-031b464b.**1798826400**.art`. Antes de D-063 la
+  clave no se habría movido y la maestra vieja habría quedado servida
+  para siempre. (La vieja convive hasta que el `run_gc()` del final de
+  la pasada la barre como huérfana, que es el comportamiento de D-059.)
+- Tests host: **16 suites, 0 fallos**; `test_fsutil` 20→**33 checks**
+  (`metro_fsutil_parent_dir()`: raíz, sin barra, buffer justo, NULL,
+  ruta terminada en barra) y `test_master_art` 71→**85 checks**
+  (`format.txt` ausente / vacío / con basura / con cola = versión 0 o el
+  número, que es donde se decide si hay purga).
+- `.bss`: sin cambio atribuible (ver D-062: el delta es la pila).
+
+**Límite conocido.** La purga de moonlit no toca las cachés privadas de
+Aura (`.rockbox/aura/cfcache`, `photocache`) — no son suyas y este repo
+no escribe fuera de lo suyo; cada familia purga las propias al ver el
+mismo `format.txt`, que es como el contrato lo define.
+
+## D-064 — "Acerca de": el hero se desplaza, y las filas dejan de perderse
+
+**El defecto, confirmado antes de tocar nada.** `metro_screen_list.c`
+navegaba "Acerca de" con `METRO_DRAW_ROWS_VISIBLE` (5), pero
+`draw_about_rows()` empezaba en y=160 con paso 28, así que en 240 px de
+alto solo cabían **dos** filas. En los desplazamientos relativos 3 y 4
+la selección se salía de la pantalla, y había filas —los créditos, las
+licencias OFL/Apache, el aviso de no afiliación con Apple, que la GPL
+§3 obliga a poder leer— que **nunca** se veían. El hero fijo de 64 px
+(creciente + wordmark, y=76..140) era lo que se comía el espacio.
+
+**Decisión.** El hero pasa a ser **compacto y desplazable**: creciente
+de 40 px + wordmark en una sola línea de 40 px, y es la "fila −1" de la
+lista — solo se dibuja mientras la ventana está arriba del todo
+(`first == 0`), y en cuanto el usuario baja desaparece y las filas usan
+toda la pantalla. Al volver al tope, vuelve.
+
+El número de filas visibles se **deriva de la geometría real**
+(`about_visible_rows()`: `(LCD_HEIGHT − primera_y) / paso`), nunca de la
+constante global, y **el mismo número** lo usan el bucle de dibujo y
+`metro_nav_move_sel()` — que era exactamente lo que no pasaba. Con hero:
+4 filas (124/152/180/208). Sin hero: 5 (80/108/136/164/192) más una
+asomando en 220. Una fila "asomando" solo se dibuja si se le ven al
+menos 12 px de texto; un sliver de 4 px es ruido, no una pista de que
+hay más lista.
+
+**Enmienda a D-016.** D-016 decía "el wordmark solo se dibuja junto al
+creciente de 64 px (arranque, Acerca de)". Este hero es la **segunda**
+pareja admitida: creciente de 40 px + wordmark de 140×28 centrado
+verticalmente contra él. El de 64 px sigue siendo el del arranque. Los
+tamaños 16/24 siguen siendo solo geometría del creciente, sin wordmark.
+
+**Fila de versión, nueva.** El maestro §B.2 da por sentado que "el
+firmware muestra su propia versión en Acerca de" — y no estaba. Se
+agrega como fila fija (índice 1, bajo el nombre del aparato) con
+`rbversion`, la cadena que ya genera el build (`genversion.sh`) y que
+`package_dist.sh` fija al tag en un release; sin `__DATE__`/`__TIME__`
+de por medio (D-048). Es además el ancla de la fila oculta de
+diagnóstico de D-062.
+
+**Desviación respecto al plan hijo, deliberada.** El plan pedía el hero
+compacto "en y=28..68, primera fila en y=80". Los 28..68 son la banda de
+los **pivotes** (`METRO_PIVOT_Y` 28, `MFONT_DISPLAY` 40 px): ahí es donde
+se dibujan "general · pantalla · acerca de", que es como se navega entre
+ellos. Poner el hero encima habría borrado esa navegación. El hero vive
+entonces en el área de contenido (y=80 cuando está arriba del todo) y
+**las posiciones de fila del plan se cumplen exactamente** —
+80/108/136/164/192 más una asomando— en cuanto el hero se va, que es el
+estado en el que el plan las pedía.
+
+**Verificación (simulador, capturas en `docs/screenshots/ronda-pulido/`).**
+- `f1-about-00-hero.png` — entrada: hero compacto + 4 filas
+  ("mi ipod" seleccionada, "versión 7eeafd24feM-260904", "pila principal
+  n/d", "sin sincronizar todavía").
+- `f1-about-04.png` — tras 4 pasos: el hero se fue, 5 filas completas +
+  una asomando, selección dentro de pantalla.
+- `f1-about-08/12/16/20.png` — el recorrido entero. `f1-about-20.png`
+  muestra la **última** fila ("moonlit no está afiliado a apple")
+  seleccionada y completa: antes de D-064 era inalcanzable.
+- `f1-about-back-to-top.png` — 6 pasos abajo y 6 arriba: el hero vuelve.
+- Sin probar: el gesto de SELECT sostenido (el arnés headless de
+  `sim_shot.sh` solo inyecta pulsaciones cortas). Va a la lista de
+  hardware.

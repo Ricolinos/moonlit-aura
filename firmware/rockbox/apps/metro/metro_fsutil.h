@@ -28,6 +28,8 @@
 #define METRO_FSUTIL_H
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <string.h>
 
 /* R4/FA-2 (M-075): true para lo que NINGUNA lista de Metro debe
  * mostrar jamás.
@@ -84,5 +86,51 @@ int metro_fsutil_list_by_ext(const char *dir, const char *const *exts, int n_ext
 int metro_fsutil_list_by_ext_mtime(const char *dir, const char *const *exts, int n_exts,
                                     char out[][METRO_FSUTIL_NAME_LEN], long out_mtimes[],
                                     int max);
+
+/* moonlit (D-063, contrato v18): copia en `out` el directorio que
+ * contiene a `file_path` -- SIN la barra final, salvo la raiz, que se
+ * queda en "/". Pura (solo cadenas), `static inline` por el mismo
+ * motivo que metro_fsutil_is_hidden_name(): asi la cubre el arnes de
+ * host sin arrastrar dependencias de Rockbox.
+ *
+ * Existe para la clave de album v18: el `<mtime>` de `a-<crc32>.<mtime>`
+ * pasa a ser el mayor entre el de la pista representativa y el de la
+ * `cover.jpg` HERMANA, para que una caratula reescrita sin tocar la
+ * pista invalide la maestra (hipotesis (a) de D-055/D-056). Este helper
+ * es el "de que carpeta hermana hablamos".
+ *
+ * false (y `out` sin tocar) si no hay carpeta que extraer: ruta vacia,
+ * ruta relativa sin ninguna barra, o `out` demasiado corto. */
+static inline bool metro_fsutil_parent_dir(const char *file_path, char *out,
+                                            size_t outsz)
+{
+    const char *slash;
+    size_t len;
+
+    if (!file_path || !out || outsz == 0)
+        return false;
+
+    slash = strrchr(file_path, '/');
+    if (!slash)
+        return false;
+
+    len = (size_t)(slash - file_path);
+    if (len == 0)
+        len = 1; /* "/pista.mp3" -> "/" */
+    if (len + 1 > outsz)
+        return false;
+
+    memcpy(out, file_path, len);
+    out[len] = '\0';
+    return true;
+}
+
+/* moonlit (D-063): mtime del archivo `name` (comparado sin distinguir
+ * mayusculas, como el FAT) dentro de `dir`, o -1 si no esta. Rockbox no
+ * expone un stat() de un solo archivo -- dir_get_info() sobre una
+ * entrada de readdir() es la unica via, la misma que ya usa
+ * metro_fsutil_list_by_ext_mtime(). Recorre hasta encontrarlo: en una
+ * carpeta de album tipica son una decena de entradas. */
+long metro_fsutil_mtime_in_dir(const char *dir, const char *name);
 
 #endif /* METRO_FSUTIL_H */
