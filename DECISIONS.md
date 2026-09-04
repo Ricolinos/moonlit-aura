@@ -4267,3 +4267,173 @@ existente). Techo D-043 8 574 076 B, margen **106 272 B**.
 
 **PARADA 2 — Fase 2 cerrada.** Sigue Fase 3 (idiomas y cirílico,
 D-080/D-081).
+
+## D-080 — Cuatro idiomas nuevos: francés, alemán, ruso, italiano
+
+**Decisión.** `metro_lang.h` gana `METRO_LANG_FR/DE/RU/IT` (orden fijo,
+`metro_lang_code_to_enum()`/`_from_enum()` y el selector de Ajustes lo
+recorren igual). `metro_lang.c` gana `strings_fr/de/ru/it[LANG_COUNT]`
+— las 137 cadenas completas, traducidas de cero (no máquina literal:
+tono natural de cada idioma, revisado cadena por cadena contra el
+significado real, no la forma de la frase en español/inglés). Reglas
+del maestro (§D.1) aplicadas:
+- Alemán: sustantivos (comunes y propios) con mayúscula inicial —
+  ortografía real, no estilo — el resto sigue el mismo tono discreto
+  que el resto de las tablas.
+- Francés: el espacio fino antes de `?`/`:` se sustituye por un espacio
+  normal (ninguna fuente de moonlit trae ese glifo, y agregar una
+  fuente aparte solo para eso no vale la pena).
+- Ruso: sin equivalente de pluralización en el motor de cadenas
+  (`%d` es un entero puro) — `LANG_MAREA_SONGS_FMT` usa el genitivo
+  plural ("%d песен"), la aproximación más común cuando no hay reglas
+  de plural por cantidad; no es gramaticalmente exacto para N=1..4,
+  limitación conocida y no nueva de este cambio (el mismo `%d` sin
+  plurales ya existía para inglés "song(s)").
+- `metro_lang_str()` pasa de un ternario ES/EN a `lang_tables[current_lang][id]`
+  — un arreglo de punteros a tabla, para que agregar un idioma sea
+  agregar una fila y una tabla, no anidar otro ternario.
+
+**Selector con nombre nativo (maestro §D.2).** `metro_lang_native_name()`
+(nueva) devuelve el nombre de un idioma EN ESE IDIOMA siempre —
+"Español", "English", "Français", "Deutsch", "Русский", "Italiano" —
+sin pasar por `current_lang`: una interfaz en alemán muestra "Русский"
+tal cual, no una traducción de "ruso". La fila "idioma" en Ajustes
+(`metro_screen_settings.c`) ahora la usa en vez de
+`LANG_VALUE_SPANISH`/`LANG_VALUE_ENGLISH` (que quedan en las tablas,
+sin uso — retirarlas movería el valor numérico de todo lo que viene
+después en el enum sin necesidad real). `SELECT` recorre los seis en
+orden y envuelve, en vez del toggle ES↔EN de antes.
+
+**`metro_splash_lang.c` también a seis idiomas.** Las ocho reglas que
+retraducen los mensajes de arranque de Rockbox (Metro no usa el
+sistema de `.lang` de Rockbox, M-009) — "Cargando...", "Preparando el
+disco...", batería baja/agotada, etc. — se habrían quedado en
+español/inglés nada más si no se tocaban: un usuario ruso habría visto
+"Preparando el disco..." en español en plena pantalla de arranque.
+`splash_rule_t.es/en` se vuelve `tr[METRO_LANG_COUNT]`, indexado igual
+que `metro_lang.c`.
+
+**Verificación.** `test_lang`: 61 → **948 checks** —
+`test_no_string_missing_in_any_language()` recorre las 137 claves × 6
+idiomas (822 checks) confirmando que NINGUNA quedó sin traducir (un
+hueco en un inicializador designado de arreglo no avisa en la
+compilación, C99 permite arreglos dispersos — se habría visto como una
+fila en blanco recién en el dispositivo); `test_six_languages_resolve()`
+confirma que los formatos (`%d`/`%s`) sobreviven la traducción en los
+seis; `test_native_names()` confirma que el nombre nativo no se mueve
+con `current_lang`. Capturas en `docs/screenshots/ajustes-2/`
+(`f3-01-hub-ruso.png`, `f3-02-acerca-de-ruso.png`) — ver D-081, la
+verificación visual real depende de la fuente cirílica.
+
+## D-081 — Cirílico: fuente aparte por rol, alfabeto ruso completo
+
+**Decisión — rango, no el bloque Unicode completo.** `1025-1105`
+(Ё U+0401, А-я U+0410-U+044F, ё U+0451: el alfabeto ruso completo, 66
+letras) en vez de `1024-1279` (el bloque "Cyrillic" entero, 256
+códigos) — medido por Metro sobre el mismo par de fuentes para su
+propio porte: el bloque completo en cinco roles pesaba 280 KB, mucho
+para alfabetos (ucraniano, serbio) que moonlit no ofrece todavía.
+Ucraniano/serbio quedan FUERA a propósito; una ronda futura que agregue
+esos idiomas amplía este rango, mide de nuevo, y ya.
+
+**Fuente aparte, los SIETE roles.** A diferencia de la de puntuación
+(D-074, excluye `MFONT_DISPLAY`), la cirílica se genera para los siete
+— `MFONT_DISPLAY` dibuja nombres de pivote del hub, y en ruso son
+cirílicos de punta a punta ("música" → "музыка"). Libre Baskerville
+(display/title/headline) no trae cirílico: esos tres roles sustituyen
+su cara por Montserrat Regular, al mismo tamaño de píxel, solo para
+este archivo — Montserrat sí trae el alfabeto completo, verificado
+(`CYRILLIC_REQUIRED_CODEPOINTS`, `design-system/generate.py`: el build
+se detiene si a algún rol le falta una sola de las 66 letras — a
+diferencia de la puntuación, aquí NO hay intersección: un alfabeto
+incompleto no es aceptable en ningún rol). Los otros cuatro roles
+(ya Montserrat) usan su misma cara, solo cambia el rango de códigos.
+`design-system/generate.py --fonts` genera `moonlit-<rol>-<px>-cyr.fnt`
+junto a la primaria y la de puntuación de siempre.
+
+**Costo medido, no supuesto — y por qué `display` se queda.** Disco:
+37 261 (display-40) + 18 597 (title-28) + 11 167 (headline-22) +
+10 003 (list-20) + 10 763 (listsel-20) + 7 971 (body-18) + 8 131
+(label-18) = **103 893 B** para los siete. RAM: medida con
+`font_get(id)->buffer_size` en el simulador tras cargar cada una — 
+**idéntica, byte a byte**, a su tamaño en disco en los siete casos: con
+presupuesto de 96 glifos (`MOONLIT_CYRILLIC_GLYPH_BUDGET`) contra 81
+entradas reales, `font_load_ex()` (`firmware/font.c`) cae en la rama
+SIN caché (el archivo entero a buflib), confirmado leyendo la condición
+`bufsize < file_size` del propio `font.c`, no solo midiendo. `display-40`
+pesa 37 261/103 893 = **35.9 %** del total — Metro, con Inter en vez de
+Montserrat, midió que su `display-48` pasaba el 52 % y lo dejó fuera
+(los nombres de pivote en ruso caen a `title` ahí); moonlit no cruza
+esa mitad, así que `display` se queda con cirílico propio, sin excepción
+que documentar en `moonlit_fonts.c`.
+
+**`moonlit_textseg.c` — tercera clase de tramo.** `MOONLIT_TEXTSEG_CYRILLIC`,
+nuevo parámetro `has_cyrillic_font` en `moonlit_textseg_build()`. Un
+codepoint en 1025-1105 con `has_cyrillic_font` en true es tramo
+CYRILLIC, bytes tal cual (nunca transliterado — no hay ASCII razonable
+para "я"). Encontrado al escribir esto: el atajo de D-074 ("sin fuente
+de puntuación, un solo tramo PRIMARY transliterado entero") asumía que
+`!has_punct_font` significa "este rol no tiene nada aparte" — cierto
+hasta ahora, falso para `MFONT_DISPLAY` desde este momento (tiene
+cirílico pero no puntuación). Corregido a
+`!has_punct_font && !has_cyrillic_font`; sin la corrección, los nombres
+de pivote en ruso se habrían transliterado (a nada, sin reemplazo) y
+mostrado el defaultchar `·` en vez del texto real. `metro_draw.c` (único
+punto de dibujo de texto, M-051) pasa `metro_font_has_cyrillic(role)` y
+resuelve `MOONLIT_TEXTSEG_CYRILLIC` a `metro_font_cyrillic_id(role)` —
+`metro_draw_text_width()` usa el mismo camino, así que mide cirílico
+correcto sin cambio propio.
+
+**`MAXUSERFONTS` 16 → 24.** 7 primarias + 6 puntuación + 7 cirílicas =
+20 fuentes, con el mismo margen de 4 que D-074 dejó. Encontrado a la
+mala (ver MODIFICATIONS.md): con 16 todavía, `moonlit_fonts.c` cargaba
+`body`/`label` cirílicas como "failed to load" — silencioso,
+`metro_font_cyrillic_id()` cae al id primario sin caerse, así que
+invisible sin medir. `firmware/tools/sim_shot.sh` ahora falla
+(`exit 1`, imprime la línea) si el log del simulador contiene
+"failed to load" — cualquier captura de aquí en adelante es también,
+gratis, una verificación de que las 20 fuentes cargaron.
+
+**`check_fonts.py --coverage` extendido, sin romper lo que ya hacía.**
+El chequeo agrupaba TODOS los `.fnt` bajo un mismo criterio ("cubre la
+UI completa") — con las fuentes de puntuación (D-074) y ahora las
+cirílicas conviviendo en el mismo directorio, eso reportaba cientos de
+"faltantes" falsos (una fuente de puntuación, rango 8208+, nunca tuvo
+que cubrir la UI general) y el propio chequeo nunca corrió limpio desde
+D-074 hasta ahora. `_font_category()` clasifica por sufijo de archivo
+(`-punct`/`-cyr`/primaria) y cada categoría se mide contra SU universo:
+primaria contra la UI menos el rango cirílico (D-081 es trabajo de la
+`-cyr`, no de esta), cirílica contra los codepoints cirílicos que la UI
+de verdad usa (extraídos de `metro_lang.c`, las seis tablas a la vez —
+`lang_codepoints()` ya recorría el archivo entero, sin cambio), y
+puntuación solo informa metadatos (su cobertura real la decide la
+intersección que `generate.py` ya calcula). Corrido limpio: los siete
+roles primarios "UI: completa", los siete cirílicos "cirílico:
+completo".
+
+**`gen_test_media.sh`.** Álbum cirílico ("Лунный Свет" / "Ночная
+Симфония", sin carátula a propósito — el monograma de Marea también
+dibuja la inicial cirílica) y álbum alemán con ß/ü ("Käfer & Größe" /
+"Weiße Straße") — este último ya en el rango primario 32-383 (D-007),
+prueba de que NO necesita fuente aparte ni transliteración.
+
+**Verificación.** `test_textseg`: 45 → **57 checks** (texto ruso puro
+un solo tramo, ruso y latín alternando con fusión de tramos contiguos,
+sin fuente cirílica no clasifica CYRILLIC, `MFONT_DISPLAY` sin
+puntuación pero con cirílico). Las 20 suites: **0 fallos**. Target y
+bootloader compilan en 0 errores. `.bss`: **8 467 964 B** (+160 B sobre
+el cierre de la Fase 2 — ocho ranuras más de `MAXUSERFONTS`, mismo
+orden de magnitud que los +96 B que D-074 midió para cuatro), techo
+D-043 8 574 076 B, margen **106 112 B**.
+
+Capturas contra arranques reales, mismo criterio de D-079
+(`docs/screenshots/ajustes-2/`): `f3-01-hub-ruso.png` (hub y Ajustes ›
+General en ruso, "язык: Рус[ский]"), `f3-02-acerca-de-ruso.png`
+("Acerca de" en ruso, cirílico en `MFONT_LIST_SEL`/`MFONT_BODY`/
+`MFONT_LABEL`), `f3-03-marea-cirilico.png` (Marea con el álbum ruso —
+título en `MFONT_HEADLINE` desbordando en marquesina, monograma con la
+inicial cirílica "Н" en vez de un placeholder o `?`), y una captura
+intermedia del álbum alemán confirmando ß/ü sin fuente aparte.
+
+**PARADA 3 — Fase 3 cerrada.** Sigue Fase 4 (visor de fotos, porta el
+diff de Metro M-109 cuando exista).

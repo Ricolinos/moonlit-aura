@@ -43,7 +43,21 @@ else
   unset METRO_SIM_BUTTONS 2>/dev/null || true
 fi
 
-./rockboxui > /dev/null 2>&1 || true
+RUN_LOG="$(mktemp -t moonlit_sim_shot)"
+trap 'rm -f "$RUN_LOG"' EXIT
+./rockboxui > "$RUN_LOG" 2>&1 || true
+
+# moonlit (D-081): una fuente que no cupo en MAXUSERFONTS (font.h) falla
+# en silencio para el usuario -- moonlit_fonts.c cae al font id
+# primario en vez de estrellarse, asi que una ranura agotada nunca se
+# veia sin medir a mano (asi se encontro el hueco de D-081 con
+# MAXUSERFONTS en 16 y las cirilicas de body/label). Cualquier captura
+# es tambien, gratis, un chequeo de que las 7+6+7 fuentes cargaron.
+if grep -q "failed to load" "$RUN_LOG"; then
+  echo "ERROR: una fuente no cargo (ver DEBUGF abajo) -- probable MAXUSERFONTS agotado (firmware/export/font.h)" >&2
+  grep "failed to load" "$RUN_LOG" >&2
+  exit 1
+fi
 
 DUMP_FILE="$(ls -t simdisk/dump*.bmp 2>/dev/null | head -1)"
 if [[ -z "$DUMP_FILE" ]]; then

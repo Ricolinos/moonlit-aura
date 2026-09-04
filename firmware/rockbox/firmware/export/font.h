@@ -56,8 +56,19 @@ enum {
  * abajo (firmware/font.c: unos 16 B de .bss; apps/gui/skin_engine/
  * skin_parser.c: unos 48+8 B mas, aunque moonlit no usa el motor de
  * skins, D-062 addendum -- esos arrays existen igual porque el modulo
- * se compila para el target). */
-#define MAXUSERFONTS 16
+ * se compila para el target).
+ *
+ * moonlit (D-081): 16 -> 24. Fuente cirilica aparte para los SIETE
+ * roles (rango 1025-1105, ver design-system/generate.py) -- 7+6+7 = 20
+ * fuentes en total, con el mismo margen de 4 que D-074 dejo (para no
+ * volver a tocar este numero si se agrega un octavo rol o una octava
+ * fuente aparte). Encontrado a la mala: con 16 todavia, moonlit_fonts.c
+ * cargaba las cirilicas de body/label como "failed to load" -- 20
+ * fuentes no cabian en 16 ranuras y el font.c interno del target no
+ * avisa mas que con un id invalido (metro_font_cyrillic_id() cae al
+ * primario, sin caerse, pero SIN cirilico en esos dos roles), asi que
+ * era invisible sin medir. */
+#define MAXUSERFONTS 24
 
 /* SYSFONT, FONT_UI, FONT_UI_REMOTE + MAXUSERFONTS fonts in skins */
 #define MAXFONTS (FONT_FIRSTUSERFONT + MAXUSERFONTS)

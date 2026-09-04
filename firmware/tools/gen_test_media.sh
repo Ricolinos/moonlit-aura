@@ -256,6 +256,24 @@ gen_track "Fundacion Panoramica de Instrumentacion Sinfonica Extendida" \
   "Sinfonia Numero Catorce en Sostenido Menor, Movimiento Primero" \
   "Classical" 1 "Obertura interminable para probar el desborde de texto" 300
 
+# moonlit (D-080, D-081, maestro SS D.4): album cirilico -- artista,
+# album y titulos en ruso de punta a punta, para probar la fuente
+# cirilica aparte (D-081) en lista, Marea y Ahora suena a la vez (los
+# tres caen en roles distintos: MFONT_LIST/LIST_SEL, MFONT_HEADLINE,
+# MFONT_TITLE). Sin cover.jpg a proposito: el monograma de Marea
+# tambien dibuja la inicial cirilica ("Л").
+gen_track "Лунный Свет" "Ночная Симфония" "Electronic" 1 "Полночь" 260
+gen_track "Лунный Свет" "Ночная Симфония" "Electronic" 2 "Рассвет" 275
+gen_track "Лунный Свет" "Ночная Симфония" "Electronic" 3 "Прилив и Отлив" 290
+
+# moonlit (D-080, maestro SS D.1/D.4): album aleman con ß/ü -- fuera
+# del rango cirilico, pero fuera de ASCII puro tambien (U+00DF, U+00FC
+# ya estan en el rango primario 32-383 de D-007, asi que no deberian
+# necesitar ni fuente aparte ni transliteracion; este fixture es
+# justo la prueba mecanica de eso).
+gen_track "Käfer & Größe" "Weiße Straße" "Rock" 1 "Über den Wolken" 240
+gen_track "Käfer & Größe" "Weiße Straße" "Rock" 2 "Grüße aus München" 255
+
 # R2-F1/DD-2: near-white cover art, worst-case contrast fixture for
 # Now Playing's semi-transparent text plate (METRO_NP_BG_ALPHA256,
 # metro_screen_nowplaying.c) -- the palest fixture that ships, on

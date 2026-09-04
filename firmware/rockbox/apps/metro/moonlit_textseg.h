@@ -40,6 +40,7 @@ enum moonlit_textseg_kind {
     MOONLIT_TEXTSEG_PRIMARY = 0, /* rol normal -- ASCII/Latin-1 tal cual,
                                   * o ya transliterado (D-066) */
     MOONLIT_TEXTSEG_PUNCT,       /* fuente de puntuacion del rol (D-074) */
+    MOONLIT_TEXTSEG_CYRILLIC,    /* fuente cirilica del rol (D-081, ruso) */
 };
 
 /* Un tramo, ya escrito y NUL-terminado dentro del buffer de salida del
@@ -50,6 +51,13 @@ struct moonlit_textseg {
     const char *text;
 };
 
+/* moonlit (D-081): rango denso de la fuente cirilica (alfabeto ruso
+ * completo, ver design-system/generate.py) -- Ё(0x401), А-я(0x410-0x44F),
+ * ё(0x451). Publico para que el test host pueda recorrerlo sin
+ * duplicar los limites. */
+#define MOONLIT_TEXTSEG_CYRILLIC_START 1025
+#define MOONLIT_TEXTSEG_CYRILLIC_LIMIT 1105
+
 /* Parte `in` en como mucho `max_segs` tramos dentro de `out_buf`
  * (`out_buf_sz` bytes). Devuelve cuantos escribio -- 0 si `in` es NULL
  * o vacio, o si no cupo ni un byte.
@@ -58,9 +66,14 @@ struct moonlit_textseg {
  * hoy solo MFONT_DISPLAY) hace que el resultado sea SIEMPRE un unico
  * tramo PRIMARY con `in` transliterado entero (moonlit_translit.h,
  * D-066) -- el comportamiento de antes de D-074, sin excepciones.
+ * `has_cyrillic_font` sigue el mismo criterio para el rango cirilico
+ * (D-081) -- hoy los siete roles lo tienen, a diferencia de punct.
  *
  * Con `has_punct_font` en true, cada codepoint se clasifica:
  *   - 32-383 (rango primario, D-007): tramo PRIMARY, bytes tal cual.
+ *   - 1025-1105 (D-081) SI `has_cyrillic_font`: tramo CYRILLIC, bytes
+ *     tal cual (sin transliterar -- no hay ASCII razonable para una
+ *     letra rusa).
  *   - en moonlit_punct_table_has() (D-074, interseccion de los seis
  *     roles): tramo PUNCT, bytes tal cual (SIN transliterar -- son
  *     justo los que la fuente de puntuacion dibuja de verdad).
@@ -76,6 +89,7 @@ struct moonlit_textseg {
  * caben en `out_buf_sz`, el resto se descarta -- mismo criterio de
  * truncar sin desbordar que ya sigue moonlit_translit(). */
 int moonlit_textseg_build(const char *in, bool has_punct_font,
+                          bool has_cyrillic_font,
                           char *out_buf, size_t out_buf_sz,
                           struct moonlit_textseg *segs, int max_segs);
 

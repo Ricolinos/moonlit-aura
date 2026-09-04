@@ -180,6 +180,27 @@ def fmt_cp(cp):
     return f"U+{cp:04X} '{shown}'"
 
 
+
+# D-081 (maestro SS D.3): rango cirilico -- mismo par de limites que
+# moonlit_textseg.h (MOONLIT_TEXTSEG_CYRILLIC_START/_LIMIT), copiado a
+# proposito (este script no enlaza C) en vez de compartido.
+CYRILLIC_RANGE = range(1025, 1106)
+
+
+def _font_category(name):
+    """-> "punct" | "cyrillic" | "primary", por el sufijo del archivo
+    (design-system/generate.py: moonlit-<rol>-<px>[-punct|-cyr].fnt).
+    Cada categoria cubre un universo de codepoints DISTINTO a proposito
+    (D-074/D-081) -- pedirle a la fuente de puntuacion o a la cirilica
+    que cubran la UI entera reportaria cientos de "faltantes" que nunca
+    fueron su trabajo."""
+    if name.endswith("-punct.fnt"):
+        return "punct"
+    if name.endswith("-cyr.fnt"):
+        return "cyrillic"
+    return "primary"
+
+
 def cmd_coverage(fonts_dir, lang_path, tags_path, translit_path):
     import glob
     import os
@@ -188,28 +209,65 @@ def cmd_coverage(fonts_dir, lang_path, tags_path, translit_path):
     if not fonts:
         die(f"no hay .fnt en {fonts_dir}")
 
-    ui = lang_codepoints(lang_path)
+    ui_all = lang_codepoints(lang_path)
+    # D-081: el rango cirilico es responsabilidad de las fuentes -cyr.fnt
+    # exclusivamente -- las primarias (D-007) y las de puntuacion (D-074)
+    # nunca lo cubrieron ni deberian, asi que separarlo aqui es lo que
+    # evita que agregar ruso rompa el chequeo de las demas.
+    ui_cyrillic = {c for c in ui_all if c in CYRILLIC_RANGE}
+    ui_other = ui_all - ui_cyrillic
     meta = set(METADATA_CODEPOINTS)
     tags = file_codepoints(tags_path) if tags_path else set()
     translit = translit_codepoints(translit_path)
 
-    print(f"== cobertura de glifos ==  UI {len(ui)} codepoints, "
-          f"metadatos {len(meta)}, tags {len(tags)}, "
-          f"transliterados {len(translit)} (D-066)")
+    print(f"== cobertura de glifos ==  UI {len(ui_other)} codepoints "
+          f"(+{len(ui_cyrillic)} cirilicos, D-081), metadatos {len(meta)}, "
+          f"tags {len(tags)}, transliterados {len(translit)} (D-066)")
     ui_failures = 0
 
     for path in fonts:
-        h, covered = read_glyph_table(path)
+        h, covered_raw = read_glyph_table(path)
         # Un codepoint transliterado no necesita glifo: se dibuja con su
         # equivalente ASCII, que si esta en el rango.
-        covered = covered | translit
+        covered = covered_raw | translit
         name = os.path.basename(path)
-        miss_ui = sorted(c for c in ui if c not in covered and c >= 32)
+        category = _font_category(name)
+
+        print(f"\n{name} [{category}]: firstchar={h['firstchar']} "
+              f"size={h['size']} defaultchar={h['defaultchar']} "
+              f"glifos_reales={len(covered_raw)}")
+
+        if category == "cyrillic":
+            # D-081: su UNICA responsabilidad es el alfabeto ruso --
+            # nunca translitera (no hay ASCII razonable para "я").
+            miss = sorted(c for c in ui_cyrillic if c not in covered_raw)
+            if miss:
+                ui_failures += 1
+                print(f"   FALTA cirilico de la UI ({len(miss)}): "
+                      + ", ".join(fmt_cp(c) for c in miss[:12])
+                      + (" ..." if len(miss) > 12 else ""))
+            else:
+                print(f"   cirilico: completo ({len(ui_cyrillic)}/{len(ui_cyrillic)})")
+            continue
+
+        if category == "punct":
+            # D-074: su cobertura real la decide la INTERSECCION que
+            # generate.py ya calcula y escribe en moonlit_punct_table.c
+            # -- aqui solo se informan metadatos, nunca se exige la UI
+            # entera (jamas fue su trabajo).
+            miss_meta = sorted(c for c in meta if c not in covered)
+            print(f"   metadatos: faltan {len(miss_meta)}/{len(meta)}"
+                  + (("  " + ", ".join(fmt_cp(c) for c in miss_meta[:8])
+                      + (" ..." if len(miss_meta) > 8 else "")) if miss_meta else ""))
+            continue
+
+        # primary: mismo chequeo de siempre (D-066), pero contra ui_other
+        # -- el rango cirilico (D-081) es trabajo de la fuente -cyr.fnt
+        # del mismo rol, no de esta.
+        miss_ui = sorted(c for c in ui_other if c not in covered and c >= 32)
         miss_meta = sorted(c for c in meta if c not in covered)
         miss_tags = sorted(c for c in tags if c not in covered and c >= 32)
 
-        print(f"\n{name}: firstchar={h['firstchar']} size={h['size']} "
-              f"defaultchar={h['defaultchar']} glifos_reales={len(covered)}")
         if miss_ui:
             ui_failures += 1
             print(f"   FALTA de la UI ({len(miss_ui)}): "
@@ -226,8 +284,10 @@ def cmd_coverage(fonts_dir, lang_path, tags_path, translit_path):
                       + (" ..." if len(miss_tags) > 8 else "")) if miss_tags else ""))
 
     if ui_failures:
-        die(f"{ui_failures} fuente(s) sin cubrir la UI de metro_lang.c")
-    print("\ncheck_fonts: la UI esta cubierta en todos los roles.")
+        die(f"{ui_failures} fuente(s) sin cubrir la UI de metro_lang.c "
+            f"(primaria: rango 32-383 + transliteracion; cirilica: alfabeto ruso completo)")
+    print("\ncheck_fonts: la UI esta cubierta en todos los roles "
+          "(primario, seis idiomas, y cirilico D-081).")
 
 
 MAX_DIACRITIC_GAP_PX = 2  # ver comentario en _detect_row_bands

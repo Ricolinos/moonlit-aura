@@ -40,24 +40,38 @@
  * da el mismo tipo de margen que los 400 de arriba dan sobre 351-352. */
 #define MOONLIT_PUNCT_GLYPH_BUDGET 320
 
+/* moonlit (D-081): las fuentes cirilicas miden 81 glifos reales exactos
+ * (rango denso 1025-1105, alfabeto ruso completo, ver
+ * design-system/generate.py) -- 96 da el mismo tipo de margen. */
+#define MOONLIT_CYRILLIC_GLYPH_BUDGET 96
+
 struct metro_font_spec {
     const char *filename; /* under FONT_DIR */
     const char *role_name; /* for DEBUGF only */
     const char *punct_filename; /* moonlit (D-074): NULL si el rol no tiene */
+    const char *cyrillic_filename; /* moonlit (D-081): los siete roles la tienen */
 };
 
 static const struct metro_font_spec font_specs[MFONT_COUNT] = {
-    [MFONT_DISPLAY]  = { "moonlit-display-40.fnt",  "display",  NULL },
-    [MFONT_TITLE]    = { "moonlit-title-28.fnt",    "title",    "moonlit-title-28-punct.fnt" },
-    [MFONT_HEADLINE] = { "moonlit-headline-22.fnt", "headline", "moonlit-headline-22-punct.fnt" },
-    [MFONT_LIST]     = { "moonlit-list-20.fnt",     "list",     "moonlit-list-20-punct.fnt" },
-    [MFONT_LIST_SEL] = { "moonlit-listsel-20.fnt",  "list_sel", "moonlit-listsel-20-punct.fnt" },
-    [MFONT_BODY]     = { "moonlit-body-18.fnt",     "body",     "moonlit-body-18-punct.fnt" },
-    [MFONT_LABEL]    = { "moonlit-label-18.fnt",    "label",    "moonlit-label-18-punct.fnt" },
+    [MFONT_DISPLAY]  = { "moonlit-display-40.fnt",  "display",  NULL,
+                          "moonlit-display-40-cyr.fnt" },
+    [MFONT_TITLE]    = { "moonlit-title-28.fnt",    "title",    "moonlit-title-28-punct.fnt",
+                          "moonlit-title-28-cyr.fnt" },
+    [MFONT_HEADLINE] = { "moonlit-headline-22.fnt", "headline", "moonlit-headline-22-punct.fnt",
+                          "moonlit-headline-22-cyr.fnt" },
+    [MFONT_LIST]     = { "moonlit-list-20.fnt",     "list",     "moonlit-list-20-punct.fnt",
+                          "moonlit-list-20-cyr.fnt" },
+    [MFONT_LIST_SEL] = { "moonlit-listsel-20.fnt",  "list_sel", "moonlit-listsel-20-punct.fnt",
+                          "moonlit-listsel-20-cyr.fnt" },
+    [MFONT_BODY]     = { "moonlit-body-18.fnt",     "body",     "moonlit-body-18-punct.fnt",
+                          "moonlit-body-18-cyr.fnt" },
+    [MFONT_LABEL]    = { "moonlit-label-18.fnt",    "label",    "moonlit-label-18-punct.fnt",
+                          "moonlit-label-18-cyr.fnt" },
 };
 
 static int font_ids[MFONT_COUNT];
 static int punct_font_ids[MFONT_COUNT]; /* moonlit (D-074) */
+static int cyrillic_font_ids[MFONT_COUNT]; /* moonlit (D-081) */
 
 static int load_one(const char *filename, const char *role_name,
                     const char *what, int glyph_budget)
@@ -108,6 +122,20 @@ void metro_fonts_init(void)
             if (punct_id >= 0)
                 punct_font_ids[role] = punct_id;
         }
+
+        /* moonlit (D-081): sin fuente cirilica propia, o si la carga
+         * falla, el tramo CYRILLIC cae al id primario -- mismo criterio
+         * "sin diferencia" que D-074 usa para PUNCT. Los siete roles SI
+         * tienen archivo (a diferencia de punct, que excluye display). */
+        cyrillic_font_ids[role] = font_ids[role];
+        if (font_specs[role].cyrillic_filename)
+        {
+            int cyr_id = load_one(font_specs[role].cyrillic_filename,
+                                  font_specs[role].role_name, "cyrillic",
+                                  MOONLIT_CYRILLIC_GLYPH_BUDGET);
+            if (cyr_id >= 0)
+                cyrillic_font_ids[role] = cyr_id;
+        }
     }
 }
 
@@ -130,4 +158,18 @@ int metro_font_punct_id(enum metro_font_role role)
     if ((unsigned)role >= MFONT_COUNT)
         return FONT_SYSFIXED;
     return punct_font_ids[role];
+}
+
+bool metro_font_has_cyrillic(enum metro_font_role role)
+{
+    if ((unsigned)role >= MFONT_COUNT)
+        return false;
+    return font_specs[role].cyrillic_filename != NULL;
+}
+
+int metro_font_cyrillic_id(enum metro_font_role role)
+{
+    if ((unsigned)role >= MFONT_COUNT)
+        return FONT_SYSFIXED;
+    return cyrillic_font_ids[role];
 }

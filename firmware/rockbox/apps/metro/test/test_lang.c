@@ -198,20 +198,28 @@ static void test_upper(void)
     CHECK(out[0] == '\0');
 }
 
-/* moonlit (D-079): codigo de dos letras <-> enum, para la clave
- * `language` de /.aura/settings.cfg. Solo es/en existen todavia --
- * D-080 (Fase 3) agrega fr/de/ru/it a esta misma tabla. */
+/* moonlit (D-079, D-080): codigo de dos letras <-> enum, para la clave
+ * `language` de /.aura/settings.cfg -- los seis idiomas de la tabla
+ * (maestro SS D). */
 static void test_code_mapping(void)
 {
     CHECK(metro_lang_code_to_enum("es") == METRO_LANG_ES);
     CHECK(metro_lang_code_to_enum("en") == METRO_LANG_EN);
-    CHECK(metro_lang_code_to_enum("fr") == -1); /* SS A.3: no soportado todavia */
+    CHECK(metro_lang_code_to_enum("fr") == METRO_LANG_FR);
+    CHECK(metro_lang_code_to_enum("de") == METRO_LANG_DE);
+    CHECK(metro_lang_code_to_enum("ru") == METRO_LANG_RU);
+    CHECK(metro_lang_code_to_enum("it") == METRO_LANG_IT);
+    CHECK(metro_lang_code_to_enum("pt") == -1); /* no soportado */
     CHECK(metro_lang_code_to_enum("") == -1);
 
     CHECK(!strcmp(metro_lang_code_from_enum(METRO_LANG_ES), "es"));
     CHECK(!strcmp(metro_lang_code_from_enum(METRO_LANG_EN), "en"));
+    CHECK(!strcmp(metro_lang_code_from_enum(METRO_LANG_FR), "fr"));
+    CHECK(!strcmp(metro_lang_code_from_enum(METRO_LANG_DE), "de"));
+    CHECK(!strcmp(metro_lang_code_from_enum(METRO_LANG_RU), "ru"));
+    CHECK(!strcmp(metro_lang_code_from_enum(METRO_LANG_IT), "it"));
 
-    /* Round-trip para cada idioma que SI existe. */
+    /* Round-trip para los seis. */
     {
         int lang;
         for (lang = 0; lang < METRO_LANG_COUNT; lang++)
@@ -221,6 +229,86 @@ static void test_code_mapping(void)
             CHECK(metro_lang_code_to_enum(code) == lang);
         }
     }
+}
+
+/* moonlit (D-080): metro_lang_native_name() no pasa por current_lang --
+ * cada idioma se ve siempre en si mismo, sin importar cual este activo. */
+static void test_native_names(void)
+{
+    enum metro_language before = metro_lang_get();
+
+    metro_lang_set(METRO_LANG_RU);
+    CHECK(!strcmp(metro_lang_native_name(METRO_LANG_ES), "Español"));
+    CHECK(!strcmp(metro_lang_native_name(METRO_LANG_EN), "English"));
+    CHECK(!strcmp(metro_lang_native_name(METRO_LANG_FR), "Français"));
+    CHECK(!strcmp(metro_lang_native_name(METRO_LANG_DE), "Deutsch"));
+    CHECK(!strcmp(metro_lang_native_name(METRO_LANG_RU), "Русский"));
+    CHECK(!strcmp(metro_lang_native_name(METRO_LANG_IT), "Italiano"));
+    CHECK(!strcmp(metro_lang_native_name((enum metro_language)99), ""));
+
+    metro_lang_set(before);
+}
+
+/* moonlit (D-080): metro_lang_str() resuelve contra cada uno de los
+ * seis idiomas -- una clave conocida nunca vuelve "" ni se cae al
+ * espanol por accidente cuando el idioma activo es otro. */
+static void test_six_languages_resolve(void)
+{
+    enum metro_language before = metro_lang_get();
+    static const enum metro_language all[] = {
+        METRO_LANG_ES, METRO_LANG_EN, METRO_LANG_FR,
+        METRO_LANG_DE, METRO_LANG_RU, METRO_LANG_IT,
+    };
+    size_t i;
+
+    for (i = 0; i < sizeof(all) / sizeof(all[0]); i++)
+    {
+        metro_lang_set(all[i]);
+        CHECK(metro_lang_get() == all[i]);
+        CHECK(metro_lang_str(LANG_HUB_MUSIC)[0] != '\0');
+        CHECK(metro_lang_str(LANG_SETTING_LANGUAGE)[0] != '\0');
+        CHECK(metro_lang_str(LANG_LEGAL_BODY)[0] != '\0');
+        /* Formato preservado en los seis -- %d/%s no se pierde al traducir. */
+        CHECK(strstr(metro_lang_str(LANG_MAREA_SONGS_FMT), "%d") != NULL);
+        CHECK(strstr(metro_lang_str(LANG_DIALOG_SWITCH_FMT), "%s") != NULL);
+        CHECK(strstr(metro_lang_str(LANG_SYNC_ART_ALBUMS), "%d") != NULL);
+    }
+
+    metro_lang_set(before);
+}
+
+/* moonlit (D-080): ninguna de las 137 claves puede quedar sin traducir
+ * en ninguno de los seis idiomas -- un hueco en una tabla designada
+ * (`[LANG_X] = "..."` faltante) no avisa en la compilacion (arrays
+ * dispersos son validos en C99) y metro_lang_str() lo cubriria con ""
+ * en silencio, una fila en blanco que nadie notaria hasta verla en el
+ * dispositivo. */
+static void test_no_string_missing_in_any_language(void)
+{
+    enum metro_language before = metro_lang_get();
+    static const enum metro_language all[] = {
+        METRO_LANG_ES, METRO_LANG_EN, METRO_LANG_FR,
+        METRO_LANG_DE, METRO_LANG_RU, METRO_LANG_IT,
+    };
+    size_t i;
+    int id;
+
+    for (i = 0; i < sizeof(all) / sizeof(all[0]); i++)
+    {
+        metro_lang_set(all[i]);
+        for (id = 0; id < LANG_COUNT; id++)
+        {
+            checks++;
+            if (metro_lang_str((enum metro_lang_id)id)[0] == '\0')
+            {
+                failures++;
+                printf("FALLO %s:%d: idioma %d, LANG id %d vacio\n",
+                       __FILE__, __LINE__, (int)all[i], id);
+            }
+        }
+    }
+
+    metro_lang_set(before);
 }
 
 int main(void)
@@ -233,6 +321,9 @@ int main(void)
     test_collate();
     test_upper();
     test_code_mapping();
+    test_native_names();
+    test_six_languages_resolve();
+    test_no_string_missing_in_any_language();
 
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

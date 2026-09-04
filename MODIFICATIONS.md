@@ -617,3 +617,20 @@ Ver `DECISIONS.md` D-059 para el resto (`apps/metro/moonlit_master_art.{c,h}`,
   los arreglos de `apps/gui/skin_engine/skin_parser.c`, que existen
   aunque moonlit no use el motor de skins, D-062 addendum — el módulo
   se compila igual para el target).
+
+- `firmware/export/font.h`: `MAXUSERFONTS` **16 → 24** (comentario
+  inline `moonlit (D-081)`). Ruso (D-080) agrega una fuente cirílica
+  aparte para los SIETE roles (rango 1025-1105, alfabeto ruso completo
+  vía Montserrat — Libre Baskerville no trae cirílico) — 7 primarias +
+  6 de puntuación + 7 cirílicas = 20 fuentes en total, con el mismo
+  margen de 4 que D-074 dejó. Encontrado a la mala con 16 todavía: las
+  cirílicas de `body`/`label` fallaban en silencio ("failed to load",
+  sin crashear — `metro_font_cyrillic_id()` cae al id primario) porque
+  20 fuentes no cabían en 16 ranuras; invisible sin medir.
+  `firmware/tools/sim_shot.sh` ahora falla la captura si ve esa línea
+  en el log del simulador, para que una ranura agotada nunca vuelva a
+  pasar desapercibida.
+
+- `apps/SOURCES`: se agrega la entrada `metro/moonlit_shared_settings.c`
+  — módulo puro para `/.aura/settings.cfg` (contrato v19), comentario
+  inline `moonlit (D-079)`.

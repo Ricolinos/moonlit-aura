@@ -61,4 +61,14 @@ bool metro_font_has_punct(enum metro_font_role role);
  * metro_font_id() itself. */
 int metro_font_punct_id(enum metro_font_role role);
 
+/* moonlit (D-081): true if `role` has its own Cyrillic font -- unlike
+ * metro_font_has_punct(), this is true for all seven roles (a Russian
+ * title can land in any of them, including MFONT_DISPLAY). */
+bool metro_font_has_cyrillic(enum metro_font_role role);
+
+/* moonlit (D-081): the Cyrillic font id for `role`. Falls back to
+ * metro_font_id(role) if the Cyrillic .fnt never loaded, same rule as
+ * metro_font_punct_id(). */
+int metro_font_cyrillic_id(enum metro_font_role role);
+
 #endif /* MOONLIT_FONTS_H */

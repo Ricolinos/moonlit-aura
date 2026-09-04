@@ -26,8 +26,10 @@
 typedef struct {
     const char *match; /* original Rockbox English text (or prefix) */
     int exact;          /* 1 = the whole text must match, 0 = prefix only */
-    const char *es;
-    const char *en;
+    /* moonlit (D-080): indexado por enum metro_language, mismo orden
+     * que metro_lang.c -- agregar un idioma es agregar una columna aca
+     * tambien. */
+    const char *tr[METRO_LANG_COUNT];
 } splash_rule_t;
 
 /* Source strings copied verbatim from apps/lang/english.lang (the only
@@ -37,21 +39,36 @@ typedef struct {
  * prefixes go before their shorter variants. */
 static const splash_rule_t s_rules[] = {
     { "Loading... (",                              0,
-      "Cargando... (",                              "Loading... (" },
+      { "Cargando... (", "Loading... (", "Chargement... (",
+        "Wird geladen... (", "Загрузка... (", "Caricamento... (" } },
     { "Loading...",                                1,
-      "Cargando...",                                "Loading..." },
+      { "Cargando...", "Loading...", "Chargement...",
+        "Wird geladen...", "Загрузка...", "Caricamento..." } },
     { "Scanning disk...",                          1,
-      "Preparando el disco...",                     "Preparing storage..." },
+      { "Preparando el disco...", "Preparing storage...", "Analyse du disque...",
+        "Datenträger wird durchsucht...", "Сканирование диска...", "Analisi del disco..." } },
     { "Shutting down...",                          1,
-      "Apagando...",                                "Shutting down..." },
+      { "Apagando...", "Shutting down...", "Extinction...",
+        "Wird heruntergefahren...", "Выключение...", "Spegnimento..." } },
     { "Database is not ready",                     1,
-      "Terminando de preparar la biblioteca...",    "Finishing up your library..." },
+      { "Terminando de preparar la biblioteca...", "Finishing up your library...",
+        "Finalisation de la préparation de votre bibliothèque...",
+        "Bibliothek wird fertig vorbereitet...",
+        "Завершение подготовки библиотеки...",
+        "Completamento della preparazione della libreria..." } },
     { "WARNING! Low Battery! Shutting down...",    1,
-      "Bateria baja. Apagando...",                  "Low battery. Shutting down..." },
+      { "Bateria baja. Apagando...", "Low battery. Shutting down...",
+        "Batterie faible. Extinction...", "Akku schwach. Wird heruntergefahren...",
+        "Батарея разряжена. Выключение...", "Batteria scarica. Spegnimento..." } },
     { "Battery empty! RECHARGE! Shutting down...", 1,
-      "Bateria agotada. Conecta el cargador.",      "Battery empty. Plug in your charger." },
+      { "Bateria agotada. Conecta el cargador.", "Battery empty. Plug in your charger.",
+        "Batterie vide. Branche le chargeur.", "Akku leer. Ladegerät anschließen.",
+        "Батарея разряжена. Подключите зарядное устройство.",
+        "Batteria scarica. Collega il caricabatterie." } },
     { "Committing database [",                     0,
-      "Preparando la biblioteca [",                 "Preparing your library [" },
+      { "Preparando la biblioteca [", "Preparing your library [",
+        "Préparation de la bibliothèque [", "Bibliothek wird vorbereitet [",
+        "Подготовка библиотеки [", "Preparazione della libreria [" } },
 };
 
 void metro_splash_translate(char *buf, size_t bufsz)
@@ -69,7 +86,7 @@ void metro_splash_translate(char *buf, size_t bufsz)
         if (!matches)
             continue;
 
-        translated = (metro_lang_get() == METRO_LANG_EN) ? r->en : r->es;
+        translated = r->tr[metro_lang_get()];
 
         if (r->exact)
         {

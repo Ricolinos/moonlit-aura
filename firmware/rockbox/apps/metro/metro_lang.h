@@ -26,9 +26,18 @@
  * Aura-Firmware's aura_lang.c (D-013, INVESTIGACION.md A.9). Spanish
  * by default (DECISIONS.md M-009); append-only as new screens land. */
 
+/* moonlit (D-080, maestro SS D): orden fijo -- metro_lang_code_to_enum()/
+ * _from_enum() y el selector de Ajustes (metro_screen_settings.c) lo
+ * recorren en este mismo orden. Los codigos ISO 639-1 de dos letras
+ * (es/en/fr/de/ru/it) son los que viaja `language` en
+ * /.aura/settings.cfg (D-079, contrato v19 SS A.1). */
 enum metro_language {
     METRO_LANG_ES = 0,
     METRO_LANG_EN,
+    METRO_LANG_FR,
+    METRO_LANG_DE,
+    METRO_LANG_RU,
+    METRO_LANG_IT,
     METRO_LANG_COUNT
 };
 
@@ -307,5 +316,12 @@ void metro_lang_upper(const char *s, char *out, size_t outsz);
  * el idioma local. NULL si `lang` no es un valor de enum conocido. */
 int metro_lang_code_to_enum(const char *code);
 const char *metro_lang_code_from_enum(enum metro_language lang);
+
+/* moonlit (D-080, maestro SS D.2): nombre NATIVO de un idioma -- "Español",
+ * "English", "Français", "Deutsch", "Русский", "Italiano" -- siempre en
+ * ese idioma, sin importar cuál esté activo (a diferencia de
+ * metro_lang_str(), que resuelve contra `current_lang`). Solo lo usa el
+ * selector de Ajustes. "" si `lang` no es válido. */
+const char *metro_lang_native_name(enum metro_language lang);
 
 #endif /* METRO_LANG_H */

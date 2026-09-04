@@ -291,6 +291,46 @@ MOONLIT_TRANSLIT_C = ROOT.parent / "firmware" / "rockbox" / "apps" / "metro" / "
 PUNCT_TABLE_C = ROOT.parent / "firmware" / "rockbox" / "apps" / "metro" / "moonlit_punct_table.c"
 PUNCT_TABLE_H = ROOT.parent / "firmware" / "rockbox" / "apps" / "metro" / "moonlit_punct_table.h"
 
+# D-081 (maestro SS D.3): cirilico para los seis idiomas nuevos (ruso).
+# Rango 1025-1105 (U+0401 Ё, U+0410-U+044F А-я, U+0451 ё) -- el
+# alfabeto ruso completo (66 letras + Ё/ё), NO el bloque "Cyrillic"
+# entero de Unicode (1024-1279, 256 codigos): medido por Metro sobre el
+# mismo par de fuentes (Montserrat) para su propio porte, 1024-1279 en
+# cinco roles pesaba 280 KB -- mucho para alfabetos (ucraniano, serbio)
+# que moonlit no ofrece todavia. Ucraniano/serbio quedan FUERA a
+# proposito; una ronda futura que los agregue amplia este rango, mide
+# de nuevo, y listo.
+#
+# Libre Baskerville (display/title/headline) no trae cirilico -- esos
+# tres roles dibujan su fuente cirilica desde Montserrat-Regular al
+# mismo tamano en vez de su cara habitual (maestro SS D.3, explicito).
+# Los otros cuatro roles ya son Montserrat: su fuente cirilica usa la
+# MISMA cara que su fuente primaria (regular/semibold/medium), solo
+# cambia el rango de codigos.
+CYRILLIC_CHARSET_START = 1025   # U+0401 Ё
+CYRILLIC_CHARSET_LIMIT = 1105   # U+0451 ё
+CYRILLIC_CHARSET_DEFAULT = CYRILLIC_CHARSET_START
+CYRILLIC_FALLBACK_FACE = "montserrat-regular"  # D-081: display/title/headline no tienen cara propia con cirilico
+
+# D-081: que caras SI traen cirilico -- Montserrat (las tres variantes
+# vendoreadas), no Libre Baskerville. Medido con _glyph_coverage() en
+# generate_fonts() (CYRILLIC_REQUIRED_CODEPOINTS exige el alfabeto
+# COMPLETO, no una interseccion) -- este dict solo decide que archivo
+# .ttf se le pasa a convttf para cada rol.
+FACES_WITH_CYRILLIC = {"montserrat-regular", "montserrat-medium", "montserrat-semibold"}
+
+# Los 66 codepoints REALES del alfabeto ruso dentro del rango de arriba
+# (el rango tiene huecos: 1106-1119 del bloque Cyrillic quedan fuera de
+# 1025-1105 por construccion, pero AUN dentro de 1025-1105 hay un hueco
+# real, 1106 no aplica aqui -- el unico hueco relevante es que el rango
+# es denso 1025-1105 = 81 posiciones, de las cuales 66 son letras
+# rusas reales; moonlit_textseg.c clasifica por RANGO, no por esta
+# lista -- esta lista es solo lo que generate_fonts() exige que CADA
+# rol dibuje de verdad (a diferencia de la puntuacion, D-074, aqui no
+# hay interseccion: si a un rol le falta una letra rusa de verdad, el
+# alfabeto queda incompleto para ese rol y el build se detiene).
+CYRILLIC_REQUIRED_CODEPOINTS = [0x0401] + list(range(0x0410, 0x0450)) + [0x0451]
+
 RB12_HEADER = struct.Struct("<4sHHHHiiiiii")
 
 # D-068 (maestro SS H): la barra de estado se alinea por la ALTURA DE
@@ -400,6 +440,11 @@ def punct_font_filename(role_name, role):
     return f"moonlit-{slug}-{role['px']}-punct.fnt"
 
 
+def cyrillic_font_filename(role_name, role):
+    slug = role.get("file_slug", role_name)
+    return f"moonlit-{slug}-{role['px']}-cyr.fnt"
+
+
 def _glyph_coverage(path):
     """-> dict codepoint -> ancho, para los codepoints con glifo REAL
     (ancho > 0) de un .fnt. Misma aritmetica de desplazamiento que
@@ -471,6 +516,37 @@ def generate_fonts(tokens):
 
         print(f"   {role_name} ({role['face']} @ {role['px']}px) -> {out_fnt.name} "
               f"(firstchar={header['firstchar']}, size={header['size']}, height={header['height']})")
+
+        # D-081 (maestro SS D.3): fuente cirilica aparte, LOS SIETE
+        # roles (a diferencia de la de puntuacion, que excluye
+        # `display` mas abajo) -- un titulo/nombre en ruso puede caer
+        # en cualquier rol, incluido el de Marea/"Ahora suena". Libre
+        # Baskerville no trae cirilico: display/title/headline
+        # sustituyen su cara por CYRILLIC_FALLBACK_FACE (Montserrat
+        # Regular) solo para este archivo, al mismo tamano de pixel.
+        cyr_face = role["face"] if role["face"] in FACES_WITH_CYRILLIC else CYRILLIC_FALLBACK_FACE
+        cyr_ttf_path = ROOT / faces[cyr_face]
+        out_cyr = FONTS_OUT / cyrillic_font_filename(role_name, role)
+        cmd = [
+            str(CONVTTF), "-p", str(role["px"]),
+            "-s", str(CYRILLIC_CHARSET_START), "-l", str(CYRILLIC_CHARSET_LIMIT),
+            "-D", str(CYRILLIC_CHARSET_DEFAULT), "-c", str(role["spacing"]),
+            "-o", str(out_cyr), str(cyr_ttf_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0 or not out_cyr.exists():
+            die(f"convttf (cirilico) fallo para {role_name}@{role['px']}px:\n"
+                f"{result.stdout}\n{result.stderr}")
+
+        cyr_coverage = _glyph_coverage(out_cyr)
+        missing = [cp for cp in CYRILLIC_REQUIRED_CODEPOINTS if cp not in cyr_coverage]
+        if missing:
+            die(f"{out_cyr}: faltan {len(missing)} de las 66 letras rusas -- "
+                + ", ".join(f"U+{cp:04X}" for cp in missing))
+        cyr_header = read_rb12_header(out_cyr)
+        print(f"      + cirilico ({cyr_face}) -> {out_cyr.name} "
+              f"(firstchar={cyr_header['firstchar']}, size={cyr_header['size']}, "
+              f"{len(cyr_coverage)} glifos reales, alfabeto completo)")
 
         # D-074: fuente de puntuacion aparte, todos los roles salvo
         # `display`. Rango denso 8208-8482 (ver la constante de arriba).

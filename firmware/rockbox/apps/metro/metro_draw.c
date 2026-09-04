@@ -78,6 +78,7 @@ static int build_segs(enum metro_font_role role, const char *str,
     if (!str)
         return 0;
     return moonlit_textseg_build(str, metro_font_has_punct(role),
+                                 metro_font_has_cyrillic(role),
                                  s_textseg_buf, sizeof(s_textseg_buf),
                                  segs, METRO_TEXTSEG_MAX);
 }
@@ -85,9 +86,11 @@ static int build_segs(enum metro_font_role role, const char *str,
 static int seg_font_id(enum metro_font_role role,
                        const struct moonlit_textseg *seg)
 {
-    return seg->kind == MOONLIT_TEXTSEG_PUNCT
-               ? metro_font_punct_id(role)
-               : metro_font_id(role);
+    if (seg->kind == MOONLIT_TEXTSEG_PUNCT)
+        return metro_font_punct_id(role);
+    if (seg->kind == MOONLIT_TEXTSEG_CYRILLIC)
+        return metro_font_cyrillic_id(role);
+    return metro_font_id(role);
 }
 
 /* moonlit (D-066/D-067/D-074): ancho de `str` EN LA FORMA EN QUE SE

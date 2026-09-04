@@ -63,6 +63,7 @@ static int decode_utf8(const char *s, uint32_t *out_cp)
 }
 
 int moonlit_textseg_build(const char *in, bool has_punct_font,
+                          bool has_cyrillic_font,
                           char *out_buf, size_t out_buf_sz,
                           struct moonlit_textseg *segs, int max_segs)
 {
@@ -76,7 +77,12 @@ int moonlit_textseg_build(const char *in, bool has_punct_font,
     if (!in || !in[0])
         return 0;
 
-    if (!has_punct_font)
+    /* moonlit (D-081): MFONT_DISPLAY no tiene fuente de puntuacion pero
+     * SI tiene cirilica (dibuja nombres de pivote del hub, que en ruso
+     * son cirilicos de punta a punta -- "musica"/"настройки") -- el
+     * atajo de un solo tramo transliterado solo aplica cuando NINGUNA
+     * de las dos fuentes aparte existe. */
+    if (!has_punct_font && !has_cyrillic_font)
     {
         moonlit_translit(in, out_buf, out_buf_sz);
         segs[0].kind = MOONLIT_TEXTSEG_PRIMARY;
@@ -96,7 +102,15 @@ int moonlit_textseg_build(const char *in, bool has_punct_font,
         {
             kind = MOONLIT_TEXTSEG_PRIMARY;
         }
-        else if (moonlit_punct_table_has(cp))
+        else if (has_cyrillic_font && cp >= MOONLIT_TEXTSEG_CYRILLIC_START &&
+                 cp <= MOONLIT_TEXTSEG_CYRILLIC_LIMIT)
+        {
+            /* moonlit (D-081): sin transliterar -- no hay ASCII
+             * razonable para una letra rusa, a diferencia de la
+             * puntuacion tipografica (D-066). */
+            kind = MOONLIT_TEXTSEG_CYRILLIC;
+        }
+        else if (has_punct_font && moonlit_punct_table_has(cp))
         {
             /* Sin transliterar -- es justo lo que la fuente de
              * puntuacion del rol dibuja de verdad (D-074). */

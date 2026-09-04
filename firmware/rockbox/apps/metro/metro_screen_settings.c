@@ -417,9 +417,10 @@ static void general_get_row(void *ctx, int index, struct metro_row *out)
     {
         case 0:
             out->title = metro_lang_str(LANG_SETTING_LANGUAGE);
-            out->subtitle = metro_lang_str(metro_lang_get() == METRO_LANG_ES
-                                                ? LANG_VALUE_SPANISH
-                                                : LANG_VALUE_ENGLISH);
+            /* moonlit (D-080, maestro SS D.2): nombre NATIVO, no
+             * traducido -- "Русский" se ve igual sin importar si la
+             * interfaz esta en español o en alemán. */
+            out->subtitle = metro_lang_native_name(metro_lang_get());
             out->kind = METRO_ROW_SETTING;
             break;
         case 1:
@@ -514,8 +515,9 @@ static void general_on_select(void *ctx, int index)
     switch (index)
     {
         case 0:
-            metro_lang_set(metro_lang_get() == METRO_LANG_ES
-                                ? METRO_LANG_EN : METRO_LANG_ES);
+            /* moonlit (D-080): recorre los seis en el orden de
+             * enum metro_language (SELECT avanza uno, envuelve). */
+            metro_lang_set((enum metro_language)((metro_lang_get() + 1) % METRO_LANG_COUNT));
             metro_settings.language = metro_lang_get();
             metro_settings_save();
             metro_settings_write_shared(); /* moonlit (D-079): clave compartida */
