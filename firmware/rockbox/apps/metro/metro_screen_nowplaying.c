@@ -36,6 +36,7 @@
 #include "metro_screen_nowplaying.h"
 #include "metro_screen_list.h"
 #include "metro_draw.h"
+#include "moonlit_marquee.h" /* moonlit (D-067) */
 #include "metro_theme.h"
 #include "metro_lang.h"
 #include "metro_widgets.h"
@@ -657,15 +658,20 @@ void metro_screen_nowplaying_show(void)
         metro_lang_upper(id3->artist ? id3->artist
                                      : metro_lang_str(LANG_UNKNOWN_ARTIST),
                          upper, sizeof(upper));
-        metro_draw_text_cut_right(MFONT_BODY, NP_COL_X, NP_ARTIST_Y, upper,
-                                   metro_color_secondary(), col_w);
-        metro_draw_text_cut_right(MFONT_LIST, NP_COL_X, NP_ALBUM_Y,
-                                   id3->album ? id3->album
-                                              : metro_lang_str(LANG_UNKNOWN_ALBUM),
-                                   metro_color_secondary(), col_w);
-        metro_draw_text_cut_right(MFONT_TITLE, NP_COL_X, NP_TITLE_Y,
-                                   id3->title ? id3->title : "?",
-                                   metro_color_fg(), col_w);
+        /* moonlit (D-067): las tres lineas desplazan si desbordan --
+         * en "Ahora suena" no hay seleccion que mover, todas tienen el
+         * foco por igual, y un titulo cortado es justo lo que el dueno
+         * no puede leer. */
+        moonlit_marquee_draw(MOONLIT_MARQUEE_NP_ARTIST, MFONT_BODY, NP_COL_X,
+                              col_w, NP_ARTIST_Y, upper, metro_color_secondary());
+        moonlit_marquee_draw(MOONLIT_MARQUEE_NP_ALBUM, MFONT_LIST, NP_COL_X,
+                              col_w, NP_ALBUM_Y,
+                              id3->album ? id3->album
+                                         : metro_lang_str(LANG_UNKNOWN_ALBUM),
+                              metro_color_secondary());
+        moonlit_marquee_draw(MOONLIT_MARQUEE_NP_TITLE, MFONT_TITLE, NP_COL_X,
+                              col_w, NP_TITLE_Y,
+                              id3->title ? id3->title : "?", metro_color_fg());
 
         draw_progress_and_times(id3);
     }

@@ -234,6 +234,18 @@ gen_track "Wheel & Click" "Analog Dreams" "Ambient" 2 "Ferrite" 175
 gen_track "Wheel & Click" "Analog Dreams" "Ambient" 3 "Idle Hum" 185
 gen_track "Wheel & Click" "Analog Dreams" "Ambient" 4 "Wind Down" 196
 
+# moonlit (D-066): album con la puntuacion tipografica que las fuentes
+# NO traen y que la transliteracion tiene que resolver -- apostrofo
+# curvo (U+2019), comillas dobles curvas (U+201C/U+201D), raya
+# (U+2014), puntos suspensivos (U+2026) y espacio duro (U+00A0), mas
+# una corchea (U+266A) que NO tiene equivalente ASCII y debe caer en el
+# defaultchar '·'. Es el caso que el plan de la ronda pide capturar en
+# lista, "Ahora suena" y Marea. Sin cover.jpg a proposito: asi el mismo
+# album sirve de monograma en Marea (D-065).
+gen_track "Journey’s Edge" "Don’t Stop — “Live”…" "Rock" 1 "Believin’" 210
+gen_track "Journey’s Edge" "Don’t Stop — “Live”…" "Rock" 2 "Any Way You Want It" 195
+gen_track "Journey’s Edge" "Don’t Stop — “Live”…" "Rock" 3 "Wheel ♪ in the Sky" 230
+
 # R2-F1/DD-2: near-white cover art, worst-case contrast fixture for
 # Now Playing's semi-transparent text plate (METRO_NP_BG_ALPHA256,
 # metro_screen_nowplaying.c) -- the palest fixture that ships, on

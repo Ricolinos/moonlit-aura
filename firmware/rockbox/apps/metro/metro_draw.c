@@ -30,6 +30,8 @@
 #include "metro_theme.h"
 #include "metro_lang.h"
 #include "moonlit_elevation.h"
+#include "moonlit_translit.h" /* moonlit (D-066): puntuacion tipografica */
+#include "moonlit_marquee.h"  /* moonlit (D-067): texto largo que desborda */
 #include "moonlit_logo.h" /* moonlit (D-016, D-044, M9): creciente 16px en la barra vacia */
 
 /* moonlit (D-011, M4): 20px, surface_container_lowest -- ver
@@ -49,13 +51,52 @@ void metro_draw_clear(void)
  * Left set to FG afterward; nothing in apps/metro/ needs a SOLID
  * rectangle on purpose, so there is no restore step. See DECISIONS.md
  * M-051. */
+/* moonlit (D-066): TODO texto de moonlit pasa por aqui (M-051), asi que
+ * este es el unico sitio donde hace falta transliterar la puntuacion
+ * tipografica que las fuentes no traen -- ni las pantallas ni
+ * metro_lang.c tienen que saber nada del asunto.
+ *
+ * El camino comun no copia nada: moonlit_translit_needed() es un
+ * recorrido de bytes que sale en falso para cualquier texto que ya sea
+ * ASCII o Latin-1 acentuado, que es casi todo. Solo cuando aparece un
+ * 0xC2/0xE2 se paga la copia al scratch.
+ *
+ * El scratch es estatico y compartido: metro_draw_* corre solo en el
+ * hilo de UI (el constructor de maestras nunca dibuja, D-059), y una
+ * llamada termina de usar el buffer antes de que empiece la siguiente
+ * -- lcd_putsxy() no cede la CPU. */
+#define METRO_TRANSLIT_MAX 256
+static char s_translit_buf[METRO_TRANSLIT_MAX];
+
+static const char *translit_if_needed(const char *str)
+{
+    if (!str || !moonlit_translit_needed(str))
+        return str;
+    return moonlit_translit(str, s_translit_buf, sizeof(s_translit_buf));
+}
+
+/* moonlit (D-066/D-067): ancho de `str` EN LA FORMA EN QUE SE DIBUJA --
+ * es decir, ya transliterado. Medir la cadena original daria otro
+ * numero (un "…" mide un glifo y se dibuja como tres), y quien centra o
+ * decide si hace falta marquesina se equivocaria por esa diferencia. */
+int metro_draw_text_width(enum metro_font_role role, const char *str)
+{
+    int w = 0, h;
+
+    if (!str)
+        return 0;
+    lcd_setfont(metro_font_id(role));
+    lcd_getstringsize((const unsigned char *)translit_if_needed(str), &w, &h);
+    return w;
+}
+
 void metro_draw_text(enum metro_font_role role, int x, int y,
                       const char *str, unsigned color)
 {
     lcd_setfont(metro_font_id(role));
     lcd_set_foreground(color);
     lcd_set_drawmode(DRMODE_FG);
-    lcd_putsxy(x, y, (const unsigned char *)str);
+    lcd_putsxy(x, y, (const unsigned char *)translit_if_needed(str));
 }
 
 void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
@@ -105,7 +146,8 @@ void metro_draw_text_clipped(enum metro_font_role role, int clip_x, int clip_w,
     vp.drawmode = DRMODE_FG; /* M-051 -- see metro_draw_text() */
 
     old_vp = lcd_set_viewport(&vp);
-    lcd_putsxy(x - clip_x, y - vp.y, (const unsigned char *)str);
+    lcd_putsxy(x - clip_x, y - vp.y,
+                (const unsigned char *)translit_if_needed(str)); /* D-066 */
     lcd_set_viewport(old_vp);
 }
 
@@ -265,10 +307,15 @@ static void draw_row_text(const struct metro_row *row, int x, int row_y, bool se
         title_clip_w = LCD_WIDTH - 12 - sub_w - x - 8;
     }
 
-    metro_draw_text_cut_right(selected ? MFONT_LIST_SEL : MFONT_LIST, x, row_y,
-                               row->title,
-                               selected ? metro_color_fg() : metro_color_secondary(),
-                               title_clip_w);
+    /* moonlit (D-067): solo la fila SELECCIONADA desplaza. Una lista
+     * entera moviendose seria ilegible, y ademas solo la seleccionada
+     * tiene el foco del usuario. Las demas se cortan como siempre. */
+    if (selected)
+        moonlit_marquee_draw(MOONLIT_MARQUEE_ROW, MFONT_LIST_SEL, x,
+                              title_clip_w, row_y, row->title, metro_color_fg());
+    else
+        metro_draw_text_cut_right(MFONT_LIST, x, row_y, row->title,
+                                   metro_color_secondary(), title_clip_w);
 }
 
 /* moonlit (D-011, M4; D-052 C4): capa de estado MD3 -- la fila
@@ -467,8 +514,10 @@ static void draw_tile_caption(const struct metro_pivot *pivot, int sel, int coun
                        - METRO_ROWS_LEFT_X - 8;
     }
 
-    metro_draw_text_cut_right(MFONT_LABEL, METRO_ROWS_LEFT_X, y + 4,
-                               row.title, metro_color_fg(), title_clip_w);
+    /* moonlit (D-067): el rotulo del tile seleccionado es el unico
+     * texto de una cuadricula, asi que siempre es "el seleccionado". */
+    moonlit_marquee_draw(MOONLIT_MARQUEE_TILE, MFONT_LABEL, METRO_ROWS_LEFT_X,
+                          title_clip_w, y + 4, row.title, metro_color_fg());
 }
 
 void metro_draw_tiles(const struct metro_pivot *pivot, int first, int sel,

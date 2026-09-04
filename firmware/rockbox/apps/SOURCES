@@ -328,6 +328,9 @@ metro/metro_screen_hub.c
 metro/metro_screen_settings.c
 metro/metro_music.c
 metro/metro_albumart.c
+metro/moonlit_translit.c /* moonlit (D-066): transliteracion de puntuacion tipografica, modulo puro */
+metro/moonlit_marquee.c /* moonlit (D-067): marquesina de texto largo (maestro SS G) */
+metro/moonlit_marquee_cycle.c /* moonlit (D-067): el reloj del ciclo, modulo puro host-testable */
 metro/moonlit_art.c /* moonlit (D-020, D-042, M7): formato .pfraw puro, de aura_art.c */
 metro/moonlit_art_cache.c /* moonlit (D-042, M7): resolucion album->pixeles; D-059: deriva de la maestra */
 metro/moonlit_master_art.c /* moonlit (D-059): formato maestro compartido /.aura/art (contrato v16), modulo puro */

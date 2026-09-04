@@ -36,3 +36,44 @@ El alias temporal de M2 (`MFONT_CAPTION` → `MFONT_BODY`) se retiró: los
 22 sitios de llamada se reanotaron con su rol MD3 real —
 `MFONT_LABEL` para header/subtítulos/valores/tiempos, `MFONT_BODY` para
 el único caso de una oración completa (el mensaje de lista vacía).
+
+## Puntuación tipográfica y carácter por omisión (D-066)
+
+Los siete `.fnt` cubren el rango decimal **32–383** (D-007). Ampliarlo
+para que entraran las comillas curvas, los guiones largos y los puntos
+suspensivos se **midió y se descartó**: RB12 es un rango denso (una
+entrada de offset + una de ancho por código, exista o no el glifo), así
+que llegar a 8482 cuesta +1 010 578 B en disco y +286 998 B de tablas en
+RAM con los siete roles cargados, contra un presupuesto de 40 KB.
+
+En su lugar, `apps/metro/moonlit_translit.c` transcribe a su equivalente
+ASCII los 24 codepoints que sí lo tienen (espacio duro, guiones
+U+2010–U+2015, comillas simples y dobles tipográficas, viñetas, puntos
+suspensivos, primas, angulares, ™). Se aplica dentro de
+`metro_draw_text()`/`metro_draw_text_clipped()`, el único sitio que hace
+falta porque M-051 obliga a que todo el texto pase por ahí.
+
+Lo que no tiene equivalente honesto (♪ ★ ♥, CJK, emoji) **no se
+inventa**: cae en el `defaultchar`, que es **`·` (U+00B7)** y no `?` — un
+punto medio no parece un error de lectura.
+
+Para medir un ancho que decida geometría, usa
+`metro_draw_text_width()`, que translitera antes de medir;
+`lcd_getstringsize()` sobre la cadena original da otro número.
+
+Verificación mecánica: `firmware/tools/check_fonts.py --coverage` compara
+la tabla de glifos de cada `.fnt` con las cadenas de `metro_lang.c`, una
+lista curada de codepoints de metadatos y la propia tabla de
+transliteración. **Falla** si la UI tiene un hueco.
+
+## Marquesina (D-067)
+
+El texto que no cabe en su banda se desplaza: **2 000 ms quieto, 5 000 ms
+de barrido lineal de derecha a izquierda, 24 px de hueco entre copias, en
+bucle** (tokens `motion.marquee_*`). Se dibujan dos copias para que el
+bucle no tenga costura. Solo desplaza el texto con foco —la fila
+seleccionada, el rótulo del tile seleccionado, las tres líneas de "Ahora
+suena", el título del panel de Marea— y solo bajo `lcd_active()` con
+`animations != off`; apagadas, se corta a la derecha como siempre. API:
+`moonlit_marquee_draw()` (`apps/metro/moonlit_marquee.h`); el reloj del
+ciclo es puro y host-testable (`moonlit_marquee_cycle.c`).

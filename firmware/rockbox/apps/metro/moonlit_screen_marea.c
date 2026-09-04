@@ -111,6 +111,7 @@ static long marea_now_us(void)
 #include "moonlit_art_cache.h"
 #include "moonlit_master_art.h"         /* moonlit (D-059): none marker helpers */
 #include "moonlit_master_art_builder.h" /* moonlit (D-059): builder generation */
+#include "moonlit_marquee.h" /* moonlit (D-067) */
 #include "moonlit_palette.h"
 #include "moonlit_elevation.h"
 #include "moonlit_fonts.h"
@@ -905,8 +906,13 @@ static void draw_panel(void)
     moonlit_draw_surface(MAREA_PANEL_X, MAREA_PANEL_Y, MAREA_PANEL_W, MAREA_PANEL_H,
                           MSURFACE_LOW, MAREA_PANEL_RADIUS);
 
-    metro_draw_text_cut_right(MFONT_HEADLINE, text_x, MAREA_PANEL_Y + 24,
-                               album->label, moonlit_color(MROLE_ON_SURFACE), text_w);
+    /* moonlit (D-067): el titulo del album enfocado desplaza si
+     * desborda. El artista y el conteo NO: dos textos moviendose a la
+     * vez en un panel de 152 px compiten entre si, y el titulo es el
+     * que de verdad se corta. */
+    moonlit_marquee_draw(MOONLIT_MARQUEE_MAREA, MFONT_HEADLINE, text_x, text_w,
+                          MAREA_PANEL_Y + 24, album->label,
+                          moonlit_color(MROLE_ON_SURFACE));
 
     if (album->subtitle[0])
         metro_draw_text_cut_right(MFONT_BODY, text_x, MAREA_PANEL_Y + 56,

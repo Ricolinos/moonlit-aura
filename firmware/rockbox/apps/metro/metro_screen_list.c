@@ -32,6 +32,7 @@
 #include "metro_settings.h" /* moonlit (D-052 C4): puerta metro_settings.animations */
 #include "metro_transitions.h"
 #include "metro_music.h" /* R4/FA-8: metro_music_playpause() */
+#include "moonlit_marquee.h" /* moonlit (D-067) */
 #include "moonlit_palette.h" /* moonlit (D-011, M4): divisores outline_variant */
 #include "moonlit_elevation.h" /* moonlit (D-044, M9): tarjeta de fila de "Acerca de" */
 #include "moonlit_logo.h" /* moonlit (D-016, D-044, M9, D-064): creciente + wordmark de "Acerca de" */
@@ -134,9 +135,18 @@ static void draw_about_rows(const struct metro_pivot *pivot, int first, int sel)
             moonlit_draw_selection_card(y - 4, METRO_ABOUT_ROW_PITCH, 256,
                                         METRO_ABOUT_ROW_PITCH, true);
 
-        metro_draw_text_cut_right(selected ? MFONT_LIST_SEL : MFONT_LIST, METRO_DRAW_LEFT_X, y,
-                                  row.title, selected ? metro_color_fg() : metro_color_secondary(),
-                                  LCD_WIDTH - METRO_DRAW_LEFT_X);
+        /* moonlit (D-067): las filas de "Acerca de" son las mas largas
+         * de moonlit (URL del repositorio, licencias) y no caben en
+         * 308 px -- la seleccionada desplaza. */
+        if (selected)
+            moonlit_marquee_draw(MOONLIT_MARQUEE_ABOUT, MFONT_LIST_SEL,
+                                  METRO_DRAW_LEFT_X,
+                                  LCD_WIDTH - METRO_DRAW_LEFT_X, y, row.title,
+                                  metro_color_fg());
+        else
+            metro_draw_text_cut_right(MFONT_LIST, METRO_DRAW_LEFT_X, y,
+                                       row.title, metro_color_secondary(),
+                                       LCD_WIDTH - METRO_DRAW_LEFT_X);
         y += METRO_ABOUT_ROW_PITCH;
     }
 }

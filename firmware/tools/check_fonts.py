@@ -10,6 +10,16 @@ Dos modos:
       genera la fuente (design-system/generate.py --fonts) es quien
       decide si un valor es aceptable.
 
+  check_fonts.py --coverage [--fonts DIR] [--lang RUTA] [--tags ARCHIVO]
+      moonlit (D-066). Lee la tabla de glifos de cada .fnt y la compara
+      con lo que la UI y los metadatos van a pedirle: (a) todas las
+      cadenas de metro_lang.c, (b) una lista curada de codepoints
+      frecuentes en metadatos de musica, y (c) opcionalmente un volcado
+      de tags (un archivo de texto cualquiera; se leen sus codepoints).
+      Reporta los faltantes por rol. Falla si falta algo de (a) -- la
+      UI propia no puede tener huecos; lo de (b)/(c) se reporta pero no
+      rompe, porque la respuesta ahi puede ser la transliteracion.
+
   check_fonts.py --capheight <captura.png> [--rows N] [--min-px PX]
       Mide, sobre una captura del simulador, la altura en pixeles del
       primer glifo de cada fila de texto (asume metro_screen_specimen:
@@ -52,6 +62,172 @@ def cmd_header(path):
     h = read_rb12_header(path)
     print(f"{path}: firstchar={h['firstchar']} defaultchar={h['defaultchar']} "
           f"size={h['size']} height={h['height']} maxwidth={h['maxwidth']}")
+
+
+# --- coverage (D-066) -----------------------------------------------------
+
+# font.c:50. Por debajo de este bits_size la tabla de offsets es de 16
+# bits; por encima, de 32. Hace falta para saltar hasta la tabla de
+# anchos, que es la que dice si un codigo tiene glifo de verdad.
+MAX_FONTSIZE_FOR_16_BIT_OFFSETS = 0xFFDB
+
+# Codepoints frecuentes en metadatos de musica reales que NO estan en el
+# rango 32-383 de D-007. Lista curada (plan de la ronda, Fase 3.1): lo
+# que de verdad aparece en titulos de disco, no todo Unicode.
+METADATA_CODEPOINTS = (
+    list(range(0x2010, 0x2028)) +   # guiones, comillas tipograficas, puntos suspensivos
+    list(range(0x2030, 0x203B)) +   # por mil, primas, angulares, dagas, vinetas
+    [0x2122,                        # (TM)
+     0x266A, 0x266B,                # corcheas
+     0x2605, 0x2606,                # estrellas
+     0x2665,                        # corazon
+     0x2022,                        # vineta
+     0x00A0]                        # espacio duro
+)
+
+
+def read_glyph_table(path):
+    """-> (firstchar, size, set de codepoints con glifo real).
+
+    Un codigo dentro de [firstchar, firstchar+size) puede seguir sin
+    glifo: convttf emite una entrada de ancho 0 para el hueco (D-032 ya
+    documenta un caso, U+017F en Libre Baskerville). Por eso no basta
+    con el rango de la cabecera -- hay que leer la tabla de anchos."""
+    h = read_rb12_header(path)
+    with open(path, "rb") as f:
+        data = f.read()
+
+    # font.c:224-238: tras el bitmap se ALINEA (16 o 32 bits segun
+    # bits_size) antes de la tabla de offsets. Sin ese relleno la tabla
+    # de anchos sale corrida un byte y todo el reporte miente -- se
+    # detecto asi: el ancho del espacio salia 0 en dos roles y el final
+    # calculado del archivo no coincidia con su tamano real.
+    off = RB12_HEADER.size + h["bits_size"]
+    if h["bits_size"] < MAX_FONTSIZE_FOR_16_BIT_OFFSETS:
+        off = (off + 1) & ~1
+        off += h["noffset"] * 2
+    else:
+        off = (off + 3) & ~3
+        off += h["noffset"] * 4
+
+    # Cruce que impide leer la tabla corrida en silencio: con el
+    # relleno bien puesto, la tabla de anchos termina EXACTAMENTE donde
+    # termina el archivo.
+    if off + h["nwidth"] != len(data):
+        die(f"{path}: la tabla de anchos termina en {off + h['nwidth']} "
+            f"pero el archivo mide {len(data)} -- el calculo de "
+            f"desplazamiento no coincide con font.c")
+
+    widths = data[off:off + h["nwidth"]]
+    covered = set()
+    if h["nwidth"] == 0:
+        # sin tabla de anchos: fuente de ancho fijo, todo el rango cuenta
+        covered = set(range(h["firstchar"], h["firstchar"] + h["size"]))
+    else:
+        for i, w in enumerate(widths):
+            if w > 0:
+                covered.add(h["firstchar"] + i)
+    return h, covered
+
+
+C_STRING_RE = None
+
+
+def lang_codepoints(lang_path):
+    """Codepoints de todas las cadenas literales de metro_lang.c."""
+    import re
+    text = open(lang_path, encoding="utf-8").read()
+    # Quita comentarios de bloque y de linea antes de buscar literales,
+    # para no recoger acentos que solo viven en la prosa del comentario.
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
+    text = re.sub(r"//[^\n]*", " ", text)
+    cps = set()
+    for lit in re.findall(r'"((?:[^"\\]|\\.)*)"', text):
+        lit = lit.replace("\\n", "\n").replace("\\t", "\t").replace('\\"', '"')
+        for ch in lit:
+            cps.add(ord(ch))
+    return cps
+
+
+def file_codepoints(path):
+    cps = set()
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            for ch in line.rstrip("\n"):
+                cps.add(ord(ch))
+    return cps
+
+
+def translit_codepoints(translit_path):
+    """Codepoints que apps/metro/moonlit_translit.c resuelve sin fuente.
+
+    Se leen de la tabla misma (formato `{ 0xNNNN, "..." },`, una por
+    linea) para que no haya dos listas que mantener sincronizadas: si
+    alguien agrega una entrada alla, este reporte la ve sola."""
+    import re
+    import os
+
+    if not os.path.exists(translit_path):
+        return set()
+    text = open(translit_path, encoding="utf-8").read()
+    return {int(m, 16) for m in re.findall(r"\{\s*0x([0-9A-Fa-f]{2,6})\s*,\s*\"",
+                                           text)}
+
+
+def fmt_cp(cp):
+    ch = chr(cp)
+    shown = ch if ch.isprintable() and not ch.isspace() else " "
+    return f"U+{cp:04X} '{shown}'"
+
+
+def cmd_coverage(fonts_dir, lang_path, tags_path, translit_path):
+    import glob
+    import os
+
+    fonts = sorted(glob.glob(os.path.join(fonts_dir, "*.fnt")))
+    if not fonts:
+        die(f"no hay .fnt en {fonts_dir}")
+
+    ui = lang_codepoints(lang_path)
+    meta = set(METADATA_CODEPOINTS)
+    tags = file_codepoints(tags_path) if tags_path else set()
+    translit = translit_codepoints(translit_path)
+
+    print(f"== cobertura de glifos ==  UI {len(ui)} codepoints, "
+          f"metadatos {len(meta)}, tags {len(tags)}, "
+          f"transliterados {len(translit)} (D-066)")
+    ui_failures = 0
+
+    for path in fonts:
+        h, covered = read_glyph_table(path)
+        # Un codepoint transliterado no necesita glifo: se dibuja con su
+        # equivalente ASCII, que si esta en el rango.
+        covered = covered | translit
+        name = os.path.basename(path)
+        miss_ui = sorted(c for c in ui if c not in covered and c >= 32)
+        miss_meta = sorted(c for c in meta if c not in covered)
+        miss_tags = sorted(c for c in tags if c not in covered and c >= 32)
+
+        print(f"\n{name}: firstchar={h['firstchar']} size={h['size']} "
+              f"defaultchar={h['defaultchar']} glifos_reales={len(covered)}")
+        if miss_ui:
+            ui_failures += 1
+            print(f"   FALTA de la UI ({len(miss_ui)}): "
+                  + ", ".join(fmt_cp(c) for c in miss_ui[:12])
+                  + (" ..." if len(miss_ui) > 12 else ""))
+        else:
+            print("   UI: completa")
+        print(f"   metadatos: faltan {len(miss_meta)}/{len(meta)}"
+              + (("  " + ", ".join(fmt_cp(c) for c in miss_meta[:8])
+                  + (" ..." if len(miss_meta) > 8 else "")) if miss_meta else ""))
+        if tags:
+            print(f"   tags: faltan {len(miss_tags)}/{len(tags)}"
+                  + (("  " + ", ".join(fmt_cp(c) for c in miss_tags[:8])
+                      + (" ..." if len(miss_tags) > 8 else "")) if miss_tags else ""))
+
+    if ui_failures:
+        die(f"{ui_failures} fuente(s) sin cubrir la UI de metro_lang.c")
+    print("\ncheck_fonts: la UI esta cubierta en todos los roles.")
 
 
 MAX_DIACRITIC_GAP_PX = 2  # ver comentario en _detect_row_bands
@@ -153,9 +329,21 @@ def main():
                          help="numero minimo de filas esperadas (default 7)")
     parser.add_argument("--min-px", type=float, default=MIN_CAPHEIGHT_PX,
                          help=f"cap-height minimo aceptado (default {MIN_CAPHEIGHT_PX})")
+    parser.add_argument("--coverage", action="store_true",
+                         help="compara la tabla de glifos de cada .fnt con la UI y los metadatos")
+    parser.add_argument("--fonts", default="firmware/assets/fonts",
+                         help="directorio de .fnt para --coverage")
+    parser.add_argument("--lang", default="firmware/rockbox/apps/metro/metro_lang.c",
+                         help="fuente de las cadenas de UI para --coverage")
+    parser.add_argument("--tags", help="volcado de tags (texto) para --coverage")
+    parser.add_argument("--translit",
+                         default="firmware/rockbox/apps/metro/moonlit_translit.c",
+                         help="tabla de transliteracion (D-066) para --coverage")
     args = parser.parse_args()
 
-    if args.capheight:
+    if args.coverage:
+        cmd_coverage(args.fonts, args.lang, args.tags, args.translit)
+    elif args.capheight:
         cmd_capheight(args.capheight, args.rows, args.min_px)
     elif args.path:
         cmd_header(args.path)

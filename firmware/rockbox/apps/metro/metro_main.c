@@ -56,6 +56,7 @@
 #include "metro_screen_specimen.h"
 #include "moonlit_screen_marea.h" /* moonlit (D-029, M8) */
 #include "moonlit_art_cache.h"    /* moonlit (D-055): moonlit_art_request_gc() */
+#include "moonlit_marquee.h" /* moonlit (D-067): puerta de cuadros */
 #include "moonlit_master_art_builder.h" /* moonlit (D-059): background master-art builder */
 
 /* See metro_main.h for why this must be called from apps/main.c's
@@ -408,10 +409,16 @@ void metro_main(void)
          * metro_screen_hub_wants_ticks()) -- antes esa espera caia a
          * HZ/10 en cuanto la animacion terminaba, aunque
          * moonlit_screen_marea_tick() todavia tuviera trabajo. */
+        /* moonlit (D-067): misma cadencia mientras una marquesina este
+         * desplazando. Se apaga sola en cuanto el texto cabe, el LCD se
+         * duerme o las animaciones estan apagadas -- la puerta la
+         * decide moonlit_marquee_draw() en cada dibujo, no una pantalla
+         * declarando "yo animo". */
         int action = metro_input_next(ctx,
                                       ((at_root && metro_screen_hub_wants_ticks()) ||
                                        (at_marea && (moonlit_screen_marea_animating() ||
-                                                     moonlit_screen_marea_wants_ticks())))
+                                                     moonlit_screen_marea_wants_ticks())) ||
+                                       moonlit_marquee_wants_ticks())
                                           ? HZ / 20 : HZ / 10,
                                       &steps);
 
@@ -506,6 +513,15 @@ void metro_main(void)
                 last_hub_tick = current_tick;
                 metro_screen_hub_tick();
             }
+
+            /* moonlit (D-067): un cuadro mas de marquesina. Va antes
+             * del reparto por pantalla porque la marquesina existe en
+             * listas, cuadriculas, "Ahora suena" y Marea por igual --
+             * y redraw_current() ya sabe cual dibujar. Marea se excluye:
+             * ahi el repintado de la banda lo maneja su propio camino
+             * de animacion, mas fino que una pantalla entera. */
+            if (!at_marea && moonlit_marquee_wants_ticks())
+                redraw_current();
 
             if (!at_root && !at_player && !at_viewer && !at_marea)
             {

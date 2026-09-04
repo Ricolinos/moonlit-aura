@@ -168,6 +168,10 @@ def generate_header(tokens):
     lines.append(f"#define MOONLIT_MOTION_SELECTION_MS {motion['selection_ms']}")
     lines.append(f'#define MOONLIT_MOTION_EASE_SELECTION "{motion["ease_selection"]}"')
     lines.append(f"#define MOONLIT_MOTION_SEAM {1 if motion['seam'] else 0}")
+    lines.append("/* D-067: marquesina de texto largo (maestro SS G) */")
+    lines.append(f"#define MOONLIT_MOTION_MARQUEE_STATIC_MS {motion['marquee_static_ms']}")
+    lines.append(f"#define MOONLIT_MOTION_MARQUEE_SCROLL_MS {motion['marquee_scroll_ms']}")
+    lines.append(f"#define MOONLIT_MOTION_MARQUEE_LOOP_GAP_PX {motion['marquee_loop_gap_px']}")
     lines.append("")
 
     color = tokens["color"]
@@ -220,10 +224,23 @@ def generate_header(tokens):
 
 # D-007: rango decimal 32-383 (charmap 0x20-0x17F expresado en decimal,
 # nunca hex -- convttf.c:1101,1113 usa atoi()/atol(), que no entienden
-# "0x..." y truncan a 0). '?' = 63 decimal como defaultchar.
+# "0x..." y truncan a 0).
+#
+# D-066: el rango se queda en 383, MEDIDO y no supuesto. Ampliarlo a
+# 8482 (para que entraran las comillas tipograficas y companiia) cuesta
+# +1 010 578 B en disco y +286 998 B de tablas en RAM con los 7 roles
+# cargados, contra un presupuesto de 40 KB -- el formato RB12 es un
+# rango DENSO, una entrada de offset + ancho por codigo exista o no el
+# glifo, asi que se pagarian 8 071 entradas vacias por fuente. La
+# puntuacion tipografica se resuelve transliterando
+# (apps/metro/moonlit_translit.c).
+#
+# D-066 tambien cambia el defaultchar de '?' (63) a '·' (183, U+00B7):
+# lo que ninguna fuente tiene (CJK, emoji, corcheas) deja de parecer un
+# error de lectura. 183 esta dentro del rango, asi que siempre existe.
 FONT_CHARSET_START = 32
 FONT_CHARSET_LIMIT = 383
-FONT_CHARSET_DEFAULT = 63
+FONT_CHARSET_DEFAULT = 183
 FONT_EXPECTED_SIZE = FONT_CHARSET_LIMIT - FONT_CHARSET_START + 1  # 352
 
 # D-032: Libre Baskerville-Regular no trae el glifo U+017F ("long s",

@@ -2984,3 +2984,163 @@ repetir si aparece algo parecido.
   `f2-marea-02-monogramas.png`, `f2-marea-03-monograma-centro.png` —
   monograma al centro **y** monograma en perspectiva arriba, la prueba
   de que ya no hay dos formas distintas para lo mismo.
+
+## D-066 — Glifos faltantes: el rango se queda, la puntuación se translitera
+
+**El encargo** (§7 del informe, plan hijo Fase 3): los metadatos reales
+traen comillas tipográficas, guiones largos y puntos suspensivos que las
+fuentes de moonlit no tienen, y salen como carácter de reemplazo.
+
+**Primero, medir qué falta.** `firmware/tools/check_fonts.py --coverage`
+(modo nuevo) lee la **tabla de anchos** de cada `.fnt` —no solo el rango
+de la cabecera: un código dentro de `[firstchar, firstchar+size)` puede
+seguir sin glifo, que es lo que D-032 ya documentaba para U+017F— y la
+compara con (a) todas las cadenas de `metro_lang.c`, (b) una lista curada
+de codepoints frecuentes en metadatos de música, y (c) opcionalmente un
+volcado de tags. Falla si falta algo de (a): la UI propia no puede tener
+huecos.
+
+Al escribir el lector de la tabla me equivoqué de desplazamiento
+—`font.c:224-238` **alinea** a 16 o 32 bits entre el bitmap y la tabla de
+offsets, según `bits_size`— y el reporte salió corrido un byte: decía que
+el espacio medía 0 px en dos roles. Se detectó porque el final calculado
+de la tabla no coincidía con el tamaño real del archivo. La herramienta
+lleva ahora ese cruce como aserción: si el cálculo no coincide con
+`font.c`, aborta en vez de mentir.
+
+**Lo que encontró, y es un defecto real de producto:** `U+2026 '…'` falta
+en **los siete roles** y `metro_lang.c` ya lo usa
+(`LANG_LIST_TRUNCATED = "…y más: la lista está llena"`). Se dibujaba como
+`?` desde siempre.
+
+**La opción preferida del plan, rechazada CON NÚMEROS.** Ampliar el rango
+de convttf a `-s 32 -l 8482`, medido generando los 7 roles:
+
+| | 32–383 | 32–8482 | delta |
+|---|---|---|---|
+| Los 7 `.fnt` en disco | 375 219 B | 1 385 797 B | **+1 010 578 B** |
+| Tablas offset+ancho en RAM (7 roles residentes) | 8 787 B | 295 785 B | **+286 998 B** |
+
+El presupuesto que fijaba el plan era **≤ 40 KB de RAM**: se pasa por
+7×. La causa es el formato: RB12 es un rango **denso**, una entrada de
+offset + una de ancho por código, exista o no el glifo. Llegar a 8482
+paga **8 071 entradas vacías por fuente** para ganar ~30 glifos útiles.
+
+**La alternativa del plan tampoco servía, por un motivo que el plan no
+podía prever.** "Un codepoint fuera del rango del rol Baskerville se
+dibuja con el rol Montserrat más cercano" presupone que Montserrat sí lo
+tiene — y no: los `.fnt` de Montserrat llevan **el mismo** rango 32–383.
+Los TTF tienen los glifos; los `.fnt` generados, no. Ampliar solo los
+cuatro roles Montserrat seguiría costando ~164 KB, cuatro veces el
+presupuesto.
+
+**Lo que sí se hizo.** `apps/metro/moonlit_translit.c`, módulo puro: 24
+codepoints con equivalente ASCII honesto (espacio duro, los seis guiones
+de U+2010–U+2015, comillas simples y dobles tipográficas, viñetas,
+puntos suspensivos, primas, angulares simples, ™). Se aplica en
+`metro_draw_text()`/`metro_draw_text_clipped()` — el único sitio que hace
+falta, porque M-051 obliga a que **todo** el texto pase por ahí, así que
+ni las pantallas ni `metro_lang.c` saben del asunto. El camino común no
+copia nada: `moonlit_translit_needed()` es un recorrido de bytes que sale
+en falso salvo que aparezca un 0xC2/0xE2.
+
+Lo que **no** tiene equivalente honesto (corcheas, estrellas, corazones,
+CJK, emoji) **no se inventa**: cae en el `defaultchar`, que pasa de `?`
+(63) a **`·` (183, U+00B7)**. Un punto medio no parece un error de
+lectura; un signo de interrogación sí. Traducir ♪ como "b" sería peor que
+no traducirlo.
+
+**Efecto secundario que hubo que atender:** medir una cadena con
+`lcd_getstringsize()` ya no da el ancho con el que se dibuja (un `…` mide
+un glifo y se dibuja como tres). Se agrega
+`metro_draw_text_width()`, que translitera antes de medir, y es la que
+usa la marquesina de D-067. Los llamadores existentes de
+`lcd_getstringsize()` que miden cadenas de `metro_lang.c` (nombres de
+pivot, subtítulos) no se tocaron: ninguna de esas cadenas lleva
+puntuación tipográfica, y el checker lo verifica en cada corrida.
+
+**Verificación de punta a punta, con una fixture nueva.**
+`gen_test_media.sh` gana el álbum *"Don’t Stop — “Live”…"* de
+*Journey’s Edge*, con apóstrofo curvo, comillas dobles curvas, raya,
+puntos suspensivos, espacio duro y una corchea ♪; sin `cover.jpg` a
+propósito, para que sirva también de monograma (D-065). En el simulador:
+- Cuadrícula de álbumes: `Don't Stop - "Live"…` / `Journey's Edge`
+  (`f3-lista-albumes.png`).
+- Lista de canciones: la ceja transliterada, `Believin'`,
+  `Any Way You Want It` (con el espacio duro ya normal) y
+  **`Wheel · in the Sky`** — la corchea cayendo en el `·` nuevo
+  (`f3-canciones.png`). Antes: `?` en los cinco sitios.
+- "Ahora suena" (`f3-nowplaying.png`) y panel de Marea
+  (`f3-marea-panel.png`), igual.
+- `check_fonts.py --coverage`: *"la UI esta cubierta en todos los
+  roles"*. De los 42 codepoints de metadatos, 24 se transliteran y 18
+  quedan al `·` a propósito.
+- Tests host: `test_translit` **94 checks**, incluidos UTF-8 truncado,
+  buffer justo (nunca corta a mitad de secuencia) y la coherencia de la
+  tabla.
+
+## D-067 — Marquesina: el texto que no cabe se mueve, y solo ese
+
+**Referencia** (maestro §G, `aura_patterns.c`/`aura_marquee.c` leídos de
+`../Aura-Firmware`, solo lectura): si cabe, estático; si no, **2 000 ms
+quieto, 5 000 ms desplazando de derecha a izquierda de forma lineal,
+24 px de hueco entre copias, en bucle**, con **dos copias** del texto
+para que no haya costura. Tokens nuevos en `tokens.json`
+(`motion.marquee_static_ms`, `marquee_scroll_ms`, `marquee_loop_gap_px`)
+→ `moonlit_tokens.h` por `generate.py --header`; ningún número a mano.
+
+**Lineal a propósito.** Con easing se lee peor: el ojo sigue el texto, no
+el movimiento.
+
+**Dónde se aplica**, y dónde deliberadamente no:
+- Fila **seleccionada** de una lista (`metro_draw.c`). Las demás se
+  cortan como siempre — una lista entera moviéndose sería ilegible.
+- Rótulo del tile seleccionado (único texto de una cuadrícula).
+- Las **tres** líneas de "Ahora suena": ahí no hay selección que mover,
+  todas tienen el foco por igual.
+- Título del panel de Marea. El artista y el conteo **no**: dos textos
+  moviéndose a la vez en un panel de 152 px compiten entre sí, y el
+  título es el que de verdad se corta.
+- Fila seleccionada de "Acerca de" (las filas más largas de moonlit: URL
+  del repositorio, licencias).
+
+**Puerta de energía.** `moonlit_marquee_draw()` decide en cada dibujo si
+esa ranura está desplazando; `moonlit_marquee_wants_ticks()` es lo que
+`metro_main.c` consulta para bajar la espera a `HZ/20` y repintar. Se
+apaga sola en cuanto el texto cabe, el LCD se duerme o las animaciones
+están apagadas — con `animations=off` se corta a la derecha como siempre,
+sin un solo tick de más. La puerta la decide el dibujo, no una pantalla
+declarando "yo animo".
+
+**Estado por ranura, no por fila.** Siete ranuras
+(`enum moonlit_marquee_slot`), una por SITIO de la UI. El ciclo se
+reinicia solo cuando cambia el texto de esa ranura: mover la selección
+empieza otra vez por el tramo quieto, que es lo que se espera —poder leer
+la fila nueva antes de que empiece a desfilar—. Se vio en vivo en la
+captura: al cambiar de pista, la línea de título reinició su ciclo
+mientras la de álbum seguía a mitad del suyo.
+
+**El reloj vive aparte.** `moonlit_marquee_cycle.c` es un módulo puro sin
+una sola dependencia de Rockbox — mismo patrón que
+`moonlit_marea_prefetch.c` respecto de Marea (D-057) — para que el arnés
+de host lo enlace solo. Ahí está todo lo que se puede equivocar sin que
+se note: que el tramo quieto sea de verdad quieto, que el barrido llegue
+**exactamente** a `span_px` (si se queda corto o se pasa, el bucle tiene
+costura) y que un tiempo grande no desborde. `test_marquee`: **591
+checks**, incluido un barrido de tres ciclos comprobando que el
+desplazamiento nunca sale de `[0, span]`.
+
+**Verificación.** Capturas de "Ahora suena" a dos instantes distintos del
+mismo recorrido (`f3-marquesina-np-1.png` tick 450,
+`f3-marquesina-np-2.png` tick 600): la línea de álbum pasa de
+`- "Live"…   Don't S` a `"…   Don't Stop - "L` — las dos copias con su
+hueco de 24 px, avanzando. Build target y simulador en 0 errores y **0
+warnings nuevos** (uno propio, `-Wtype-limits` por comparar un enum sin
+signo contra 0, corregido antes de commitear). Tests host: **18 suites,
+0 fallos**. `.bss` **8 461 404** (+640 B: las 7 ranuras de 48 bytes de
+clave más el estado; bajo el techo D-043 de 8 574 076, margen
+**112 672 B**). `stack_report.py`: OK, 5 512 B (44.9 %).
+
+**Pendiente de hardware**: que 5 000 ms de barrido se lean cómodos en el
+iPod con un título de 40 caracteres, y que el repintado a `HZ/20` de una
+marquesina no se note en la batería. Van a la lista de la ronda.

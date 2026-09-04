@@ -68,6 +68,11 @@ void metro_draw_text(enum metro_font_role role, int x, int y,
  * Metro-language "recorte en el borde derecho": pass a clip_w
  * narrower than the string's rendered width and the tail is cut, not
  * wrapped or refused. */
+/* moonlit (D-066/D-067): ancho de `str` tal como se DIBUJA (ya
+ * transliterado). Usalo en vez de lcd_getstringsize() directo siempre
+ * que el numero decida geometria. */
+int metro_draw_text_width(enum metro_font_role role, const char *str);
+
 void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
                                 const char *str, unsigned color, int clip_w);
 

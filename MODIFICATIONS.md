@@ -560,3 +560,13 @@ Ver `DECISIONS.md` D-059 para el resto (`apps/metro/moonlit_master_art.{c,h}`,
   los símbolos posteriores se desplazan 0x1000 y el último,
   `_fiqstackend`, queda en `0xb530` (antes `0xa530`), por debajo del
   límite `0xC000`. Verificado en `firmware/build-ipod6g/rockbox.map`.
+
+- `apps/SOURCES`: se agrega la entrada `metro/moonlit_translit.c` —
+  transliteración de la puntuación tipográfica que las fuentes de
+  moonlit no traen (comillas curvas, guiones largos, puntos
+  suspensivos, espacio duro), módulo puro host-testable. Comentario
+  inline `moonlit (D-066)`.
+
+- `apps/SOURCES`: se agrega la entrada `metro/moonlit_marquee.c` —
+  marquesina de texto largo (maestro §G), con el cálculo de
+  desplazamiento host-testable. Comentario inline `moonlit (D-067)`.
