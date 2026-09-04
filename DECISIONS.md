@@ -3911,6 +3911,16 @@ estructural para que se comporte distinto).
 - `package_dist.sh` sin `--release-tag`: corrida completa, los seis
   `.fnt` de puntuación presentes en `rockbox.zip`, `stack_report.py`
   en verde dentro del script.
+- **Reproducibilidad, con `font.h` tocado**: `firmware/export/font.h` es
+  un archivo de core, así que se repitió la verificación de D-075 sobre
+  este cambio en particular — no dar por sentado que un header
+  compartido se comporta igual solo porque D-075 ya lo probó con otro
+  diff. Build limpio (`BUILD_TARGET_CLEAN=1`) contra incremental, **mismo
+  commit** en los dos (el primer intento comparó binarios de dos commits
+  distintos por un descuido del propio proceso de verificación —
+  detectado por el `cmp` mostrando 20 bytes de diferencia justo donde
+  vive la cadena `RBVERSION`, no en el código; repetido con el commit
+  fijo, **idénticos byte a byte**).
 
 ### Cierre de la ronda
 
