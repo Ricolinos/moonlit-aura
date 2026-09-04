@@ -219,6 +219,16 @@ bool metro_screen_list_push(const struct metro_page *page)
     if (!metro_nav_push(&s_nav, page->npivots))
         return false;
 
+    /* moonlit (D-067 addendum): la marquesina guarda su reloj POR
+     * RANURA, no por texto, y la ranura de "fila seleccionada" es una
+     * sola para todas las listas. Sin este reinicio, dos pantallas cuyo
+     * primer texto coincida en los primeros 48 bytes de la clave
+     * heredan el ciclo a medias y la fila nueva arranca desplazandose,
+     * sin el tramo quieto que existe para poder leerla. Se detecto al
+     * portarla a Metro (M-106): la funcion estaba escrita y documentada
+     * pero no la llamaba nadie. */
+    moonlit_marquee_reset();
+
     page_stack[metro_nav_depth(&s_nav) - 1] = page;
     s_feather_pending = true;
     return true;
@@ -226,11 +236,13 @@ bool metro_screen_list_push(const struct metro_page *page)
 
 bool metro_screen_list_pop(void)
 {
+    moonlit_marquee_reset(); /* moonlit (D-067 addendum): ver push() */
     return metro_nav_pop(&s_nav);
 }
 
 void metro_screen_list_pop_to_root(void)
 {
+    moonlit_marquee_reset();
     metro_nav_pop_to_root(&s_nav);
 }
 
@@ -411,9 +423,11 @@ void metro_screen_list_handle(int action, int steps)
             }
             break;
         case MACT_PIVOT_PREV:
+            moonlit_marquee_reset(); /* D-067 addendum */
             metro_nav_pivot_prev(&s_nav);
             break;
         case MACT_PIVOT_NEXT:
+            moonlit_marquee_reset();
             metro_nav_pivot_next(&s_nav);
             break;
         case MACT_SELECT:

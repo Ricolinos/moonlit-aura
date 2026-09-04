@@ -3379,3 +3379,134 @@ techo D-043 con **112 672 B** de margen; `stack_report.py` OK, 5 528 B
 HZ/10 vea el flanco del interruptor real sin rebotes, y que la pantalla
 en reposo no impida que la retroiluminación se apague por su
 temporizador normal.
+
+### D-067, addendum — la marquesina no reiniciaba su reloj al cambiar de pantalla
+
+Hallazgo de Metro al portarla (M-106, avisado por la supervisora):
+`moonlit_marquee_reset()` estaba **escrita, documentada y sin un solo
+llamador**. El estado de la marquesina se guarda **por ranura**, no por
+texto, y la ranura de "fila seleccionada" es una sola para todas las
+listas: dos pantallas cuyo primer texto coincida en los 48 bytes de la
+clave heredan el ciclo a medias, y la fila nueva arranca desplazándose
+sin el tramo quieto que existe justo para poder leerla.
+
+Se llama ahora en `metro_screen_list_push()`, `_pop()`, `_pop_to_root()`
+y en los dos cambios de pivot. Los tres centinelas —Marea, "Ahora suena"
+y el visor de fotos— entran y salen por `metro_screen_list_push()`/
+`_pop()`, así que quedan cubiertos sin una línea más.
+
+## D-071 — Ajustes homologados: apagado automático, clicker, avisos legales y dos pantallas de barra
+
+**Encargo**: maestro §C, la matriz de Ajustes que las tres familias
+deben tener parecida.
+
+**Lo que faltaba, y lo que de verdad importaba.** De las filas nuevas la
+que hacía falta es **apagado automático** {nunca, 10, 20, 60 min}: sin
+ella, un aparato olvidado en un bolsillo se queda encendido hasta agotar
+la batería, y Rockbox ya trae el ajuste (`global_settings.poweroff` +
+`set_poweroff_timeout()`) sin que moonlit lo expusiera. También entran
+**clicker** (`global_settings.keyclick`, aquí como interruptor: moonlit
+no expone tres fuerzas de un clic de 10 ms) y **avisos legales**, que la
+GPL v2 §3 exige tener a la vista del usuario y no solo en el repositorio.
+
+**Un defecto de fondo que afectaba a filas que ya existían.**
+`settings_save()` de Rockbox **no escribe en el acto**: registra un
+callback en `DISK_EVENT_SPINUP`, y `call_storage_idle_notifys()` se
+auto-bloquea 30 s entre corridas, así que el flush real llegaba con el
+apagado limpio. Un aparato al que se le acaba la batería perdía el
+cambio. Toda fila que toque `global_settings` termina ahora en
+`save_global_settings_now()` — incluidas **brillo, retroiluminación y
+límite de volumen**, que ya existían y ya tenían el problema. (Hallazgo
+de Metro R7-5, estándar de los tres repos.)
+
+**Brillo y retroiluminación dejan de ciclar valores con SELECT** y pasan
+a una pantalla propia con barra (`metro_screen_adjust.c`, portada de
+Metro M-103 con el idioma visual de moonlit). Con cuatro pasos de brillo
+no se podía afinar; con seis de retroiluminación, llegar al que uno
+quiere costaba cinco pulsaciones sin ver nunca el rango. El brillo pasa a
+los **diez** pasos que pide el maestro, repartidos sobre el rango real
+del aparato con el paso 0 en el mínimo (nunca 0: apagar la pantalla no
+es un nivel de brillo). La retroiluminación conserva sus seis valores no
+lineales, incluido "nunca", que no son una rejilla y no tendría sentido
+interpolar. La rueda mueve **un paso por evento, sin aceleración** (un
+control de 6 o 10 posiciones con la aceleración pensada para listas de
+cientos de filas sería imposible de parar), se aplica **en vivo**, y hay
+**un solo guardado, al salir**.
+
+El subtítulo de la fila muestra la **posición del control**, no el crudo
+de `global_settings`: si no, la fila y la barra pueden enseñar dos
+porcentajes distintos para el mismo estado.
+
+**Avisos legales** usa `metro_screen_text.c` (también portada de M-103):
+texto corrido con ajuste de línea, la rueda desplaza **con** aceleración
+—al revés que la de barra: aquí se recorre un texto largo, no se elige
+entre pocas posiciones—, sin leer disco (la cadena vive en
+`metro_lang.c`, bilingüe como todo lo demás).
+
+**Fuera de esta ronda, por acuerdo**: fecha y hora, y ajuste de volumen
+(replaygain) — el plan ya los marcaba P2.
+
+**Verificación**: `f5-brillo.png` (barra a 33 %, valor en acento),
+`f5-avisos-legales.png` (párrafos ajustados). Target y simulador en 0
+errores, 0 warnings nuevos; 18 suites en verde.
+
+## D-072 — Fotos: la maestra ES el tile, y el visor se navega como se espera
+
+**(a) La rejilla lee la maestra directo.** La maestra de una foto mide
+80 px (`MOONLIT_MASTER_ART_PHOTO_SIZE`) y el tile mide **80**
+(`METRO_TILE_SIZE`): el `.mth` era una **copia byte a byte** de un
+archivo que ya estaba en disco, más una vuelta entera de cola por foto
+(encolar → decodificar en el tick → escribir → releer) para no ganar
+nada. Ahora la rejilla lee la maestra en el camino de dibujo, con
+presupuesto de **4 lecturas por cuadro** (`metro_thumbs_begin_frame()`),
+el mismo criterio de lectura acotada que Marea (D-057): el dibujo de una
+rejilla no puede convertirse en ocho lecturas de disco seguidas.
+
+Álbumes y artistas **no** cambian: su maestra es de 130 px y hay que
+reducirla a 80, así que ahí el `.mth` sí evita trabajo real. La
+distinción vive en un campo nuevo de `struct metro_thumb_source`
+(`master_path`), que solo Fotos rellena.
+
+**Un error propio, cazado en la primera captura.** Al agotarse el
+presupuesto del cuadro devolvía `NULL` **sin encolar**, así que la
+segunda fila de la rejilla se quedaba en monograma hasta que el usuario
+la moviera — se ve en la primera corrida: cuatro tiles cargados arriba y
+cuatro monogramas abajo. Corregido: agotado el presupuesto, el ítem cae
+a la cola de siempre y `metro_thumbs_tick()` lo resuelve en la vuelta
+ociosa, que es quien fuerza el repintado.
+
+Verificado en disco, no de vista: tras dibujar la rejilla,
+`/.aura/thumbs/photos` **no existe** y `/.aura/thumbs/albums` conserva
+sus 7 archivos. `CONTRATO-moonlit-studio.md` pasa a **v6** con la nota de
+compatibilidad en las dos direcciones (Metro puede seguir escribiéndolo;
+moonlit lo ignora, y la purga de `format.txt` se lo lleva igual).
+
+**(b) El visor.** LEFT/RIGHT pasan de foto — en el visor no hay pivotes
+que torcer, así que estaban **sin mapear**, y son el gesto que cualquiera
+prueba primero. Al cambiar de foto entra un deslizamiento horizontal:
+`metro_transitions_photo_slide()`, el mismo slide de siempre (misma
+captura, misma composición, misma costura, misma puerta de nivel de
+animación) pero **topado a 5 cuadros = 150 ms** bajo `all`. Un twist de
+pivote se hace una vez al entrar a una pantalla; pasar de foto se hace
+en ráfaga, y a 210 ms el visor se siente pastoso justo en el gesto que
+más se repite. Bajo `minimal` el tope no toca nada: sus 4 cuadros
+(120 ms) ya cumplen.
+
+**MENU vuelve conservando la selección**, que es lo que el plan pedía y
+no pasaba: el visor podía haber avanzado cincuenta fotos y la rejilla se
+quedaba en la que se abrió. Se usa `metro_nav_move_sel_grid()` y **no**
+`metro_nav_set_sel()`: en una cuadrícula `first_visible` tiene que ser
+múltiplo de `METRO_TILE_COLS` —`metro_draw_tiles()` mapea slot→fila/
+columna suponiéndolo— y `_set_sel()` ventana por filas sueltas, lo que
+dejaría la rejilla corrida.
+
+**Verificación**: `f5-fotos-rejilla.png` (ocho tiles cargados, sin
+`.mth` de fotos en disco), `f5-visor-derecha.png` (LEFT/RIGHT),
+`f5-visor-vuelta.png` (MENU vuelve con la tercera foto seleccionada,
+`dreamscape.jpg`, y la rejilla alineada). Target y simulador en 0
+errores, **0 warnings nuevos**; 18 suites en verde; `.bss` **8 467 612**
+(+6 208 B: las 96 líneas de 64 bytes del ajuste de texto de los avisos
+legales, estáticas a propósito y no en la pila —el tope de marco de
+`stack_report.py`—, más el presupuesto de la rejilla), bajo el techo
+D-043 de 8 574 076 con **106 464 B** de margen; `stack_report.py` OK,
+5 528 B (45.0 %).

@@ -38,6 +38,7 @@
  * moonlit_screen_marea.c con los tokens de movimiento. */
 #include "moonlit_tokens.h"
 #include "moonlit_translit.h" /* moonlit (D-066): puntuacion tipografica */
+#include "metro_thumbs.h"   /* moonlit (D-072): presupuesto por cuadro */
 #include "moonlit_marquee.h"  /* moonlit (D-067): texto largo que desborda */
 #include "moonlit_logo.h" /* moonlit (D-016, D-044, M9): creciente 16px en la barra vacia */
 
@@ -583,6 +584,10 @@ void metro_draw_tiles(const struct metro_pivot *pivot, int first, int sel,
 {
     int count = pivot->count(pivot->ctx);
     int slot;
+
+    /* moonlit (D-072): un cuadro, un presupuesto de lecturas de
+     * maestra -- ver metro_thumbs_begin_frame(). */
+    metro_thumbs_begin_frame();
 
     for (slot = 0; slot < METRO_TILE_COLS * METRO_TILE_ROWS_VISIBLE; slot++)
     {

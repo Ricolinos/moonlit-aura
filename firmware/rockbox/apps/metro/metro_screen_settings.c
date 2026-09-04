@@ -23,6 +23,7 @@
 
 #include "settings.h"
 #include "backlight.h"
+#include "ata_idle_notify.h" /* call_storage_idle_notifys() -- moonlit (D-071) */
 #include "powermgmt.h" /* R3-F6/DD-10: set_sleeptimer_duration()/get_sleep_timer() */
 #include "eq.h" /* R3-F6/DD-10: dsp_eq_enable()/dsp_set_eq_coefs() */
 
@@ -30,6 +31,8 @@
 #include "metro_screen_list.h" /* moonlit (D-047): push del submenu "cambiar sistema" */
 #include "metro_screen_about.h"
 #include "metro_screen_lock.h"
+#include "metro_screen_adjust.h" /* moonlit (D-071) */
+#include "metro_screen_text.h"   /* moonlit (D-071) */
 #include "metro_lang.h"
 #include "metro_theme.h"
 #include "metro_widgets.h"
@@ -337,10 +340,34 @@ static const struct metro_page lock_page = {
     LANG_SETTING_LOCK, lock_pivots, 1, NULL
 };
 
+/* moonlit (D-071): guardar los ajustes de Rockbox NO los escribe en el
+ * acto -- settings_save() registra un callback en DISK_EVENT_SPINUP y
+ * call_storage_idle_notifys() se auto-bloquea 30 s entre corridas, asi
+ * que el flush real llegaba con el apagado limpio. Un aparato al que se
+ * le acaba la bateria perdia el cambio. Toda fila que toque
+ * global_settings termina aqui. (Hallazgo de Metro R7-5, estandar de
+ * los tres repos.) */
+static void save_global_settings_now(void)
+{
+    settings_save();
+    call_storage_idle_notifys(true);
+}
+
+static const char *poweroff_subtitle(void)
+{
+    static char buf[16];
+
+    /* moonlit (D-071): 0 = nunca (apps/settings_list.c, UNIT_MIN). */
+    if (global_settings.poweroff <= 0)
+        return metro_lang_str(LANG_VALUE_NEVER);
+    snprintf(buf, sizeof(buf), "%d min", global_settings.poweroff);
+    return buf;
+}
+
 static int general_count(void *ctx)
 {
     (void)ctx;
-    return 10;
+    return 13; /* moonlit (D-071): +3 filas (apagado, clicker, legales) */
 }
 
 static void general_get_row(void *ctx, int index, struct metro_row *out)
@@ -397,7 +424,29 @@ static void general_get_row(void *ctx, int index, struct metro_row *out)
             out->subtitle = NULL;
             out->kind = METRO_ROW_ACTION;
             break;
+        /* moonlit (D-071, maestro SS C): las tres filas que moonlit no
+         * tenia y Aura si. El apagado automatico es la que de verdad
+         * faltaba -- sin ella, un aparato olvidado en un bolsillo se
+         * queda encendido hasta agotar la bateria. */
         case 8:
+            out->title = metro_lang_str(LANG_SETTING_POWEROFF);
+            out->subtitle = poweroff_subtitle();
+            out->kind = METRO_ROW_SETTING;
+            break;
+        case 9:
+            out->title = metro_lang_str(LANG_SETTING_CLICKER);
+            out->subtitle = metro_lang_str(global_settings.keyclick
+                                                ? LANG_VALUE_ON : LANG_VALUE_OFF);
+            out->kind = METRO_ROW_SETTING;
+            break;
+        case 10:
+            /* GPL v2 SS3: el aviso de licencia tiene que estar a la vista
+             * del usuario, no solo en el repositorio. */
+            out->title = metro_lang_str(LANG_SETTING_LEGAL);
+            out->subtitle = NULL;
+            out->kind = METRO_ROW_NAV;
+            break;
+        case 11:
             /* R5 (M-090, contrato v10) / moonlit D-047: submenu con una
              * fila por familia hermana (Aura, Metro). La fila siempre
              * se ve, para que se sepa que existe la opcion; las hermanas
@@ -449,6 +498,11 @@ static void general_on_select(void *ctx, int index)
 
         case 5:
             cycle_volume_limit();
+            /* moonlit (D-071): metro_music_set_volume_limit_level() ya
+             * llama settings_save(), pero eso solo REGISTRA el guardado
+             * -- el flush hay que forzarlo igual que en las demas filas
+             * que tocan global_settings. */
+            call_storage_idle_notifys(true);
             break;
 
         case 6:
@@ -475,6 +529,39 @@ static void general_on_select(void *ctx, int index)
             break;
 
         case 8:
+        {
+            /* moonlit (D-071): {nunca, 10, 20, 60 min}, los mismos
+             * valores que Aura. global_settings.poweroff esta en
+             * minutos y 0 = nunca (apps/settings_list.c). */
+            static const int steps[] = { 0, 10, 20, 60 };
+            int i, next = steps[0];
+
+            for (i = 0; i < (int)(sizeof(steps) / sizeof(steps[0])); i++)
+                if (steps[i] > global_settings.poweroff)
+                {
+                    next = steps[i];
+                    break;
+                }
+            global_settings.poweroff = next;
+            set_poweroff_timeout(next);
+            save_global_settings_now();
+            break;
+        }
+
+        case 9:
+            /* keyclick de Rockbox: 0 = apagado, 1..3 intensidades. Aqui
+             * es un interruptor -- moonlit no expone tres fuerzas de un
+             * clic que dura 10 ms. */
+            global_settings.keyclick = global_settings.keyclick ? 0 : 2;
+            save_global_settings_now();
+            break;
+
+        case 10:
+            metro_screen_text_show(metro_lang_str(LANG_SETTING_LEGAL),
+                                    metro_lang_str(LANG_LEGAL_BODY));
+            break;
+
+        case 11:
             metro_screen_list_push(&switch_page);
             break;
 
@@ -513,16 +600,79 @@ static const enum metro_lang_id accent_names[METRO_ACCENT_COUNT] = {
     LANG_ACCENT_MOONSTONE, LANG_ACCENT_TIDE, LANG_ACCENT_EMBER, LANG_ACCENT_MOSS,
 };
 
-/* A handful of presets rather than the raw 1..MAX_BRIGHTNESS_SETTING
- * range or every possible timeout value -- same "cycle through a
- * short list via SELECT" pattern as theme/accent/repeat, simpler than
- * a slider Metro's input model doesn't have anyway (no drag gesture on
- * a clickwheel). */
-static const int brightness_steps[] = { 16, 32, 48, MAX_BRIGHTNESS_SETTING };
-#define BRIGHTNESS_STEPS_N (int)(sizeof(brightness_steps) / sizeof(brightness_steps[0]))
+/* moonlit (D-071, maestro SS C): brillo y retroiluminacion dejan de
+ * ciclar valores con SELECT y pasan a su propia pantalla de barra
+ * (metro_screen_adjust.h). Con cuatro pasos de brillo no se podia
+ * afinar, y con seis de retroiluminacion llegar al que uno quiere podia
+ * costar cinco pulsaciones sin ver nunca el rango completo. El brillo
+ * pasa de 4 pasos fijos a los DIEZ que pide el maestro, repartidos
+ * sobre el rango real del aparato; la retroiluminacion conserva sus
+ * seis valores no lineales (incluido "nunca"), que no son una rejilla
+ * y no tendria sentido interpolar. */
+#define BRIGHTNESS_STEPS_N 10
+
+static int brightness_of_step(int step)
+{
+    /* Reparto lineal sobre 1..MAX_BRIGHTNESS_SETTING, con el paso 0 en
+     * el minimo REAL del aparato (nunca 0: apagar la pantalla no es un
+     * nivel de brillo). */
+    int lo = 1, hi = MAX_BRIGHTNESS_SETTING;
+
+    return lo + (hi - lo) * step / (BRIGHTNESS_STEPS_N - 1);
+}
+
+static int brightness_to_step(int value)
+{
+    int lo = 1, hi = MAX_BRIGHTNESS_SETTING;
+    int step;
+
+    if (value <= lo)
+        return 0;
+    if (value >= hi)
+        return BRIGHTNESS_STEPS_N - 1;
+    step = (value - lo) * (BRIGHTNESS_STEPS_N - 1) / (hi - lo);
+    return step;
+}
 
 static const int backlight_steps[] = { 5, 10, 15, 30, 60, -1 }; /* -1 = never */
 #define BACKLIGHT_STEPS_N (int)(sizeof(backlight_steps) / sizeof(backlight_steps[0]))
+
+/* --- especificaciones de las dos pantallas de barra (D-071) -------- */
+
+static const char *brightness_label(void *ctx, int step)
+{
+    static char buf[16];
+
+    (void)ctx;
+    snprintf(buf, sizeof(buf), "%d%%",
+             brightness_of_step(step) * 100 / MAX_BRIGHTNESS_SETTING);
+    return buf;
+}
+
+static void brightness_apply(void *ctx, int step)
+{
+    (void)ctx;
+    global_settings.brightness = brightness_of_step(step);
+    backlight_set_brightness(global_settings.brightness);
+}
+
+static const char *backlight_label(void *ctx, int step)
+{
+    static char buf[16];
+
+    (void)ctx;
+    if (backlight_steps[step] < 0)
+        return metro_lang_str(LANG_VALUE_NEVER);
+    snprintf(buf, sizeof(buf), "%ds", backlight_steps[step]);
+    return buf;
+}
+
+static void backlight_apply(void *ctx, int step)
+{
+    (void)ctx;
+    global_settings.backlight_timeout = backlight_steps[step];
+    backlight_set_timeout(global_settings.backlight_timeout);
+}
 
 static int display_count(void *ctx)
 {
@@ -555,8 +705,12 @@ static void display_get_row(void *ctx, int index, struct metro_row *out)
             break;
         case 2:
             out->title = metro_lang_str(LANG_SETTING_BRIGHTNESS);
-            snprintf(brightness_buf, sizeof(brightness_buf), "%d%%",
-                     global_settings.brightness * 100 / MAX_BRIGHTNESS_SETTING);
+            /* D-071: el rotulo es la POSICION DEL CONTROL, no el crudo
+             * de global_settings -- si no, la fila y la barra pueden
+             * mostrar dos porcentajes distintos para el mismo estado. */
+            snprintf(brightness_buf, sizeof(brightness_buf), "%s",
+                     brightness_label(NULL,
+                         brightness_to_step(global_settings.brightness)));
             out->subtitle = brightness_buf;
             break;
         default:
@@ -597,31 +751,32 @@ static void display_on_select(void *ctx, int index)
 
         case 2:
         {
-            int i, next = brightness_steps[0];
-            for (i = 0; i < BRIGHTNESS_STEPS_N; i++)
-                if (brightness_steps[i] > global_settings.brightness)
-                {
-                    next = brightness_steps[i];
-                    break;
-                }
-            global_settings.brightness = next;
-            backlight_set_brightness(next);
-            settings_save();
+            static const struct metro_adjust_spec spec = {
+                LANG_SETTING_BRIGHTNESS, BRIGHTNESS_STEPS_N,
+                brightness_label, brightness_apply, NULL
+            };
+
+            metro_screen_adjust_run(&spec, brightness_to_step(global_settings.brightness));
+            save_global_settings_now(); /* D-071: un solo guardado, al salir */
             break;
         }
 
         default:
         {
-            int i, next = backlight_steps[0];
+            static const struct metro_adjust_spec spec = {
+                LANG_SETTING_BACKLIGHT, BACKLIGHT_STEPS_N,
+                backlight_label, backlight_apply, NULL
+            };
+            int i, start = 0;
+
             for (i = 0; i < BACKLIGHT_STEPS_N; i++)
-                if (backlight_steps[i] > global_settings.backlight_timeout)
+                if (backlight_steps[i] == global_settings.backlight_timeout)
                 {
-                    next = backlight_steps[i];
+                    start = i;
                     break;
                 }
-            global_settings.backlight_timeout = next;
-            backlight_set_timeout(next);
-            settings_save();
+            metro_screen_adjust_run(&spec, start);
+            save_global_settings_now();
             break;
         }
     }

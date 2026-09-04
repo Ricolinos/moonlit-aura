@@ -205,6 +205,32 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_LOCK_REQUIRE_5MIN] = "tras 5 minutos",
     [LANG_LOCK_REQUIRE_BOOT] = "solo al encender",
     [LANG_LOCK_REMOVE]       = "quitar bloqueo",
+
+    /* moonlit (D-071) */
+    [LANG_SETTING_POWEROFF]  = "apagado automático",
+    [LANG_SETTING_CLICKER]   = "clicker",
+    [LANG_SETTING_LEGAL]     = "avisos legales",
+    [LANG_LEGAL_BODY] =
+        "moonlit.aura es software libre.\n"
+        "\n"
+        "Está basado en Rockbox y hereda su licencia: GNU General "
+        "Public License, versión 2 o posterior. Se distribuye SIN "
+        "NINGUNA GARANTÍA.\n"
+        "\n"
+        "El código fuente completo, incluidas las modificaciones a "
+        "Rockbox, está en:\n"
+        "github.com/ricolinos/moonlit-aura\n"
+        "\n"
+        "Rockbox: rockbox.org\n"
+        "\n"
+        "Tipografías:\n"
+        "Libre Baskerville y Montserrat, SIL Open Font License 1.1.\n"
+        "\n"
+        "Iconos:\n"
+        "Material Symbols (Google), Apache License 2.0.\n"
+        "\n"
+        "iPod es marca registrada de Apple Inc. moonlit.aura no está "
+        "afiliado a Apple ni cuenta con su respaldo.",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -385,6 +411,32 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_LOCK_REQUIRE_5MIN] = "after 5 minutes",
     [LANG_LOCK_REQUIRE_BOOT] = "only at power-on",
     [LANG_LOCK_REMOVE]       = "remove lock",
+
+    /* moonlit (D-071) */
+    [LANG_SETTING_POWEROFF]  = "auto power-off",
+    [LANG_SETTING_CLICKER]   = "clicker",
+    [LANG_SETTING_LEGAL]     = "legal notices",
+    [LANG_LEGAL_BODY] =
+        "moonlit.aura is free software.\n"
+        "\n"
+        "It is based on Rockbox and inherits its licence: GNU General "
+        "Public License, version 2 or later. It comes with ABSOLUTELY "
+        "NO WARRANTY.\n"
+        "\n"
+        "The complete source code, including the modifications to "
+        "Rockbox, is at:\n"
+        "github.com/ricolinos/moonlit-aura\n"
+        "\n"
+        "Rockbox: rockbox.org\n"
+        "\n"
+        "Typefaces:\n"
+        "Libre Baskerville and Montserrat, SIL Open Font License 1.1.\n"
+        "\n"
+        "Icons:\n"
+        "Material Symbols (Google), Apache License 2.0.\n"
+        "\n"
+        "iPod is a trademark of Apple Inc. moonlit.aura is not "
+        "affiliated with or endorsed by Apple.",
 };
 
 void metro_lang_set(enum metro_language lang)

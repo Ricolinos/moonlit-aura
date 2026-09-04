@@ -103,6 +103,12 @@ static const struct button_mapping player_mapping[] = {
 static const struct button_mapping viewer_mapping[] = {
     { MACT_PREV,             BUTTON_SCROLL_BACK,        BUTTON_NONE },
     { MACT_NEXT,             BUTTON_SCROLL_FWD,          BUTTON_NONE },
+    /* moonlit (D-072, plan de la ronda): LEFT/RIGHT tambien pasan de
+     * foto. En el visor no hay pivotes que torcer, asi que estaban sin
+     * mapear -- y son el gesto que cualquiera prueba primero para pasar
+     * a la siguiente. Mismo significado que la rueda. */
+    { MACT_PREV,             BUTTON_LEFT  | BUTTON_REL, BUTTON_LEFT  },
+    { MACT_NEXT,             BUTTON_RIGHT | BUTTON_REL, BUTTON_RIGHT },
     { MACT_TOGGLE_VIEW_MODE, BUTTON_SELECT | BUTTON_REL, BUTTON_SELECT },
     { MACT_BACK,             BUTTON_MENU | BUTTON_REL,   BUTTON_MENU },
     { MACT_HOME,             BUTTON_MENU | BUTTON_REPEAT, BUTTON_NONE },

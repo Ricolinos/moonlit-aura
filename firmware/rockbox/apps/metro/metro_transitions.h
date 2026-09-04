@@ -42,6 +42,12 @@ typedef metro_fb_draw_fn metro_transitions_draw_fn;
  * "Filo de luna" seam (D-052 C3) like every slide. */
 void metro_transitions_slide(metro_transitions_draw_fn draw_to, int direction);
 
+/* moonlit (D-072): el mismo slide, topado a 5 cuadros (150 ms bajo
+ * `all`) para el visor de fotos -- pasar de foto se hace en rafaga y a
+ * 210 ms se siente pastoso. Bajo `minimal` no cambia nada: sus 4
+ * cuadros ya estan por debajo del tope. */
+void metro_transitions_photo_slide(metro_transitions_draw_fn draw_to, int direction);
+
 /* PUSH/POP (deepening into a page / going back, PLAN_MAESTRO.md S3.3):
  * > 0 push, < 0 pop. moonlit (D-052 C1, "Luz de canto"): at every
  * animations/graphics level this is a slide with the INVERSE of

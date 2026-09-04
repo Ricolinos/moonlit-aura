@@ -79,6 +79,17 @@ static int s_pending_n = 0;
 static fb_data s_master[MOONLIT_MASTER_ART_MAX_SIZE * MOONLIT_MASTER_ART_MAX_SIZE];
 static bool s_waiting;
 
+/* moonlit (D-072): presupuesto de lecturas de maestra por cuadro, mismo
+ * criterio que la lectura acotada de Marea (D-057) -- el dibujo de la
+ * rejilla no puede convertirse en ocho lecturas de disco seguidas. */
+#define THUMB_MASTER_READS_PER_FRAME 4
+static int s_master_reads;
+
+void metro_thumbs_begin_frame(void)
+{
+    s_master_reads = 0;
+}
+
 static struct thumb_slot *find_slot(const char *key)
 {
     int i;
@@ -245,6 +256,41 @@ const fb_data *metro_thumbs_get(const struct metro_thumb_source *source,
     if (s)
         return s->pixels;
 
+    /* moonlit (D-072): fuente cuya maestra YA es del tamano del tile
+     * (Fotos). Se lee la maestra directo, sin `.mth` de por medio y sin
+     * pasar por la cola -- pero con presupuesto: como mucho
+     * THUMB_MASTER_READS_PER_FRAME lecturas por cuadro, para que una
+     * rejilla llena no meta ocho lecturas de disco en el mismo cuadro.
+     * Lo que no alcance en este cuadro entra en el siguiente. */
+    if (source->master_path && s_master_reads < THUMB_MASTER_READS_PER_FRAME)
+    {
+        char mpath[MAX_PATH];
+
+        if (source->master_path(ctx, index, mpath, sizeof(mpath)))
+        {
+            s_master_reads++;
+            if (moonlit_master_art_read(mpath, METRO_TILE_SIZE,
+                                         s_window[s_window_ring].pixels))
+            {
+                s = &s_window[s_window_ring];
+                strlcpy(s->key, key, sizeof(s->key));
+                s->valid = true;
+                s_window_ring = (s_window_ring + 1) % WINDOW_N;
+                return s->pixels;
+            }
+        }
+        /* Sin maestra todavia: el constructor de fondo la escribira
+         * (D-059). Cae a la cola de siempre. */
+    }
+
+    /* Agotado el presupuesto del cuadro, NO se sale con las manos
+     * vacias: el item cae a la cola de siempre y metro_thumbs_tick() lo
+     * resuelve en la vuelta ociosa, que es quien fuerza el repintado.
+     * Salir aqui dejaba la segunda fila de la rejilla en monograma
+     * hasta que el usuario la moviera -- se vio en la primera captura
+     * de la rejilla de fotos, con las cuatro de arriba cargadas y las
+     * cuatro de abajo no. */
+
     /* Disk cache is a raw read (no decode) -- cheap enough to try
      * synchronously, unlike an actual decode. */
     cache_path(source, key, path, sizeof(path));
@@ -303,6 +349,12 @@ bool metro_thumbs_tick(void)
     strlcpy(s->key, entry.key, sizeof(s->key));
     s->valid = true;
     s_window_ring = (s_window_ring + 1) % WINDOW_N;
+
+    /* moonlit (D-072): una fuente que lee la maestra directo no escribe
+     * `.mth` -- seria una copia byte a byte de un archivo que ya esta en
+     * disco. `/.aura/thumbs/photos` deja de crecer. */
+    if (entry.source->master_path)
+        return true;
 
     ensure_cache_dir(entry.source);
     cache_path(entry.source, entry.key, path, sizeof(path));

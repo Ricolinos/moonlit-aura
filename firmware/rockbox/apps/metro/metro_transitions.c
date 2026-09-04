@@ -293,6 +293,41 @@ void metro_transitions_slide(metro_transitions_draw_fn draw_to, int direction)
     note_transition_cost("slide", spec, start_tick);
 }
 
+/* moonlit (D-072, plan de la ronda): el deslizamiento del VISOR de
+ * fotos. Es el mismo slide de siempre -- misma captura, misma
+ * composicion, misma costura, misma puerta de nivel de animacion -- pero
+ * TOPADO a METRO_PHOTO_SLIDE_MAX_FRAMES cuadros.
+ *
+ * Por que un tope y no la duracion compartida: un twist de pivote se
+ * hace una vez al entrar a una pantalla; pasar de foto se hace en
+ * rafaga, una pulsacion tras otra. A 7 cuadros (210 ms) el visor se
+ * siente pastoso justo en el gesto que mas se repite. Con 5 cuadros de
+ * 3 ticks son 150 ms, el tope que fija el plan de la ronda, y bajo
+ * `minimal` los 4 cuadros de siempre (120 ms) ya cumplen -- por eso el
+ * tope no los toca. */
+#define METRO_PHOTO_SLIDE_MAX_FRAMES 5
+
+void metro_transitions_photo_slide(metro_transitions_draw_fn draw_to, int direction)
+{
+    struct level_spec spec = anim_level_spec(effective_level());
+    long start_tick = current_tick;
+
+    if (!lcd_active() || spec.frames == 0)
+    {
+        draw_to();
+        return;
+    }
+
+    if (spec.frames > METRO_PHOTO_SLIDE_MAX_FRAMES)
+        spec.frames = METRO_PHOTO_SLIDE_MAX_FRAMES;
+
+    metro_fb_capture(s_fb_from);
+    metro_fb_render(s_fb_to, draw_to);
+    run_slide(direction, spec, METRO_EASE_OUT_EXPO, false, "photo");
+
+    note_transition_cost("photo", spec, start_tick);
+}
+
 bool metro_transitions_effective_all(void)
 {
     return effective_level() == METRO_ANIM_ALL;

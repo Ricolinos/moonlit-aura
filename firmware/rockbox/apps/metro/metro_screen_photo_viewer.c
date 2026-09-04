@@ -27,8 +27,10 @@
 
 #include "metro_screen_photo_viewer.h"
 #include "metro_screen_list.h"
+#include "metro_nav.h" /* moonlit (D-072): conservar la seleccion al volver */
 #include "metro_music.h" /* R4/FA-8: metro_music_playpause() */
 #include "metro_draw.h"
+#include "metro_transitions.h" /* moonlit (D-072) */
 #include "metro_theme.h"
 #include "metro_lang.h"
 #include "metro_keymap.h"
@@ -394,11 +396,35 @@ bool metro_screen_photo_viewer_is_current(void)
     return metro_screen_list_current_page() == &sentinel_page;
 }
 
+/* moonlit (D-072): direccion armada por el ultimo cambio de foto, o 0
+ * si el repintado no viene de un cambio (entrada al visor, cambio de
+ * ajustar/cubrir, vuelta de una sesion USB). */
+static int s_slide_dir;
+
+static void draw_current_photo(void);
+
 void metro_screen_photo_viewer_show(void)
 {
     if (s_count == 0)
         return;
 
+    /* moonlit (D-072): si el repintado viene de pasar de foto, entra
+     * deslizando. metro_transitions_photo_slide() ya cae solo a un
+     * dibujo directo con animations=off o el LCD dormido. */
+    if (s_slide_dir != 0)
+    {
+        int dir = s_slide_dir;
+
+        s_slide_dir = 0;
+        metro_transitions_photo_slide(draw_current_photo, dir);
+        return;
+    }
+
+    draw_current_photo();
+}
+
+static void draw_current_photo(void)
+{
     metro_draw_clear();
 
     probe_current();
@@ -436,10 +462,17 @@ void metro_screen_photo_viewer_handle(int action, int steps)
 {
     switch (action)
     {
+        /* moonlit (D-072): al cambiar de foto se arma el deslizamiento
+         * horizontal; el dibujo lo hace metro_main.c en su repintado, y
+         * metro_screen_photo_viewer_show() lo consume. Se arma aqui y no
+         * se dibuja aqui para no tener dos caminos de dibujo del visor
+         * (mismo criterio que CONTINUUM, D-052 C1). */
         case MACT_PREV:
         {
             int new_index = s_index - steps;
             if (new_index < 0) new_index = 0;
+            if (new_index != s_index)
+                s_slide_dir = -1;
             s_index = new_index;
             break;
         }
@@ -447,6 +480,8 @@ void metro_screen_photo_viewer_handle(int action, int steps)
         {
             int new_index = s_index + steps;
             if (new_index > s_count - 1) new_index = s_count - 1;
+            if (new_index != s_index)
+                s_slide_dir = 1;
             s_index = new_index;
             break;
         }
@@ -455,7 +490,23 @@ void metro_screen_photo_viewer_handle(int action, int steps)
             s_loaded_index = -1; /* DD-10: re-decode, never resample a stale buffer */
             break;
         case MACT_BACK:
-            metro_screen_list_pop();
+            /* moonlit (D-072, plan de la ronda): volver conserva la
+             * seleccion. El visor puede haber avanzado varias fotos con
+             * la rueda o con LEFT/RIGHT, y la rejilla se quedaba en la
+             * que se abrio -- perder el sitio despues de recorrer
+             * cincuenta fotos es exactamente lo que uno no quiere. Se
+             * escribe ANTES del pop: despues, el marco de arriba de la
+             * pila ya es otro. */
+            metro_nav_pop(metro_screen_nav());
+            /* metro_nav_move_sel_grid(), no _set_sel(): en una
+             * cuadricula `first_visible` TIENE que ser multiplo de
+             * METRO_TILE_COLS (metro_draw_tiles() mapea slot->fila/
+             * columna suponiendolo), y _set_sel() ventana por filas
+             * sueltas -- dejaria la rejilla corrida. */
+            metro_nav_move_sel_grid(metro_screen_nav(),
+                                     s_index - metro_nav_sel(metro_screen_nav()),
+                                     s_count, METRO_TILE_COLS,
+                                     METRO_TILE_ROWS_VISIBLE);
             break;
         case MACT_HOME:
             metro_screen_list_pop_to_root();

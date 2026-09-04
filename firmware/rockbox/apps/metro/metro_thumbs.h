@@ -63,6 +63,22 @@ struct metro_thumb_source {
      * repaints when the builder's generation moves and the grid asks
      * again). */
     int (*decode)(void *ctx, int index, fb_data *dst);
+
+    /* moonlit (D-072, plan de la ronda): ruta de la MAESTRA de este
+     * item, o NULL si esta fuente no la tiene a la medida del tile.
+     *
+     * Solo lo llena Fotos, y por una razon concreta: la maestra de una
+     * foto es de 80 px (MOONLIT_MASTER_ART_PHOTO_SIZE) y el tile TAMBIEN
+     * mide 80 (METRO_TILE_SIZE), asi que el `.mth` era una copia byte a
+     * byte de la maestra -- un archivo de mas por foto y una vuelta
+     * entera de cola (encolar, decodificar en el tick, escribir, releer)
+     * para no ganar nada. Con esto la rejilla lee la maestra DIRECTO en
+     * el camino de dibujo, con un presupuesto de lecturas por cuadro,
+     * igual que hace Marea (D-057).
+     *
+     * Albumes y artistas NO la llenan: su maestra es de 130 px y hay que
+     * reducirla a 80, asi que ahi el `.mth` si evita trabajo real. */
+    bool (*master_path)(void *ctx, int index, char *out, size_t out_len);
 };
 
 #define METRO_THUMB_FAIL    0
@@ -87,6 +103,12 @@ const fb_data *metro_thumbs_get(const struct metro_thumb_source *source,
  * this tick). Meant to be called once per metro_main() idle-loop
  * iteration, same poll as before. */
 bool metro_thumbs_tick(void);
+
+/* moonlit (D-072): reinicia el presupuesto de lecturas de maestra del
+ * cuadro. Lo llama metro_draw_tiles() antes de pedir el primer tile:
+ * sin el, una rejilla entera podria hacer ocho lecturas de disco dentro
+ * de un mismo cuadro. */
+void metro_thumbs_begin_frame(void);
 
 /* Clears the RAM window and the pending queue -- call when leaving a
  * grid, or switching source within the same screen, so a later visit

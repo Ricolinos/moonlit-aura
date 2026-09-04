@@ -221,6 +221,12 @@ enum metro_lang_id {
     LANG_LOCK_REQUIRE_BOOT,
     LANG_LOCK_REMOVE,
 
+    /* moonlit (D-071, maestro SS C): filas nuevas de Ajustes. */
+    LANG_SETTING_POWEROFF,
+    LANG_SETTING_CLICKER,
+    LANG_SETTING_LEGAL,
+    LANG_LEGAL_BODY,
+
     LANG_COUNT
 };
 

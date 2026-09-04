@@ -241,8 +241,23 @@ static int photo_thumb_decode(void *ctx, int index, fb_data *dst)
                                           photo_raw_decode, &raw, dst);
 }
 
+/* moonlit (D-072): la maestra de una foto ES el tile (80 px las dos),
+ * asi que la rejilla la lee directo -- ver metro_thumbs.h. */
+static bool photo_master_path(void *ctx, int index, char *out, size_t out_len)
+{
+    struct photo_pivot_ctx *c = ctx;
+    char path[MAX_PATH];
+
+    if (index < 0 || index >= *c->count)
+        return false;
+    snprintf(path, sizeof(path), "%s/%s", PHOTOS_DIR, c->items[index].filename);
+    moonlit_art_master_file_path('p', "photos", path, c->items[index].mtime,
+                                  out, out_len);
+    return true;
+}
+
 static const struct metro_thumb_source photo_thumb_source = {
-    "photos", photo_thumb_cache_key, photo_thumb_decode
+    "photos", photo_thumb_cache_key, photo_thumb_decode, photo_master_path
 };
 
 /* R2-F2/DD-7/DD-9: bitmap for the grid's get_tile() -- delegates

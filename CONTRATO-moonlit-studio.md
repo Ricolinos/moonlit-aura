@@ -1,5 +1,15 @@
 # Contrato entre `moonlit-aura` y Aura Studio
 
+**Versión 6 — 2026-09-04 (D-072).** Cambio respecto a v5: moonlit deja
+de escribir `/.aura/thumbs/photos` — la maestra de una foto ya mide
+80 px, exactamente el lado del tile, así que el `.mth` era una copia
+byte a byte y la rejilla ahora lee la maestra directo. **Compatible en
+las dos direcciones**: Metro puede seguir escribiendo ese directorio y
+moonlit lo ignora; un `/.aura/thumbs/photos` heredado no estorba (y la
+purga de `format.txt`, §A.11, se lo lleva igual). Álbumes y artistas
+**sí** siguen usando `.mth`: su maestra es de 130 px y hay que reducirla
+a 80, así que ahí la caché L2 evita trabajo real.
+
 **Versión 5 — 2026-09-03 (D-062/D-063).** Cambios respecto a v4:
 referencia al contrato canónico **v18** (redactado por Aura-Firmware en
 paralelo); §A.11 gana `format.txt` (versión de formato del árbol de
@@ -123,7 +133,9 @@ en Studio que aquí se requieren (§C) **no** se ejecutan desde este repo
    completo (junto con el sello) cuando fuerza una reconstrucción.
 10. **Miniaturas compartidas `/.aura/thumbs/{albums,artists,photos}/`**
    (v15, D-055, C30): `.mth` de 80×80 `fb_data` crudo, formato idéntico
-   en Metro y moonlit. Clave de álbum `a-<crc32 de la ruta de la pista
+   en Metro y moonlit. **v18 (D-072): moonlit ya no escribe el subdirectorio
+   `photos`** — ver la nota de la versión 6 arriba; `albums` y `artists`
+   siguen igual. Clave de álbum `a-<crc32 de la ruta de la pista
    representativa>.<tag_mtime>` — estable a través de rebuilds; fotos y
    artistas conservan `<archivo>.<mtime>`. **v18 (D-063):** ese
    `<tag_mtime>` es ahora `max(mtime de la pista representativa, mtime
