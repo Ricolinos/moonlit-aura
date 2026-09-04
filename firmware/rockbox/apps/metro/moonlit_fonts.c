@@ -35,22 +35,54 @@
  * cache). */
 #define METRO_FONT_GLYPH_BUDGET 400
 
+/* moonlit (D-074): las fuentes de puntuacion miden ~272-275 glifos
+ * reales (rango denso 8208-8482, ver design-system/generate.py); 320
+ * da el mismo tipo de margen que los 400 de arriba dan sobre 351-352. */
+#define MOONLIT_PUNCT_GLYPH_BUDGET 320
+
 struct metro_font_spec {
     const char *filename; /* under FONT_DIR */
     const char *role_name; /* for DEBUGF only */
+    const char *punct_filename; /* moonlit (D-074): NULL si el rol no tiene */
 };
 
 static const struct metro_font_spec font_specs[MFONT_COUNT] = {
-    [MFONT_DISPLAY]  = { "moonlit-display-40.fnt",  "display"  },
-    [MFONT_TITLE]    = { "moonlit-title-28.fnt",    "title"    },
-    [MFONT_HEADLINE] = { "moonlit-headline-22.fnt", "headline" },
-    [MFONT_LIST]     = { "moonlit-list-20.fnt",     "list"     },
-    [MFONT_LIST_SEL] = { "moonlit-listsel-20.fnt",  "list_sel" },
-    [MFONT_BODY]     = { "moonlit-body-18.fnt",     "body"     },
-    [MFONT_LABEL]    = { "moonlit-label-18.fnt",    "label"    },
+    [MFONT_DISPLAY]  = { "moonlit-display-40.fnt",  "display",  NULL },
+    [MFONT_TITLE]    = { "moonlit-title-28.fnt",    "title",    "moonlit-title-28-punct.fnt" },
+    [MFONT_HEADLINE] = { "moonlit-headline-22.fnt", "headline", "moonlit-headline-22-punct.fnt" },
+    [MFONT_LIST]     = { "moonlit-list-20.fnt",     "list",     "moonlit-list-20-punct.fnt" },
+    [MFONT_LIST_SEL] = { "moonlit-listsel-20.fnt",  "list_sel", "moonlit-listsel-20-punct.fnt" },
+    [MFONT_BODY]     = { "moonlit-body-18.fnt",     "body",     "moonlit-body-18-punct.fnt" },
+    [MFONT_LABEL]    = { "moonlit-label-18.fnt",    "label",    "moonlit-label-18-punct.fnt" },
 };
 
 static int font_ids[MFONT_COUNT];
+static int punct_font_ids[MFONT_COUNT]; /* moonlit (D-074) */
+
+static int load_one(const char *filename, const char *role_name,
+                    const char *what, int glyph_budget)
+{
+    char path[MAX_PATH];
+    int id;
+
+    /* role_name/what solo se usan dentro de DEBUGF() -- que en un build
+     * sin logf se compila a nada, dejando los dos parametros sin usar
+     * (-Wunused-parameter, -Wextra). */
+    (void)role_name;
+    (void)what;
+
+    snprintf(path, sizeof(path), "%s/%s", FONT_DIR, filename);
+    id = font_load_ex(path, 0, glyph_budget);
+    if (id < 0)
+    {
+        DEBUGF("moonlit_fonts: %s %s (%s) failed to load\n",
+               role_name, what, path);
+        return -1;
+    }
+    DEBUGF("moonlit_fonts: %s %s (%s) loaded as font id %d\n",
+           role_name, what, path, id);
+    return id;
+}
 
 void metro_fonts_init(void)
 {
@@ -58,24 +90,23 @@ void metro_fonts_init(void)
 
     for (role = 0; role < MFONT_COUNT; role++)
     {
-        char path[MAX_PATH];
-        int id;
+        int id = load_one(font_specs[role].filename, font_specs[role].role_name,
+                          "primary", METRO_FONT_GLYPH_BUDGET);
 
-        snprintf(path, sizeof(path), "%s/%s",
-                  FONT_DIR, font_specs[role].filename);
+        font_ids[role] = (id >= 0) ? id : FONT_SYSFIXED;
 
-        id = font_load_ex(path, 0, METRO_FONT_GLYPH_BUDGET);
-        if (id < 0)
+        /* moonlit (D-074): sin fuente propia de puntuacion (MFONT_DISPLAY)
+         * o si la carga falla, el tramo PUNCT cae al mismo id que el
+         * primario -- metro_draw.c lo trata como "sin diferencia" en vez
+         * de arriesgar un id invalido. */
+        punct_font_ids[role] = font_ids[role];
+        if (font_specs[role].punct_filename)
         {
-            DEBUGF("moonlit_fonts: %s (%s) failed to load, falling back"
-                   " to FONT_SYSFIXED\n", font_specs[role].role_name, path);
-            font_ids[role] = FONT_SYSFIXED;
-        }
-        else
-        {
-            DEBUGF("moonlit_fonts: %s (%s) loaded as font id %d\n",
-                   font_specs[role].role_name, path, id);
-            font_ids[role] = id;
+            int punct_id = load_one(font_specs[role].punct_filename,
+                                    font_specs[role].role_name, "punct",
+                                    MOONLIT_PUNCT_GLYPH_BUDGET);
+            if (punct_id >= 0)
+                punct_font_ids[role] = punct_id;
         }
     }
 }
@@ -85,4 +116,18 @@ int metro_font_id(enum metro_font_role role)
     if ((unsigned)role >= MFONT_COUNT)
         return FONT_SYSFIXED;
     return font_ids[role];
+}
+
+bool metro_font_has_punct(enum metro_font_role role)
+{
+    if ((unsigned)role >= MFONT_COUNT)
+        return false;
+    return font_specs[role].punct_filename != NULL;
+}
+
+int metro_font_punct_id(enum metro_font_role role)
+{
+    if ((unsigned)role >= MFONT_COUNT)
+        return FONT_SYSFIXED;
+    return punct_font_ids[role];
 }

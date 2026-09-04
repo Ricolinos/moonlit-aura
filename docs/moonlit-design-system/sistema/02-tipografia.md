@@ -46,20 +46,43 @@ entrada de offset + una de ancho por código, exista o no el glifo), así
 que llegar a 8482 cuesta +1 010 578 B en disco y +286 998 B de tablas en
 RAM con los siete roles cargados, contra un presupuesto de 40 KB.
 
-En su lugar, `apps/metro/moonlit_translit.c` transcribe a su equivalente
-ASCII los 24 codepoints que sí lo tienen (espacio duro, guiones
-U+2010–U+2015, comillas simples y dobles tipográficas, viñetas, puntos
-suspensivos, primas, angulares, ™). Se aplica dentro de
-`metro_draw_text()`/`metro_draw_text_clipped()`, el único sitio que hace
-falta porque M-051 obliga a que todo el texto pase por ahí.
+`apps/metro/moonlit_translit.c` transcribe a su equivalente ASCII los 24
+codepoints que sí lo tienen (espacio duro, guiones U+2010–U+2015,
+comillas simples y dobles tipográficas, viñetas, puntos suspensivos,
+primas, angulares, ™) — sigue siendo el respaldo final para lo que la
+fuente de puntuación de abajo no cubre.
 
 Lo que no tiene equivalente honesto (♪ ★ ♥, CJK, emoji) **no se
 inventa**: cae en el `defaultchar`, que es **`·` (U+00B7)** y no `?` — un
 punto medio no parece un error de lectura.
 
-Para medir un ancho que decida geometría, usa
-`metro_draw_text_width()`, que translitera antes de medir;
-`lcd_getstringsize()` sobre la cadena original da otro número.
+### Fuente de puntuación uniforme (D-074)
+
+Seis de los siete roles (todos salvo `MFONT_DISPLAY`, que solo dibuja
+nombres de pivote) cargan además un `.fnt` **aparte**, rango denso
+8208–8482 (U+2010–U+2122 — el mismo bloque de arriba), con las comillas
+curvas y rayas **de verdad**, no su sustituto ASCII. Medido: 39 502 B en
+disco, 4 932 B de tablas en RAM — el rango denso sí cabe cuando se
+acota a la puntuación real, a diferencia de ampliar el rango primario
+completo hasta 8482 (rechazado arriba).
+
+Solo entra un codepoint si **los seis roles** lo dibujan con un glifo
+real — la intersección, generada por `design-system/generate.py --fonts`
+en `moonlit_punct_table.c` — nunca la unión: un texto que pase por dos
+roles distintos en la misma pantalla (título en `MFONT_TITLE`, álbum en
+`MFONT_LIST`, por ejemplo) tiene que verse igual en los dos, o la
+inconsistencia se lee como error de codificación, no como diseño.
+
+`apps/metro/moonlit_textseg.c` (módulo puro, host-testable) parte cada
+cadena en tramos — normal o puntuación — y `metro_draw_text()`/
+`metro_draw_text_clipped()` los dibuja uno tras otro, cambiando de
+fuente por tramo. La transliteración sigue siendo el respaldo: lo que
+no está en la intersección (fuera del rango, o un codepoint que alguno
+de los seis roles no trae) transcribe a ASCII como antes.
+
+Para medir un ancho que decida geometría, usa `metro_draw_text_width()`,
+que recorre los mismos tramos que el dibujo; `lcd_getstringsize()` sobre
+la cadena original da otro número.
 
 Verificación mecánica: `firmware/tools/check_fonts.py --coverage` compara
 la tabla de glifos de cada `.fnt` con las cadenas de `metro_lang.c`, una

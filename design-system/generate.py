@@ -269,6 +269,28 @@ FONT_SIZE_EXCEPTIONS = {
     "libre-baskerville-regular": FONT_EXPECTED_SIZE - 1,  # 351
 }
 
+# D-074: seis roles (todos salvo `display`, que solo dibuja nombres de
+# pivote) ganan una fuente APARTE de puntuacion tipografica, rango
+# denso 8208-8482 (U+2010-U+2122: guiones, comillas curvas, puntos
+# suspensivos, primas, angulares, TM -- el mismo bloque "General
+# Punctuation" + TM que ya cubre moonlit_translit.c). El costo de este
+# rango SI cabe: es denso (275 entradas contra las 8 470 que costaria
+# llegar hasta aqui desde 32, ver D-066) y solo se paga en los roles
+# que muestran metadatos.
+#
+# El defaultchar de estas fuentes no importa en la practica: nunca se
+# dibuja un codepoint que no este ya verificado en la tabla generada
+# moonlit_punct_table.c (interseccion de las seis, ver mas abajo), pero
+# convttf exige uno dentro del rango -- se usa el primero.
+PUNCT_CHARSET_START = 8208   # U+2010
+PUNCT_CHARSET_LIMIT = 8482   # U+2122
+PUNCT_CHARSET_DEFAULT = PUNCT_CHARSET_START
+PUNCT_ROLES_EXCLUDE = {"display"}  # D-074: solo dibuja nombres de pivote
+
+MOONLIT_TRANSLIT_C = ROOT.parent / "firmware" / "rockbox" / "apps" / "metro" / "moonlit_translit.c"
+PUNCT_TABLE_C = ROOT.parent / "firmware" / "rockbox" / "apps" / "metro" / "moonlit_punct_table.c"
+PUNCT_TABLE_H = ROOT.parent / "firmware" / "rockbox" / "apps" / "metro" / "moonlit_punct_table.h"
+
 RB12_HEADER = struct.Struct("<4sHHHHiiiiii")
 
 # D-068 (maestro SS H): la barra de estado se alinea por la ALTURA DE
@@ -373,6 +395,47 @@ def font_filename(role_name, role):
     return f"moonlit-{slug}-{role['px']}.fnt"
 
 
+def punct_font_filename(role_name, role):
+    slug = role.get("file_slug", role_name)
+    return f"moonlit-{slug}-{role['px']}-punct.fnt"
+
+
+def _glyph_coverage(path):
+    """-> dict codepoint -> ancho, para los codepoints con glifo REAL
+    (ancho > 0) de un .fnt. Misma aritmetica de desplazamiento que
+    fnt_cap_box() de arriba y que read_glyph_table() de
+    firmware/tools/check_fonts.py (D-066): 4 bpp fila-contigua, relleno
+    a 16/32 bits segun bits_size antes de la tabla de offsets. El cruce
+    -- que la tabla de anchos termine EXACTO donde termina el archivo --
+    es lo que impidio que D-066 se equivocara de desplazamiento sin
+    darse cuenta; se repite aqui por el mismo motivo. """
+    data = path.read_bytes()
+    (magic, maxwidth, height, ascent, depth, firstchar, defaultchar,
+     size, bits_size, noffset, nwidth) = RB12_HEADER.unpack(data[:RB12_HEADER.size])
+    if magic != b"RB12":
+        die(f"{path}: cabecera invalida")
+    long_off = bits_size >= 0xFFDB
+    off = RB12_HEADER.size + bits_size
+    off = (off + 3) & ~3 if long_off else (off + 1) & ~1
+    w_start = off + noffset * (4 if long_off else 2)
+    widths = data[w_start:w_start + nwidth]
+    if w_start + nwidth != len(data):
+        die(f"{path}: la tabla de anchos no termina donde el archivo "
+            f"({w_start + nwidth} vs {len(data)})")
+    return {firstchar + i: w for i, w in enumerate(widths) if w > 0}
+
+
+def _translit_codepoints():
+    """Codepoints de moonlit_translit.c, leidos de la tabla misma
+    (D-066: "ESTA TABLA ES LA FUENTE UNICA") -- mismo regex que
+    translit_codepoints() de check_fonts.py, para que los candidatos a
+    fuente de puntuacion (D-074) nunca diverjan de la tabla real de
+    transliteracion."""
+    import re
+    text = MOONLIT_TRANSLIT_C.read_text(encoding="utf-8")
+    return {int(m, 16) for m in re.findall(r"\{\s*0x([0-9A-Fa-f]{2,6})\s*,\s*\"", text)}
+
+
 def generate_fonts(tokens):
     print("==> Generando fuentes bitmap (firmware/assets/fonts/*.fnt)")
     ensure_convttf()
@@ -380,6 +443,7 @@ def generate_fonts(tokens):
 
     faces = tokens["font"]["faces"]
     type_scale = tokens["type_scale"]
+    punct_coverage = {}  # role_name -> dict codepoint -> width
 
     for role_name, role in type_scale.items():
         if role_name == "comment":
@@ -407,6 +471,79 @@ def generate_fonts(tokens):
 
         print(f"   {role_name} ({role['face']} @ {role['px']}px) -> {out_fnt.name} "
               f"(firstchar={header['firstchar']}, size={header['size']}, height={header['height']})")
+
+        # D-074: fuente de puntuacion aparte, todos los roles salvo
+        # `display`. Rango denso 8208-8482 (ver la constante de arriba).
+        if role_name in PUNCT_ROLES_EXCLUDE:
+            continue
+
+        out_punct = FONTS_OUT / punct_font_filename(role_name, role)
+        cmd = [
+            str(CONVTTF), "-p", str(role["px"]),
+            "-s", str(PUNCT_CHARSET_START), "-l", str(PUNCT_CHARSET_LIMIT),
+            "-D", str(PUNCT_CHARSET_DEFAULT), "-c", str(role["spacing"]),
+            "-o", str(out_punct), str(ttf_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0 or not out_punct.exists():
+            die(f"convttf (puntuacion) fallo para {role_name}@{role['px']}px:\n"
+                f"{result.stdout}\n{result.stderr}")
+
+        punct_header = read_rb12_header(out_punct)
+        # A diferencia del rango primario (D-007), aqui NO se exige
+        # firstchar == PUNCT_CHARSET_START: convttf sube firstchar al
+        # primer codepoint con glifo real, y una tipografia puede no
+        # traer justo U+2010 (el primero del rango) aunque si traiga la
+        # mayoria del resto -- mismo fenomeno que D-032 documenta para
+        # el hueco de U+017F, aqui en el extremo inicial. La
+        # interseccion de abajo es la que de verdad decide que se usa;
+        # esto es solo diagnostico.
+        punct_coverage[role_name] = _glyph_coverage(out_punct)
+        print(f"      + puntuacion -> {out_punct.name} "
+              f"(firstchar={punct_header['firstchar']}, size={punct_header['size']}, "
+              f"{len(punct_coverage[role_name])} glifos reales)")
+
+    # D-074: la INTERSECCION de los seis roles -- un codepoint solo entra
+    # a la tabla generada si TODOS lo dibujan de verdad, para que un
+    # mismo texto nunca mezcle la fuente de puntuacion en un rol y la
+    # transliteracion ASCII en otro (el caso concreto que descarto la
+    # variante de "solo dos roles" en el addendum de D-066: "Ahora
+    # suena" dibuja el album y el titulo en roles distintos).
+    candidates = sorted(_translit_codepoints() & set(range(PUNCT_CHARSET_START,
+                                                           PUNCT_CHARSET_LIMIT + 1)))
+    intersection = [cp for cp in candidates
+                    if all(cp in punct_coverage[r] for r in punct_coverage)]
+    dropped = [cp for cp in candidates if cp not in intersection]
+
+    print(f"==> Interseccion de puntuacion (D-074): {len(intersection)}/"
+          f"{len(candidates)} codepoints candidatos cubiertos por los "
+          f"{len(punct_coverage)} roles")
+    if dropped:
+        print("   fuera de la interseccion (algun rol no lo dibuja de verdad): "
+              + ", ".join(f"U+{cp:04X}" for cp in dropped))
+
+    lines = [
+        "/* GENERATED by design-system/generate.py --fonts -- do not edit by hand.",
+        " *",
+        " * moonlit (D-074): interseccion de los codepoints de",
+        " * moonlit_translit.c que los SEIS roles con fuente de puntuacion",
+        " * (todos salvo MFONT_DISPLAY) dibujan con un glifo real -- no solo",
+        " * los que trae CUALQUIERA de los seis. Ver el comentario de",
+        " * generate_fonts() en design-system/generate.py.",
+        " */",
+        "#include \"moonlit_punct_table.h\"",
+        "",
+        "const uint32_t moonlit_punct_codepoints[] = {",
+    ]
+    for cp in intersection:
+        lines.append(f"    0x{cp:04X},")
+    lines.append("};")
+    lines.append("")
+    lines.append("const int moonlit_punct_codepoint_count = "
+                 f"{len(intersection)};")
+    lines.append("")
+    PUNCT_TABLE_C.write_text("\n".join(lines))
+    print(f"==> {PUNCT_TABLE_C.relative_to(ROOT.parent)}")
 
 
 # WCAG 2.x contraste relativo (formula estandar, sRGB -> luminancia lineal).

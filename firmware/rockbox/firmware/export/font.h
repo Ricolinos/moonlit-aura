@@ -48,7 +48,16 @@ enum {
     FONT_SYSFIXED = -1, /* system fixed pitch font*/
     FONT_FIRSTUSERFONT = 0, /* first id for the user fonts */
 };
-#define MAXUSERFONTS 12
+/* moonlit (D-074): 12 -> 16. moonlit carga 7 roles de texto MD3 mas,
+ * desde D-074, hasta 6 fuentes de puntuacion aparte (una por rol salvo
+ * MFONT_DISPLAY, que solo dibuja nombres de pivote) -- 13 fuentes en
+ * total, con margen hasta 16 para no volver a tocar este numero si se
+ * agrega un rol. Costo: 4 ranuras de mas en las tablas de MAXFONTS de
+ * abajo (firmware/font.c: unos 16 B de .bss; apps/gui/skin_engine/
+ * skin_parser.c: unos 48+8 B mas, aunque moonlit no usa el motor de
+ * skins, D-062 addendum -- esos arrays existen igual porque el modulo
+ * se compila para el target). */
+#define MAXUSERFONTS 16
 
 /* SYSFONT, FONT_UI, FONT_UI_REMOTE + MAXUSERFONTS fonts in skins */
 #define MAXFONTS (FONT_FIRSTUSERFONT + MAXUSERFONTS)

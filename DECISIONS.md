@@ -3122,10 +3122,10 @@ tenía delante:**
    que cuesta **16 B** de `.bss` (`buflib_allocations[MAXFONTS]`, 4 B
    por ranura) y su entrada en `MODIFICATIONS.md`.
 
-**Estado: medido y NO implementado en esta ronda.** La versión que vale
-la pena es la uniforme (seis roles + `MAXUSERFONTS` a 16: ~44 KB de
-disco, ~4.9 KB de tablas, 16 B de `.bss`), y su costo real no está en
-esos números sino en el **dibujo por tramos dentro de
+**Estado en el momento de esta medición: NO implementado.** La versión
+que vale la pena es la uniforme (seis roles + `MAXUSERFONTS` a 16:
+~44 KB de disco, ~4.9 KB de tablas, 16 B de `.bss`), y su costo real no
+está en esos números sino en el **dibujo por tramos dentro de
 `metro_draw_text()`**: partir la cadena en tramos por bloque de
 codepoint, avanzar la x por el ancho medido de cada tramo, y que todo
 eso siga cuadrando con el viewport de recorte, con la medición de la
@@ -3134,9 +3134,12 @@ de texto más caliente del firmware y un error ahí se ve en todas las
 pantallas a la vez.
 
 La transliteración ya cierra el **defecto reportado** (el dueño veía el
-carácter de reemplazo). Lo que queda es estético: `'` en vez de `’`. Se
-deja como decisión propia para una ronda siguiente, con los números ya
-hechos y el criterio claro: **uniforme o nada**.
+carácter de reemplazo). Lo que quedaba era estético: `'` en vez de `’`.
+Se dejó como decisión propia para el final de la ronda, con los números
+ya hechos y el criterio claro: **uniforme o nada** — la supervisora
+condicionó implementarla a que todo lo demás cerrara en verde primero.
+Cerró: es **D-074**, al final de esta misma ronda, con los números de
+aquí confirmados casi exactos por la medición real.
 
 ## D-067 — Marquesina: el texto que no cabe se mueve, y solo ese
 
@@ -3781,14 +3784,142 @@ sigue solo se puede confirmar en el iPod real.
 - [ ] Ninguno — verificado enteramente en esta sesión (build limpio
   byte-idéntico al incremental, paquete completo sin `--release-tag`).
 
+**Fuente de puntuación uniforme (D-074)**
+- [ ] Ninguno — verificado enteramente en esta sesión (simulador +
+  tests host); es dibujo, no temporización ni hardware específico.
+
+## D-074 — Fuente de puntuación uniforme: seis roles, medida por intersección
+
+**Fase 8, condicionada por la supervisora al cierre en verde de todo lo
+anterior (§I de la ronda)**: el resto cerró en verde, así que se
+implementa la variante "uniforme o nada" que el addendum de D-066 dejó
+medida y pendiente — comillas curvas, rayas y puntos suspensivos de
+verdad, en vez de su equivalente ASCII, en los seis roles que muestran
+metadatos.
+
+**`MAXUSERFONTS` 12 → 16** (`firmware/export/font.h`). moonlit ya
+cargaba 7 fuentes; seis roles más (todos salvo `MFONT_DISPLAY`, que
+solo dibuja nombres de pivote) suman 13, con margen hasta 16 para no
+volver a tocar este número. Costo medido: **+96 B de `.bss`** —
+`buflib_allocations[MAXFONTS]` de `firmware/font.c` más los arreglos de
+`apps/gui/skin_engine/skin_parser.c` (existen aunque moonlit no use el
+motor de skins, D-062 addendum, porque el módulo se compila igual para
+el target). Muy por debajo de los 16 B que estimaba el addendum —la
+estimación solo contaba el primer arreglo— y de cualquier forma
+trivial.
+
+**Seis `.fnt` nuevos** (`design-system/generate.py --fonts`, extendido):
+rango denso 8208–8482 (U+2010–U+2122, el mismo bloque que ya cubre
+`moonlit_translit.c`), una por rol. `convttf` no siempre arranca
+exactamente en 8208 — Libre Baskerville no trae U+2010 (HYPHEN), aunque
+sí la mayoría del resto, mismo fenómeno que D-032 documenta para
+U+017F pero en el extremo inicial del rango en vez de en medio — así
+que a diferencia del rango primario (D-007) **no** se exige
+`firstchar == 8208`; lo que decide qué se usa es la intersección de
+abajo, no la cabecera de cada `.fnt`.
+
+Medido, no estimado: **39 502 B en disco, 4 932 B de tablas en RAM**
+(los seis roles residentes) — casi exacto al ~44 KB / ~4.9 KB que el
+addendum de D-066 había calculado.
+
+**La intersección, no la unión.** De los 24 codepoints de
+`moonlit_translit_table` (23 dentro del rango 8208–8482; el espacio duro,
+U+00A0, queda fuera y sigue transliterando siempre), `generate.py` lee
+la tabla de anchos real de cada uno de los seis `.fnt` —mismo cruce
+"la tabla termina donde el archivo" que evitó el error de desplazamiento
+de D-066— y **solo** los codepoints que los **seis** dibujan con un
+glifo real (ancho > 0) entran a la tabla generada
+`moonlit_punct_table.c`. Medido: **20 de 23** — quedan fuera U+2010,
+U+2011 y U+2012 (la familia de guiones cortos que Baskerville no trae),
+que siguen transliterando a `-` como antes, sin que se note: ya
+transliteraban a lo mismo.
+
+Es la condición que el addendum de D-066 identificó como la razón real
+para no hacerlo con dos roles: "Ahora suena" dibuja el álbum en
+`MFONT_LIST` y el título en `MFONT_TITLE` — con la intersección, los
+dos roles dibujan **exactamente** el mismo conjunto de codepoints con
+fuente propia, así que un mismo texto nunca mezcla comilla curva en un
+rol y comilla recta en otro dentro de la misma pantalla.
+
+**Dibujo por tramos** (`moonlit_textseg.c`, módulo puro, mismo patrón
+que `moonlit_marea_prefetch.c` y `moonlit_marquee_cycle.c`): recorre la
+cadena codepoint a codepoint y clasifica cada uno en PRIMARY (rango
+32–383, o transliterado si no hay fuente de puntuación que lo cubra) o
+PUNCT (está en la intersección — sin transliterar, es justo lo que la
+fuente de puntuación dibuja de verdad). Tramos contiguos del mismo tipo
+se funden en uno solo. `metro_draw_text()`/`metro_draw_text_clipped()`
+dibujan cada tramo con su fuente y avanzan la x por el ancho medido de
+cada uno; `metro_draw_text_width()` sigue el mismo camino, así que la
+medición que usa la marquesina (D-067) para decidir si desborda es
+coherente con lo que de verdad se dibuja.
+
+Sin fuente de puntuación (`MFONT_DISPLAY`), el resultado es **siempre**
+un solo tramo transliterado entero — el comportamiento de D-066 sin
+excepciones, verificado con su propio caso de test.
+
+`lcd_setfont()` dentro de un viewport activo escribe directo
+`lcd_current_viewport->font` (`firmware/drivers/lcd-bitmap-common.c`,
+verificado leyendo el código, no supuesto): cambiar de fuente por tramo
+dentro de `metro_draw_text_clipped()` no necesita ningún mecanismo
+nuevo, el mismo `vp` que ya se armaba una vez ahora recibe un
+`lcd_setfont()` por tramo.
+
+**Verificación de punta a punta, en el mismo álbum de prueba de
+D-066/D-067.** Capturas del recorrido completo:
+- `f8-lista-albumes.png` — la cuadrícula: `Don't Stop — "Live"…`, con
+  raya y comillas **curvas de verdad**, no su sustituto ASCII.
+- `f8-canciones.png` — la ceja (mismo texto, rol `MFONT_LABEL`) y
+  `Believin'` con apóstrofo curvo (`MFONT_LIST_SEL`); `Wheel · in the
+  Sky` sigue con el `·` de D-066 — la corchea está fuera de
+  8208–8482 por completo, ninguna fuente de puntuación la cubre y
+  el defaultchar sigue resolviéndola.
+- `f8-nowplaying.png` — el álbum (`MFONT_LIST`) con raya y comillas
+  curvas.
+- `f8-marea-panel.png` — el título del panel (`MFONT_HEADLINE`) con
+  apóstrofo y raya curvos, y el artista `Journey's Edge`
+  (`MFONT_BODY`) con su propio apóstrofo.
+- `f8-marquesina-1.png`/`f8-marquesina-2.png` — mismo recorrido de
+  D-067 a dos instantes distintos: la marquesina sigue desplazando
+  (el texto avanzó entre los dos tics) y sigue dibujando con la fuente
+  de puntuación en vez de la transliteración.
+
+Cinco de los seis roles quedan documentados con evidencia visual directa
+(falta solo `MFONT_TITLE` de Ahora Suena, que en este recorrido no tocó
+mostrar un título con puntuación especial — el camino de código es el
+mismo `build_segs()` que los otros cinco, así que no hay una razón
+estructural para que se comporte distinto).
+
+**Verificación.**
+- Host: `test_textseg` nuevo, **45 checks** — el caso del encargo
+  segmentado exactamente como se espera (8 tramos, alternando y
+  fundiendo contiguos), lo que no tiene fuente de puntuación sigue
+  transliterando, casos de borde (empieza/termina en PUNCT, buffer y
+  `max_segs` agotados sin desbordar). Las 19 suites completas: **0
+  fallos**.
+- Un warning propio, corregido antes de commitear:
+  `-Wunused-parameter` en el helper `load_one()` — sus dos parámetros
+  de diagnóstico solo se usan dentro de `DEBUGF()`, que se compila a
+  nada fuera de un build de depuración.
+- Target y bootloader: `build_target.sh` (los dos) en **0 errores, 0
+  warnings nuevos**. Simulador: **0 errores, 0 warnings nuevos**.
+- `.bss`: **8 467 708** (+96 B sobre D-075, exactamente el costo de
+  `MAXUSERFONTS`; ningún dato de fuente vive en `.bss` — se carga en el
+  heap de buflib en runtime, igual que las siete fuentes primarias ya
+  hacían). Bajo el techo D-043 de 8 574 076, margen **106 368 B**.
+- `stack_report.py`: OK, 5 528 B (45.0 %) — sin cambio: `load_one()` no
+  agrega marco significativo.
+- `package_dist.sh` sin `--release-tag`: corrida completa, los seis
+  `.fnt` de puntuación presentes en `rockbox.zip`, `stack_report.py`
+  en verde dentro del script.
+
 ### Cierre de la ronda
 
-Doce decisiones cerradas (D-061 a D-075, sin contar addenda): pila y
+Trece decisiones cerradas (D-061 a D-075, sin contar addenda): pila y
 estabilidad, caché de carátulas v18, "Acerca de" navegable, Marea sin
 fases visibles, glifos faltantes y marquesina, barra de estado
 alineada, bloqueo por Hold, tiles con selección visible, ajustes
-homologados, fotos como Aura, bootloader con pantalla de arranque, y
-reproducibilidad del empaquetado.
+homologados, fotos como Aura, bootloader con pantalla de arranque,
+reproducibilidad del empaquetado, y fuente de puntuación uniforme.
 
 Tag sugerido para cuando el dueño termine la lista de hardware:
 **`v0.2.0`**. Esta sesión no crea el tag ni el release — package_dist.sh

@@ -124,7 +124,7 @@ static int decode_utf8(const char *s, uint32_t *out_cp)
     return n;
 }
 
-static const char *lookup(uint32_t cp)
+const char *moonlit_translit_lookup(uint32_t cp)
 {
     int i;
 
@@ -150,7 +150,7 @@ const char *moonlit_translit(const char *in, char *out, size_t outsz)
     {
         uint32_t cp;
         int n = decode_utf8(in, &cp);
-        const char *rep = cp ? lookup(cp) : NULL;
+        const char *rep = cp ? moonlit_translit_lookup(cp) : NULL;
         size_t need;
         size_t k;
 

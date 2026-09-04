@@ -64,6 +64,14 @@ struct moonlit_translit_entry {
 extern const struct moonlit_translit_entry moonlit_translit_table[];
 extern const int moonlit_translit_count;
 
+/* moonlit (D-074): el reemplazo de UN codepoint, o NULL si la tabla no
+ * lo tiene. Es el `lookup()` interno de moonlit_translit(), expuesto
+ * para que moonlit_textseg.c decida caracter por caracter -- ahi es
+ * donde hace falta separar "esto tiene fuente de puntuacion propia" de
+ * "esto solo tiene equivalente ASCII", y moonlit_translit() por si sola
+ * solo sabe transliterar la cadena entera. */
+const char *moonlit_translit_lookup(uint32_t cp);
+
 /* true si `s` contiene algun byte que PODRIA iniciar una secuencia
  * transliterable (0xC2 para U+00A0, 0xE2 para el bloque de puntuacion
  * general). Barato: un recorrido de bytes sin decodificar. El camino

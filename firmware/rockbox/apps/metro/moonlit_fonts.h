@@ -20,6 +20,8 @@
 #ifndef MOONLIT_FONTS_H
 #define MOONLIT_FONTS_H
 
+#include <stdbool.h>
+
 /* Seven MD3 type roles (D-005, D-028): Libre Baskerville for
  * display/title/headline, Montserrat for list/list_sel/body/label
  * (design-system/tokens.json:type_scale). Loaded once, fully
@@ -37,14 +39,26 @@ enum metro_font_role {
     MFONT_COUNT
 };
 
-/* Loads all 7 roles from FONT_DIR ("/.rockbox/fonts/moonlit-*.fnt").
- * Safe to call more than once. Call once from metro_main() before the
- * first screen draws. */
+/* Loads all 7 roles from FONT_DIR ("/.rockbox/fonts/moonlit-*.fnt"),
+ * plus (moonlit D-074) the punctuation companion for every role but
+ * MFONT_DISPLAY. Safe to call more than once. Call once from
+ * metro_main() before the first screen draws. */
 void metro_fonts_init(void);
 
 /* Rockbox font id for a role, ready to pass to lcd_setfont()/
  * font_getstringsize(). Always valid -- returns FONT_SYSFIXED if the
  * role's .fnt never loaded. */
 int metro_font_id(enum metro_font_role role);
+
+/* moonlit (D-074): true if `role` has its own punctuation font
+ * (everything but MFONT_DISPLAY, which only draws pivot names). */
+bool metro_font_has_punct(enum metro_font_role role);
+
+/* moonlit (D-074): the punctuation font id for `role` -- only valid
+ * (and only meaningful to call) when metro_font_has_punct() is true.
+ * Falls back to metro_font_id(role) if the punctuation .fnt never
+ * loaded, same "never leave the caller with an invalid font" rule as
+ * metro_font_id() itself. */
+int metro_font_punct_id(enum metro_font_role role);
 
 #endif /* MOONLIT_FONTS_H */

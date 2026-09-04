@@ -37,7 +37,7 @@
  * misma linea que ya siguen metro_transitions.c y
  * moonlit_screen_marea.c con los tokens de movimiento. */
 #include "moonlit_tokens.h"
-#include "moonlit_translit.h" /* moonlit (D-066): puntuacion tipografica */
+#include "moonlit_textseg.h" /* moonlit (D-066/D-074): puntuacion tipografica por tramos */
 #include "metro_thumbs.h"   /* moonlit (D-072): presupuesto por cuadro */
 #include "moonlit_marquee.h"  /* moonlit (D-067): texto largo que desborda */
 #include "moonlit_logo.h" /* moonlit (D-016, D-044, M9): creciente 16px en la barra vacia */
@@ -59,52 +59,80 @@ void metro_draw_clear(void)
  * Left set to FG afterward; nothing in apps/metro/ needs a SOLID
  * rectangle on purpose, so there is no restore step. See DECISIONS.md
  * M-051. */
-/* moonlit (D-066): TODO texto de moonlit pasa por aqui (M-051), asi que
- * este es el unico sitio donde hace falta transliterar la puntuacion
- * tipografica que las fuentes no traen -- ni las pantallas ni
- * metro_lang.c tienen que saber nada del asunto.
+/* moonlit (D-066/D-074): TODO texto de moonlit pasa por aqui (M-051),
+ * asi que este es el unico sitio donde hace falta partir una cadena
+ * entre la fuente normal del rol y su fuente de puntuacion (D-074) --
+ * ni las pantallas ni metro_lang.c tienen que saber nada del asunto.
  *
- * El camino comun no copia nada: moonlit_translit_needed() es un
- * recorrido de bytes que sale en falso para cualquier texto que ya sea
- * ASCII o Latin-1 acentuado, que es casi todo. Solo cuando aparece un
- * 0xC2/0xE2 se paga la copia al scratch.
- *
- * El scratch es estatico y compartido: metro_draw_* corre solo en el
+ * El buffer es estatico y compartido: metro_draw_* corre solo en el
  * hilo de UI (el constructor de maestras nunca dibuja, D-059), y una
  * llamada termina de usar el buffer antes de que empiece la siguiente
  * -- lcd_putsxy() no cede la CPU. */
-#define METRO_TRANSLIT_MAX 256
-static char s_translit_buf[METRO_TRANSLIT_MAX];
+#define METRO_TEXTSEG_BUF 256
+#define METRO_TEXTSEG_MAX 12
+static char s_textseg_buf[METRO_TEXTSEG_BUF];
 
-static const char *translit_if_needed(const char *str)
+static int build_segs(enum metro_font_role role, const char *str,
+                      struct moonlit_textseg *segs)
 {
-    if (!str || !moonlit_translit_needed(str))
-        return str;
-    return moonlit_translit(str, s_translit_buf, sizeof(s_translit_buf));
-}
-
-/* moonlit (D-066/D-067): ancho de `str` EN LA FORMA EN QUE SE DIBUJA --
- * es decir, ya transliterado. Medir la cadena original daria otro
- * numero (un "…" mide un glifo y se dibuja como tres), y quien centra o
- * decide si hace falta marquesina se equivocaria por esa diferencia. */
-int metro_draw_text_width(enum metro_font_role role, const char *str)
-{
-    int w = 0, h;
-
     if (!str)
         return 0;
-    lcd_setfont(metro_font_id(role));
-    lcd_getstringsize((const unsigned char *)translit_if_needed(str), &w, &h);
-    return w;
+    return moonlit_textseg_build(str, metro_font_has_punct(role),
+                                 s_textseg_buf, sizeof(s_textseg_buf),
+                                 segs, METRO_TEXTSEG_MAX);
+}
+
+static int seg_font_id(enum metro_font_role role,
+                       const struct moonlit_textseg *seg)
+{
+    return seg->kind == MOONLIT_TEXTSEG_PUNCT
+               ? metro_font_punct_id(role)
+               : metro_font_id(role);
+}
+
+/* moonlit (D-066/D-067/D-074): ancho de `str` EN LA FORMA EN QUE SE
+ * DIBUJA -- suma de cada tramo en SU fuente (D-074: un tramo PUNCT mide
+ * distinto en la fuente de puntuacion que en la normal). Medir la
+ * cadena original daria otro numero, y quien centra o decide si hace
+ * falta marquesina se equivocaria por esa diferencia. */
+int metro_draw_text_width(enum metro_font_role role, const char *str)
+{
+    struct moonlit_textseg segs[METRO_TEXTSEG_MAX];
+    int n = build_segs(role, str, segs);
+    int total = 0, i;
+
+    for (i = 0; i < n; i++)
+    {
+        int w, h;
+
+        lcd_setfont(seg_font_id(role, &segs[i]));
+        lcd_getstringsize((const unsigned char *)segs[i].text, &w, &h);
+        total += w;
+    }
+    return total;
 }
 
 void metro_draw_text(enum metro_font_role role, int x, int y,
                       const char *str, unsigned color)
 {
-    lcd_setfont(metro_font_id(role));
+    struct moonlit_textseg segs[METRO_TEXTSEG_MAX];
+    int n = build_segs(role, str, segs);
+    int cx = x, i;
+
     lcd_set_foreground(color);
     lcd_set_drawmode(DRMODE_FG);
-    lcd_putsxy(x, y, (const unsigned char *)translit_if_needed(str));
+    for (i = 0; i < n; i++)
+    {
+        int w, h;
+
+        lcd_setfont(seg_font_id(role, &segs[i]));
+        lcd_putsxy(cx, y, (const unsigned char *)segs[i].text);
+        if (i + 1 < n)
+        {
+            lcd_getstringsize((const unsigned char *)segs[i].text, &w, &h);
+            cx += w;
+        }
+    }
 }
 
 void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
@@ -118,8 +146,14 @@ void metro_draw_text_clipped(enum metro_font_role role, int clip_x, int clip_w,
 {
     struct viewport vp;
     struct viewport *old_vp;
+    struct moonlit_textseg segs[METRO_TEXTSEG_MAX];
+    int n, cx, i;
 
     if (clip_w <= 0)
+        return;
+
+    n = build_segs(role, str, segs);
+    if (n == 0)
         return;
 
     /* viewport_set_defaults() -- NOT viewport_set_fullscreen() directly.
@@ -154,8 +188,24 @@ void metro_draw_text_clipped(enum metro_font_role role, int clip_x, int clip_w,
     vp.drawmode = DRMODE_FG; /* M-051 -- see metro_draw_text() */
 
     old_vp = lcd_set_viewport(&vp);
-    lcd_putsxy(x - clip_x, y - vp.y,
-                (const unsigned char *)translit_if_needed(str)); /* D-066 */
+    /* moonlit (D-074): lcd_setfont() sobre ESTE viewport (ya activo)
+     * cambia vp.font por tramo -- lcd_putsxy()/lcd_getstringsize() leen
+     * `lcd_current_viewport->font`, no un estado global aparte (ver
+     * firmware/drivers/lcd-bitmap-common.c: setfont() solo hace
+     * `LCDFN(current_viewport)->font = newfont`). */
+    cx = x - clip_x;
+    for (i = 0; i < n; i++)
+    {
+        int w, h;
+
+        lcd_setfont(seg_font_id(role, &segs[i]));
+        lcd_putsxy(cx, y - vp.y, (const unsigned char *)segs[i].text);
+        if (i + 1 < n)
+        {
+            lcd_getstringsize((const unsigned char *)segs[i].text, &w, &h);
+            cx += w;
+        }
+    }
     lcd_set_viewport(old_vp);
 }
 

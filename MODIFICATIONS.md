@@ -607,3 +607,13 @@ Ver `DECISIONS.md` D-059 para el resto (`apps/metro/moonlit_master_art.{c,h}`,
   quedaría verificado a mano y ninguna captura headless podría probarlo.
   Mismo mecanismo que Metro M-104, portado tras leerlo de
   `../Metro-Aura` (solo lectura).
+
+- `firmware/export/font.h`: `MAXUSERFONTS` **12 → 16** (comentario
+  inline `moonlit (D-074)`). moonlit carga 7 roles de texto MD3 más,
+  desde D-074, hasta 6 fuentes de puntuación aparte (una por rol salvo
+  `MFONT_DISPLAY`) — 13 fuentes en total, con margen hasta 16 para no
+  volver a tocar este número si se agrega un rol. Costo medido:
+  `.bss` +96 B (`buflib_allocations[MAXFONTS]` en `firmware/font.c` +
+  los arreglos de `apps/gui/skin_engine/skin_parser.c`, que existen
+  aunque moonlit no use el motor de skins, D-062 addendum — el módulo
+  se compila igual para el target).
