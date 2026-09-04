@@ -4565,3 +4565,131 @@ Suite de host completa tras el puerto del sufijo `+HOLD` a
 host-testable -- viven en el simulador, guardadas por `SIMULATOR`).
 
 **PARADA 4 — Fase 4 cerrada.** Sigue Fase 5 (cierre de la ronda).
+
+## Fase 5 — Cierre
+
+**`stack_report.py`, una FALLA real cazada por la propia verificación
+mecánica del cierre.** Sobre el build limpio: `metro_settings_write_
+shared()` (D-079) medía **2240 B** de marco y `metro_settings_apply_
+pending_shared()` **1648 B** -- las dos muy por encima del tope de
+1024 B de `apps/metro/`, sin que nada de las Fases 1-4 lo hubiera
+notado (ninguna las ejercita en un camino que `stack_report.py` marque
+como el peor; el reporte solo se había corrido para medir `.bss`, no
+releído su veredicto completo hasta ahora). Causa: `write_shared()`
+tenía DOS `moonlit_shared_settings_t` completos en la pila a la vez
+(`s` y `old`) más el buffer de 1024 B; `apply_pending_shared()` uno
+solo. Corregido con el mismo idioma que ya usa este archivo y
+`metro_sync.c` (`write_marker()`) para el mismo problema -- estáticos en
+vez de automáticos, seguro porque los cuatro puntos de llamada son
+siempre el hilo de UI, nunca reentrante ni concurrente entre sí.
+Commit `39371977`. `stack_report.py` tras la corrección: **OK, peor
+camino 5528 B (45.0 % de 12288 B)**, sin cambio respecto a D-075 -- las
+dos funciones movidas no estaban en ese camino tampoco.
+
+**`.bss`.** Sobre el build limpio final: **8 484 604 B** (+3840 B sobre
+el cierre de Fase 4 -- los dos `moonlit_shared_settings_t` que pasaron
+de pila a `.bss`). Techo D-043 8 574 076 B, margen **89 472 B**.
+
+**Reproducibilidad (mismo criterio de D-075).** `BUILD_TARGET_CLEAN=1`
+contra el incremental de esta misma sesión, mismo commit (`39371977`):
+`cmp` de los dos `rockbox.bin` -- **idénticos byte a byte**. `text`/
+`data`/`bss` idénticos: `1 274 684 / 12 308 / 8 484 604`.
+
+**`package_dist.sh` sin `--release-tag`.** Corrida completa (árbol con
+`.serena/` sin trackear -- de siempre, no bloquea sin el flag, solo
+agrega la `M` de árbol sucio a `rockbox-info.txt`, esperado en
+desarrollo). Los 7 assets del contrato: `rockbox.ipod`, `rockbox.zip`,
+`bootloader-ipod6g.ipod`, `mks5lboot`, `checksums.txt`,
+`MODIFICATIONS.md`, `THIRD-PARTY-NOTICES.txt`. 419 archivos en el árbol
+`.rockbox/` armado, centinelas verificados. `stack_report.py` corre
+DENTRO del script (antes de `make zip`) y sale en verde. Sin
+`.rockbox/aura/version.txt` dentro de `rockbox.zip` (correcto, sin
+`--release-tag`; verificado con `unzip -l | grep aura`, no supuesto).
+
+**`CONTRATO-moonlit-studio.md`.** Sube a **Versión 7**: referencia al
+contrato canónico v19 (Aura-Firmware, leído en paralelo), §A.12 nueva
+para `/.aura/settings.cfg` (consumo/escritura desde el lado de moonlit,
+puntos exactos de aplicación en el handoff de disco y antes del
+candado), fila de la tabla de contratos corregida de v16 a v19 (estaba
+desactualizada desde antes de esta ronda -- el propio changelog del
+archivo ya citaba v18 en Versión 5, la tabla nunca se había puesto al
+día; se corrigió de paso al tocar la fila para v19, no una auditoría
+completa del archivo).
+
+### Lista de verificación en hardware — ajustes 2
+
+Ninguno de estos puntos se puede confirmar en el simulador -- verifica
+geometría, máquinas de estado y ausencia de regresión; lo que sigue
+solo se prueba en el iPod real. Agrupado por decisión.
+
+**Barra de estado y entrada directa a Marea (D-076/D-077/D-078)**
+- [ ] Un título de pista/álbum largo en la barra nunca choca con el
+  reloj, la batería, el icono de transporte ni el de candado (D-076);
+  la marquesina del título corre dentro de su franja delimitada.
+- [ ] Entrar a Música desde el hub va directo al panel de Marea (sin
+  pasar por una lista intermedia), y MENU/`MACT_BACK` desde Marea
+  vuelve directo a la raíz del hub, no a un nivel intermedio (D-077).
+- [ ] Dentro de Marea, LEFT/RIGHT recorren los pivotes (Reproducción
+  rápida, Listas) sin volver a envolver al llegar a la punta (D-077).
+- [ ] Título y artista largos en el panel de Marea se desplazan cada
+  uno con su propia marquesina, desfasadas entre sí (D-078) -- no
+  arrancan ni cambian de dirección al mismo tiempo.
+
+**Ajustes compartidos entre familias (D-079, contrato v19)**
+- [ ] Cambiar brillo, apagado automático, volumen máximo o bloqueo en
+  Metro (o Aura) y cambiar de sistema a moonlit: mismos valores, mismo
+  comportamiento del candado -- y a la inversa, cambiando desde
+  moonlit hacia las otras.
+- [ ] Cambiar idioma en una familia -- las otras arrancan ya en ese
+  idioma la próxima vez que se entre a ellas.
+- [ ] Restablecer ajustes en moonlit escribe `/.aura/settings.cfg` con
+  los valores por defecto y un `rev` nuevo; las otras familias los
+  recogen al arrancar.
+- [ ] Apagar el aparato con `screen_lock_enabled: 0` recién escrito por
+  Studio (USB) y encenderlo de nuevo: el candado NO se activa (ruta de
+  emergencia, D.6 del contrato canónico) -- confirma el segundo punto
+  de aplicación antes de `metro_screen_lock_init()`.
+
+**Sincronización de hora (contrato v19, D.4)**
+- [ ] Sincronizar biblioteca desde Studio con moonlit conectado: la
+  hora del iPod queda igual a la del Mac al terminar, sin reiniciar el
+  aparato -- incluida una sincronización que no toca ningún archivo
+  (biblioteca ya al día).
+
+**Seis idiomas y cirílico (D-080/D-081)**
+- [ ] Recorrer Ajustes, Ahora suena, el candado y "Acerca de" en ruso y
+  en alemán completos, sin cortes de texto ni caer en `·`/`?` donde no
+  debería.
+- [ ] Un álbum con título/artista en cirílico se lee bien en la lista
+  de música, en Marea y en Ahora suena -- glifos reales, no cuadros ni
+  el `·` de transliteración.
+- [ ] Un álbum con `ß`/`ü`/`ö`/`Ä` (alemán) se lee bien en los mismos
+  tres lugares.
+
+**Visor de fotos responsivo (D-082)**
+- [ ] Girar la rueda sin levantar el dedo recorre varias fotos
+  seguidas, no solo una -- la corrección real de M-109 en hardware, no
+  solo en el simulador con el token `+HOLD` inyectado.
+- [ ] Girar rápido de foto en foto se siente fluido -- solo un
+  destello de la maestra de baja resolución por cada una, sin que el
+  aparato se trabe intentando decodificar cada JPEG intermedio.
+- [ ] La foto completa (decodificada) aparece al detenerse la rueda,
+  dentro de una fracción de segundo perceptible como inmediata.
+
+### Cierre de la ronda
+
+Siete decisiones cerradas (D-076 a D-082, sin contar addenda): barra de
+estado delimitada y entrada directa a Marea, marquesina doble
+desfasada, ajustes compartidos entre las tres familias (contrato v19),
+seis idiomas con soporte cirílico completo, y visor de fotos
+responsivo con debounce -- este último con un hallazgo propio de Fase 5
+(la FALLA de `stack_report.py` en el módulo de ajustes compartidos de
+D-079, corregida en la misma pasada) y una reproducción dinámica real
+del bug M-109 después de portar el sufijo `+HOLD` de Metro a
+`sim_tasks.c`, que sustituyó la limitación honesta anotada originalmente
+en D-082.
+
+Tag sugerido para cuando el dueño termine la lista de hardware:
+**`v0.2.1`**. Esta sesión no crea el tag ni el release --
+`package_dist.sh` corrió únicamente sin `--release-tag`, tal como pide
+el protocolo de la ronda (maestro §F).

@@ -1,5 +1,17 @@
 # Contrato entre `moonlit-aura` y Aura Studio
 
+**Versión 7 — 2026-09-04 (ronda "ajustes 2", D-079).** Cambio respecto
+a v6: referencia al contrato canónico **v19** (redactado por
+Aura-Firmware en paralelo); §A.12 nueva, ajustes compartidos entre
+familias `/.aura/settings.cfg` (bloqueo, brillo, apagado, idioma,
+apariencia…) — mismo patrón de propiedad que `/.aura/art/format.txt`
+(§A.11): fuera de `.rockbox/`, de los firmwares, Studio nunca lo toca
+ni lo borra. La corrección de alcance de v19 sobre `rtc_sync_*` (§D.4
+del contrato canónico: ahora en cada sincronización, no solo "Aura
+corriendo") no cambia nada de este lado — moonlit ya leía esas siete
+claves en el mismo punto de siempre (arranque y vuelta de USB), solo
+que ahora Studio las escribe con más frecuencia.
+
 **Versión 6 — 2026-09-04 (D-072).** Cambio respecto a v5: moonlit deja
 de escribir `/.aura/thumbs/photos` — la maestra de una foto ya mide
 80 px, exactamente el lado del tile, así que el `.mth` era una copia
@@ -55,7 +67,7 @@ Contratos referenciados (fuente canónica, se leen desde el repo hermano):
 
 | Contrato | Versión referenciada | Ruta |
 |---|---|---|
-| Firmware ↔ Studio | **v16** (2026-08-26; v15 + caché maestra de imagen compartida en `/.aura/art/`) | `Aura-Firmware/CONTRATO-firmware-studio.md` |
+| Firmware ↔ Studio | **v19** (2026-09-04; v16 + formato/purga de `/.aura/art/` (v18, D-063) + ajustes compartidos `/.aura/settings.cfg` y alcance de `rtc_sync_*` corregido (v19, D-079)) | `Aura-Firmware/CONTRATO-firmware-studio.md` |
 | Nombre del dispositivo | **v2** (2026-08-17) | `Aura-Firmware/CONTRATO-dispositivo.md` |
 | Estructura de biblioteca | **v1.3** (2026-08-18) | `Aura-Firmware/docs/contracts/library-layout-v1.md` |
 
@@ -181,6 +193,38 @@ en Studio que aquí se requieren (§C) **no** se ejecutan desde este repo
    es `max(mtime de la pista representativa, mtime de la `cover.jpg`
    hermana si existe)`: una carátula reescrita sin tocar la pista
    invalida la maestra (hipótesis (a) de D-055/D-056).
+
+12. **Ajustes compartidos `/.aura/settings.cfg`** (v19, D-079, D.6 del
+   contrato canónico): texto plano, una clave por línea (`clave:
+   valor`), cabecera obligatoria `# aura-shared-settings v1`, escritura
+   atómica (`.tmp` + `rename()`). moonlit lo consume con un módulo puro
+   propio (`moonlit_shared_settings.c`/`.h`, host-testable, mismo criterio
+   que `metro_sync_marker.c`) para no acoplar el parseo/serializado al
+   resto del firmware. Trece claves conocidas: `rev`, `updated_by`,
+   `screen_lock_enabled`, `screen_lock_pin`, `screen_lock_require`,
+   `brightness`, `backlight_timeout`, `idle_poweroff`, `keyclick`,
+   `volume_limit`, `replaygain`, `language`, `appearance`. Una clave
+   desconocida se preserva textual al reescribir (`unknown_lines`); un
+   valor fuera de rango se ignora clave por clave, nunca aborta el
+   archivo entero (mismo criterio de tolerancia que el resto de `/.aura`).
+
+   **Cuándo se aplica.** `metro_settings_apply_pending_shared()` corre
+   en el mismo punto donde ya se aplicaba la hora (arranque y vuelta de
+   USB, `metro_disk_handoff()`) y una segunda vez justo antes de
+   `metro_screen_lock_init()` — el candado tiene que ver un `rev` nuevo
+   ANTES de decidir si bloquea, o un `screen_lock_enabled: 0` escrito
+   por Studio con el aparato apagado quedaría inalcanzable la próxima
+   vez que encienda (ruta de emergencia por USB, D.6 del contrato
+   canónico). `shared_rev_applied` vive en `aura.cfg` de moonlit, igual
+   que las demás familias.
+
+   **Cuándo se escribe.** `metro_settings_write_shared()` reescribe el
+   archivo completo con `rev+1`, `updated_by: moonlit` y las 13 claves
+   conocidas al valor VIGENTE — nunca el valor que traía el archivo
+   viejo — cada vez que el usuario cambia una de ellas desde Ajustes o
+   el candado, y al Restablecer ajustes. Studio nunca escribe ni borra
+   este archivo (regla D.6): es propiedad exclusiva de los firmwares,
+   igual que `/.aura/art`.
 
 Todo lo demás (C1–C31 de `docs/COMPAT_STUDIO.md`) se hereda de Metro-Aura
 sin cambios de formato.
