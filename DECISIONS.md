@@ -2417,3 +2417,26 @@ estaba en vuelo cuando llega un cambio de familia.
   `#define`, cero estáticas nuevas. Bajo el techo D-043 de 8 574 076.
 - `git status --short`: limpio tras este commit (más el screenshot
   nuevo, agregado al repo).
+
+## D-061 — "actualizar biblioteca" prepara también las carátulas; el aviso no cabía en el diálogo
+
+**Encargo del dueño (2026-08-27).** Una opción de Ajustes **"Actualizar Biblioteca"** en las tres familias, con aviso de que puede tardar varios minutos según los archivos y el estado del disco, y que la preparación ocurra solo tras actualizar el firmware, tras un sync de Studio, o a pedido. El síntoma que la motiva es de moonlit: *"en el music flow de moonlit (marea) se tarda un poco en cargarse las imágenes de los albums; el movimiento sí es fluido pero se tarda en mostrar la imagen."*
+
+**Lo que ya existía.** La caché maestra compartida `/.aura/art/` (D-059) y la base compartida `/.aura/tagcache/` (D-054) ya viven fuera de `/.rockbox/`, con las mismas claves (`crc_32(ruta, 0xffffffff)` + mtime) y los mismos lados (130/130/80) que Aura y Metro — verificado leyendo los tres. La fila de Ajustes también existía (`LANG_SETTING_LIBRARY` → `metro_sync_request_manual()`). Lo que faltaba: que esa preparación **incluyera las imágenes** y terminara antes de devolver el control. D-059 reemplazó la fase bloqueante de D-049/D-058 por un constructor puramente en segundo plano, y eso es exactamente lo que produce la espera reportada: entras a Marea y las carátulas van apareciendo mientras el hilo camina.
+
+**Decisión.** Terminado el trabajo de tagcache, `metro_sync.c` entra en `METRO_SYNC_BUILDING_ART`: espera a que la base sea consultable, corre una pasada **completa** del constructor y recién entonces cierra la pantalla, con el avance en la misma pantalla de espera. Solo cuando la música estuvo en juego. MENU la pospone: el constructor no se cancela, vuelve a su cadencia de fondo. La fila pasa a "actualizar biblioteca" y su aviso lleva la advertencia de duración.
+
+Esto **no** reabre lo que D-059 cerró. Lo que ahí bloqueaba aparecía solo, sin que nadie lo pidiera; aquí el usuario lo pidió y se le advirtió cuánto tarda.
+
+`moonlit_master_art_builder` gana lo mínimo: `progress()` (fase + hechos/total; total 0 en artistas y fotos, cuyos recorridos son en streaming), `pass_done()` (apoyado en el `complete` que `run_pass()` ya devolvía — una pasada interrumpida nunca cuenta), `is_running()`, `set_foreground()` (sin la pausa de animación ni el paso de `HZ/20`, solo `yield()`) y `begin_full_pass()`, que además llama a `poll()`: el hilo lo crea `poll()` la primera vez que la base está lista, así que pedir la preparación sin haber entrado nunca a Música habría dejado `s_kick` puesto sin hilo que lo atendiera.
+
+**Detalle que se corrigió al instrumentar**: el contador NO se incrementa dentro de `pace()`, que también corre desde `service_hints()` — un hint de Marea no es un elemento del recorrido y habría movido el contador de la pantalla sin motivo. Se cuenta en los tres sitios reales del recorrido.
+
+**Bug colateral corregido: el aviso no cabía, y el diálogo se encimaba.** `draw_question()` está topada en dos líneas a propósito. Se agregó `metro_widgets_confirm_detail()`, igual que en Metro (M-100), pero aquí **no bastó con meter una línea**: la tipografía de moonlit es mucho más grande (Baskerville 28 px en la pregunta), así que *"¿actualizar biblioteca ahora?"* ya ocupa dos líneas por sí sola y termina justo donde empezaría el detalle — el texto se dibujaba encima de la segunda línea de la pregunta y encima de "sí". Con detalle, el bloque entero se reacomoda (pregunta en 62, detalle en 112, "sí"/"no" en 178/206) y el detalle admite **tres** líneas en vez de dos; sin detalle, las posiciones no cambian ni un píxel y ningún otro diálogo se mueve. El envoltorio del detalle también cortaba la **última** línea en su último espacio y perdía la palabra final ("…y cómo esté el" en vez de "…el disco."): si lo que queda entra entero, va entero.
+
+**Verificado.**
+- Build ARM (`firmware/build-ipod6g`): **0 errores**; sin warnings en los archivos tocados. Los `-Wmissing-field-initializers` de `metro_screen_hub.c` son preexistentes y no se tocaron.
+- `make -C firmware/rockbox/apps/metro/test test`: **11 suites, 0 fallos**.
+- Simulador (build limpio + `make install`), recorrido real con inyección de botones: la fila **"actualizar biblioteca"** aparece en Ajustes › general; el aviso muestra la pregunta y **la advertencia completa** en tres líneas, sin encimarse (captura); al aceptar corre la base y sigue con **"preparando carátulas 83/312"** bajo "actualizando biblioteca…" (captura), y la pantalla **se cierra sola** devolviendo a Ajustes. Con la caché maestra de álbumes vaciada antes de la corrida, se reconstruyeron las **312** maestras.
+- A diferencia de Aura (D-344) y Metro (M-100), aquí la captura del progreso **no** necesitó ralentizar nada: la biblioteca del simulador de moonlit tiene 312 álbumes y la fase dura lo suficiente para observarla con el volcado automático.
+- **Límite documentado**: no se probó en hardware, ni el disparo por marcador de un sync de Studio real (exige Mac + iPod); los dos entran por el mismo `finish_ok()`, que es el punto modificado.

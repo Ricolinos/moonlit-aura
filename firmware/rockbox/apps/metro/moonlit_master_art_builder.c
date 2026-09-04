@@ -68,6 +68,15 @@ static volatile bool s_kick;
 static volatile bool s_paused;
 static volatile bool s_active;
 static volatile unsigned s_generation = 1;
+/* D-061: progreso de la pasada. Lo escribe solo el hilo del constructor
+ * y lo lee solo el de UI; enteros de palabra y planificacion cooperativa
+ * (el cambio de contexto solo ocurre en yield/sleep/bloqueo), asi que
+ * sin candado -- misma disciplina que s_paused/s_active. */
+static volatile moonlit_master_art_phase_t s_phase = MOONLIT_MASTER_ART_PHASE_IDLE;
+static volatile int  s_phase_done = 0;
+static volatile int  s_phase_total = 0;   /* 0 = desconocido (streaming) */
+static volatile bool s_pass_done = false;
+static volatile bool s_foreground = false;
 static bool s_legacy_migrated;
 
 static int32_t s_hints[HINT_RING_N];
@@ -142,6 +151,15 @@ static bool db_usable(void)
 /* Between elements: honour a pause, then the contract's pace. */
 static void pace(bool did_work)
 {
+    /* D-061: en primer plano el usuario esta MIRANDO esta pasada -- ni la
+     * pausa de animacion (la levanta la cadencia de Marea, que no esta en
+     * pantalla) ni el paso de HZ/20 tienen sentido. Se cede el turno para
+     * que la pantalla se redibuje, y nada mas. */
+    if (s_foreground)
+    {
+        yield();
+        return;
+    }
     while (s_paused)
         sleep(BUILDER_PAUSE_POLL);
     if (did_work)
@@ -323,6 +341,7 @@ static bool build_artist_cb(const char *path, long mtime, void *ctx)
     (void)ctx;
     service_hints();
     pace(build_file('r', "artists", path, mtime, MOONLIT_MASTER_ART_ARTIST_SIZE));
+    s_phase_done++; /* D-061 */
     return !s_kick;
 }
 
@@ -331,6 +350,7 @@ static bool build_photo_cb(const char *path, long mtime, void *ctx)
     (void)ctx;
     service_hints();
     pace(build_file('p', "photos", path, mtime, MOONLIT_MASTER_ART_PHOTO_SIZE));
+    s_phase_done++; /* D-061 */
     return !s_kick;
 }
 
@@ -493,17 +513,30 @@ static bool run_pass(void)
     if (!enumerate_albums())
         return false;
     DEBUGF("master_art: pass start, %d albums\n", s_seeks_n);
+    s_phase = MOONLIT_MASTER_ART_PHASE_ALBUMS;
+    s_phase_done = 0;
+    s_phase_total = s_seeks_n;
     for (i = 0; i < s_seeks_n; i++)
     {
         service_hints();
         if (s_kick || !db_usable())
             return false;
+        /* D-061: se cuenta AQUI y no dentro de pace(), que tambien corre
+         * desde service_hints() -- un hint de Marea no es un elemento del
+         * recorrido y no debe mover el contador de la pantalla. */
+        s_phase_done = i;
         pace(build_album(s_seeks[i]));
     }
 
+    s_phase = MOONLIT_MASTER_ART_PHASE_ARTISTS;
+    s_phase_done = 0;
+    s_phase_total = 0; /* recorrido en streaming: sin conteo previo */
     metro_settings_artists_dir(dir, sizeof(dir));
     if (!walk_dir(dir, k_artist_exts, 1, build_artist_cb, NULL))
         return false;
+    s_phase = MOONLIT_MASTER_ART_PHASE_PHOTOS;
+    s_phase_done = 0;
+    s_phase_total = 0;
     if (!walk_dir(METRO_PHOTOS_DIR, k_photo_exts, 2, build_photo_cb, NULL))
         return false;
 
@@ -534,8 +567,11 @@ static void builder_thread(void)
         s_active = true;
         complete = run_pass();
         s_active = false;
+        s_phase = MOONLIT_MASTER_ART_PHASE_IDLE;
         s_generation++;
-        if (!complete)
+        if (complete)
+            s_pass_done = true; /* D-061 */
+        else
         {
             s_kick = true;
             sleep(HZ);
@@ -557,4 +593,44 @@ void moonlit_master_art_builder_poll(void)
                                 IF_COP(, CPU));
     s_thread_running = (s_thread_id != 0);
     DEBUGF("master_art: builder thread %s\n", s_thread_running ? "started" : "FAILED");
+}
+
+/* -- D-061: preparacion explicita --------------------------------------- */
+
+bool moonlit_master_art_builder_progress(moonlit_master_art_phase_t *phase,
+                                          int *done, int *total)
+{
+    if (phase)
+        *phase = s_phase;
+    if (done)
+        *done = s_phase_done;
+    if (total)
+        *total = s_phase_total;
+    return s_thread_running && s_phase != MOONLIT_MASTER_ART_PHASE_IDLE;
+}
+
+bool moonlit_master_art_builder_pass_done(void)
+{
+    return s_pass_done;
+}
+
+bool moonlit_master_art_builder_is_running(void)
+{
+    return s_thread_running;
+}
+
+void moonlit_master_art_builder_set_foreground(bool foreground)
+{
+    s_foreground = foreground;
+}
+
+void moonlit_master_art_builder_begin_full_pass(void)
+{
+    s_pass_done = false;
+    /* El hilo lo crea poll() la primera vez que la base esta lista. Si el
+     * usuario pidio la preparacion sin haber entrado nunca a Musica, el
+     * hilo puede no existir todavia -- sin esto, s_kick se quedaria
+     * puesto y la pantalla saldria por is_running() sin preparar nada. */
+    moonlit_master_art_builder_poll();
+    s_kick = true;
 }

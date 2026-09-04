@@ -97,12 +97,18 @@ enum metro_lang_id {
     LANG_SYNC_ERROR_VERSION,
     LANG_SYNC_ERROR_ATTEMPTS,
     LANG_SYNC_DISMISS_HINT,
+    /* D-061: fase de imagenes de la preparacion (/.aura/art). Artistas y
+     * fotos van en streaming, sin total previo. */
+    LANG_SYNC_ART_ALBUMS,
+    LANG_SYNC_ART_ARTISTS,
+    LANG_SYNC_ART_PHOTOS,
 
     LANG_SETTING_LIBRARY,
     LANG_SETTING_BRIGHTNESS,
     LANG_SETTING_BACKLIGHT,
     LANG_VALUE_NEVER,
     LANG_DIALOG_LIBRARY_TITLE,
+    LANG_DIALOG_LIBRARY_DETAIL, /* D-061: advertencia de duración */
     LANG_LIBRARY_UPDATING,
 
     LANG_ABOUT_DEVICE_DEFAULT,

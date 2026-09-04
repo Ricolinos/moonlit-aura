@@ -43,7 +43,7 @@
  * block still ends above "sí"/"no". Never more than two lines: every
  * question in the catalogue fits in two at 320 px, and a third would
  * run into the answers. */
-static void draw_question(const char *question)
+static void draw_question_at(const char *question, int qy)
 {
     static char head[96];
     int w, h, max_w = LCD_WIDTH - 2 * CONFIRM_QUESTION_X;
@@ -54,7 +54,7 @@ static void draw_question(const char *question)
     lcd_getstringsize((const unsigned char *)question, &w, &h);
     if (w <= max_w)
     {
-        metro_draw_text(MFONT_TITLE, CONFIRM_QUESTION_X, CONFIRM_QUESTION_Y,
+        metro_draw_text(MFONT_TITLE, CONFIRM_QUESTION_X, qy,
                          question, metro_color_fg());
         return;
     }
@@ -76,21 +76,119 @@ static void draw_question(const char *question)
     if (cut == 0)
     {
         /* No usable space: let the LCD clip it, as before. */
-        metro_draw_text(MFONT_TITLE, CONFIRM_QUESTION_X, CONFIRM_QUESTION_Y,
+        metro_draw_text(MFONT_TITLE, CONFIRM_QUESTION_X, qy,
                          question, metro_color_fg());
         return;
     }
     memcpy(head, question, cut);
     head[cut] = '\0';
-    metro_draw_text(MFONT_TITLE, CONFIRM_QUESTION_X, CONFIRM_QUESTION_Y - h / 2,
+    metro_draw_text(MFONT_TITLE, CONFIRM_QUESTION_X, qy - h / 2,
                      head, metro_color_fg());
-    metro_draw_text(MFONT_TITLE, CONFIRM_QUESTION_X, CONFIRM_QUESTION_Y + h / 2,
+    metro_draw_text(MFONT_TITLE, CONFIRM_QUESTION_X, qy + h / 2,
                      question + cut + 1, metro_color_fg());
+}
+
+/* D-061: linea de detalle bajo la pregunta, en MFONT_BODY.
+ * draw_question() esta topada en DOS lineas a proposito (una tercera
+ * choca con "si"/"no"), asi que una advertencia larga -- "puede tardar
+ * varios minutos, segun cuantos archivos tengas y como este el disco" --
+ * no cabe ahi sin mutilarla. Va debajo, en tipografia menor: la
+ * jerarquia habitual (titulo + cuerpo). */
+/* Tres lineas: con la pregunta en 62 (dos lineas de Baskerville 28,
+ * hasta ~104) y "sí" en 178, entran tres de MFONT_BODY (18 px) desde
+ * 112 -- la tercera termina en ~166. Con dos se perdia la ultima
+ * palabra de la advertencia. */
+#define CONFIRM_DETAIL_LINES  3
+
+static void draw_detail_at(const char *detail, int dy)
+{
+    static char line[128];
+    int max_w = LCD_WIDTH - 2 * CONFIRM_QUESTION_X;
+    const char *p = detail;
+    int drawn = 0;
+    int y = dy;
+    int lh;
+
+    lcd_setfont(metro_font_id(MFONT_BODY));
+    lcd_getstringsize((const unsigned char *)"Ag", NULL, &lh);
+
+    while (*p && drawn < CONFIRM_DETAIL_LINES)
+    {
+        const char *tail;
+        size_t cut = 0, len;
+        int w;
+
+        /* Si lo que queda entra entero, va entero -- sin esto la ULTIMA
+         * linea se cortaria igual en su ultimo espacio y la palabra final
+         * se perderia. */
+        len = strlen(p);
+        if (len < sizeof(line))
+        {
+            memcpy(line, p, len);
+            line[len] = '\0';
+            lcd_getstringsize((const unsigned char *)line, &w, NULL);
+            if (w <= max_w)
+            {
+                metro_draw_text(MFONT_BODY, CONFIRM_QUESTION_X, y, line,
+                                 metro_color_secondary());
+                return;
+            }
+        }
+
+        for (tail = p; (tail = strchr(tail, ' ')) != NULL; tail++)
+        {
+            size_t n = (size_t)(tail - p);
+
+            if (n >= sizeof(line))
+                break;
+            memcpy(line, p, n);
+            line[n] = '\0';
+            lcd_getstringsize((const unsigned char *)line, &w, NULL);
+            if (w > max_w)
+                break;
+            cut = n;
+        }
+        if (cut == 0)
+        {
+            len = strlen(p);
+            if (len >= sizeof(line))
+                len = sizeof(line) - 1;
+            memcpy(line, p, len);
+            line[len] = '\0';
+            metro_draw_text(MFONT_BODY, CONFIRM_QUESTION_X, y, line,
+                             metro_color_secondary());
+            return;
+        }
+        memcpy(line, p, cut);
+        line[cut] = '\0';
+        metro_draw_text(MFONT_BODY, CONFIRM_QUESTION_X, y, line,
+                         metro_color_secondary());
+        p += cut + 1;
+        y += lh;
+        drawn++;
+    }
 }
 
 bool metro_widgets_confirm(const char *title, const char *question)
 {
+    return metro_widgets_confirm_detail(title, question, NULL);
+}
+
+bool metro_widgets_confirm_detail(const char *title, const char *question,
+                                   const char *detail)
+{
     bool sel_yes = false; /* default to "no" -- the safe answer */
+    /* D-061: con detalle hace falta reacomodar TODO el bloque, no solo
+     * meter una linea. La tipografia de moonlit es grande (Baskerville
+     * 28 px en la pregunta): "¿actualizar biblioteca ahora?" ya ocupa
+     * dos lineas por si sola y termina donde empezaria el detalle. Con
+     * los valores de siempre el detalle se encimaba sobre la segunda
+     * linea de la pregunta y sobre "sí". Sin detalle, las posiciones no
+     * cambian ni un pixel -- ningun otro dialogo se mueve. */
+    const int qy  = detail ? 62  : CONFIRM_QUESTION_Y;
+    const int dy  = 112;
+    const int yy  = detail ? 178 : CONFIRM_YES_Y;
+    const int ny  = detail ? 206 : 178;
 
     while (1)
     {
@@ -98,11 +196,13 @@ bool metro_widgets_confirm(const char *title, const char *question)
 
         metro_draw_clear();
         metro_draw_header(title);
-        draw_question(question);
-        metro_draw_text(sel_yes ? MFONT_LIST_SEL : MFONT_LIST, 12, CONFIRM_YES_Y,
+        draw_question_at(question, qy);
+        if (detail)
+            draw_detail_at(detail, dy);
+        metro_draw_text(sel_yes ? MFONT_LIST_SEL : MFONT_LIST, 12, yy,
                          metro_lang_str(LANG_DIALOG_YES),
                          sel_yes ? metro_color_fg() : metro_color_secondary());
-        metro_draw_text(!sel_yes ? MFONT_LIST_SEL : MFONT_LIST, 12, 178,
+        metro_draw_text(!sel_yes ? MFONT_LIST_SEL : MFONT_LIST, 12, ny,
                          metro_lang_str(LANG_DIALOG_NO),
                          !sel_yes ? metro_color_fg() : metro_color_secondary());
         lcd_update();

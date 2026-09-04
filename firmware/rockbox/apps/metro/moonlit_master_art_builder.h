@@ -57,6 +57,15 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* D-061: fase de la pasada, para la pantalla "actualizando biblioteca".
+ * Mismo orden que el recorrido (albumes -> artistas -> fotos). */
+typedef enum {
+    MOONLIT_MASTER_ART_PHASE_IDLE = 0,
+    MOONLIT_MASTER_ART_PHASE_ALBUMS,
+    MOONLIT_MASTER_ART_PHASE_ARTISTS,
+    MOONLIT_MASTER_ART_PHASE_PHOTOS,
+} moonlit_master_art_phase_t;
+
 /* Once, before the main loop (metro_main()): mutex init. No thread yet. */
 void moonlit_master_art_builder_init(void);
 
@@ -94,5 +103,35 @@ void moonlit_master_art_builder_hint_album(int32_t album_seek);
  * whole decode+resample+write element on the builder). */
 void moonlit_master_art_lock(void);
 void moonlit_master_art_unlock(void);
+
+/* D-061 (encargo del dueno: "Actualizar Biblioteca"). Una PREPARACION
+ * explicita -- la manual de Ajustes, el marcador de un sync de Studio,
+ * el primer arranque tras actualizar el firmware -- termina la pasada de
+ * imagenes ANTES de devolver el control, con su progreso en la misma
+ * pantalla de espera. Es lo que D-059 quito del camino normal, y con
+ * razon: ahi bloqueaba sin que nadie lo pidiera. Aca el usuario lo pidio
+ * y se le advirtio cuanto tarda. Solo metro_sync.c llama estas cuatro. */
+
+/* Progreso de la pasada. `total` 0 = todavia no se sabe (los recorridos
+ * de artistas y fotos son en streaming). false si no hay pasada. */
+bool moonlit_master_art_builder_progress(moonlit_master_art_phase_t *phase,
+                                          int *done, int *total);
+
+/* true en cuanto una pasada COMPLETA termino desde el ultimo
+ * begin_full_pass(). run_pass() ya distingue completa de interrumpida. */
+bool moonlit_master_art_builder_pass_done(void);
+
+/* true si el hilo existe -- para que la pantalla no espere una pasada
+ * que no puede llegar. */
+bool moonlit_master_art_builder_is_running(void);
+
+/* Primer plano: sin la espera de HZ/20 entre elementos y sin ceder ante
+ * la pausa de animacion (no hay carrusel con el que competir mientras se
+ * muestra el progreso). Sigue cediendo la CPU para que la pantalla se
+ * redibuje. */
+void moonlit_master_art_builder_set_foreground(bool foreground);
+
+/* Pide una pasada completa desde el principio. */
+void moonlit_master_art_builder_begin_full_pass(void);
 
 #endif /* MOONLIT_MASTER_ART_BUILDER_H */

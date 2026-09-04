@@ -29,6 +29,7 @@
 #include "misc.h" /* read_line()/settings_parseline() -- R3-F5/DD-7 */
 
 #include "metro_sync.h"
+#include "moonlit_master_art_builder.h" /* D-061 */
 #include "metro_sync_marker.h"
 #include "metro_settings.h"
 #include "moonlit_art_cache.h" /* moonlit_art_request_gc() -- D-055 */
@@ -49,6 +50,15 @@
 typedef enum { JOB_NONE = 0, JOB_UPDATE, JOB_REBUILD } job_kind_t;
 
 static metro_sync_state_t s_state = METRO_SYNC_IDLE;
+/* D-061: la pasada de imagenes no arranca en cuanto termina tagcache --
+ * la base recien comitida todavia no es consultable y el recorrido de
+ * albumes se saltaria entero en silencio (medido en Aura-Firmware,
+ * D-344). El constructor de moonlit ya se protege solo (db_usable() en
+ * su bucle), pero la pantalla no debe devolver el control antes de que
+ * la pasada real haya corrido. */
+static bool s_art_started = false;
+static int  s_art_wait_ticks = 0;
+#define MOONLIT_ART_DB_WAIT_MAX_TICKS (HZ * 10)
 static metro_sync_marker_t s_marker;
 static job_kind_t s_job = JOB_NONE;
 static unsigned s_jobs_before = 0;
@@ -278,6 +288,7 @@ bool metro_sync_needs_screen(void)
 {
     return s_state == METRO_SYNC_WAIT_TAGCACHE
         || s_state == METRO_SYNC_RUNNING
+        || s_state == METRO_SYNC_BUILDING_ART
         || s_state == METRO_SYNC_ERROR_VERSION
         || s_state == METRO_SYNC_ERROR_ATTEMPTS;
 }
@@ -286,7 +297,10 @@ bool metro_sync_job_active(void)
 {
     return s_state == METRO_SYNC_WAIT_TAGCACHE
         || s_state == METRO_SYNC_RUNNING
-        || s_state == METRO_SYNC_POSTPONED;
+        || s_state == METRO_SYNC_POSTPONED
+        /* D-061: la fase de imagenes tambien es trabajo en curso --
+         * metro_main.c solo llama al tick mientras esto sea cierto. */
+        || s_state == METRO_SYNC_BUILDING_ART;
 }
 
 metro_sync_state_t metro_sync_state(void)
@@ -306,7 +320,36 @@ static void finish_ok(void)
     if (s_marker.music)
         moonlit_art_request_gc();
     remove_marker();
+
+    /* D-061 (encargo del dueno, 2026-08-27): "biblioteca preparada"
+     * incluye las imagenes. Devolver el control aqui deja a Marea y a las
+     * rejillas mostrando monogramas mientras el constructor camina en
+     * segundo plano -- exactamente la espera que el dueno reporto. Solo
+     * cuando la musica estuvo en juego: un marcador de solo Videos/Fotos
+     * no toca albumes ni fotos de artista. */
+    if (s_marker.music)
+    {
+        moonlit_master_art_builder_set_foreground(true);
+        s_art_started = false;
+        s_art_wait_ticks = 0;
+        s_state = METRO_SYNC_BUILDING_ART;
+        return;
+    }
     go_idle();
+}
+
+/* D-061: salir de la fase de imagenes -- el constructor vuelve a su
+ * cadencia de fondo pase lo que pase. */
+static void leave_art_phase(void)
+{
+    moonlit_master_art_builder_set_foreground(false);
+}
+
+bool metro_sync_art_progress(moonlit_master_art_phase_t *phase, int *done, int *total)
+{
+    if (s_state != METRO_SYNC_BUILDING_ART)
+        return false;
+    return moonlit_master_art_builder_progress(phase, done, total);
 }
 
 /* R3-F5/DD-7 (M-066): one-way import of Studio's ratings.cfg --
@@ -511,6 +554,28 @@ bool metro_sync_tick(void)
             job_ended();
             return true;
 
+        case METRO_SYNC_BUILDING_ART:
+            if (!s_art_started)
+            {
+                if (!tagcache_is_usable()
+                    && s_art_wait_ticks < MOONLIT_ART_DB_WAIT_MAX_TICKS)
+                {
+                    s_art_wait_ticks++;
+                    return true;
+                }
+                s_art_started = true;
+                moonlit_master_art_builder_begin_full_pass();
+                return true;
+            }
+            if (moonlit_master_art_builder_pass_done()
+                || !moonlit_master_art_builder_is_running())
+            {
+                leave_art_phase();
+                go_idle();
+                return true;
+            }
+            return true; /* progreso: redibujar */
+
         default:
             return false;
     }
@@ -527,6 +592,12 @@ void metro_sync_postpone(void)
         case METRO_SYNC_RUNNING:
             tagcache_stop_scan();
             s_state = METRO_SYNC_POSTPONED;
+            break;
+        case METRO_SYNC_BUILDING_ART:
+            /* D-061: MENU cierra la pantalla; el constructor NO se
+             * cancela, vuelve a su cadencia de fondo y termina solo. */
+            leave_art_phase();
+            go_idle();
             break;
         default:
             break;

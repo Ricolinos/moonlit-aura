@@ -32,6 +32,8 @@
 #ifndef METRO_SYNC_H
 #define METRO_SYNC_H
 
+#include "moonlit_master_art_builder.h" /* D-061 */
+
 #include <stdbool.h>
 
 typedef enum {
@@ -41,6 +43,10 @@ typedef enum {
     METRO_SYNC_POSTPONED,     /* user pressed MENU on the screen; job still finishing in the background */
     METRO_SYNC_ERROR_VERSION, /* marker's "version" is newer than METRO_SYNC_MARKER_VERSION_SUPPORTED */
     METRO_SYNC_ERROR_ATTEMPTS,/* marker's "attempts" hit METRO_SYNC_MARKER_MAX_ATTEMPTS */
+    METRO_SYNC_BUILDING_ART,  /* D-061: base lista; terminando la cache maestra
+                                 compartida (/.aura/art) antes de devolver el
+                                 control. MENU la pospone: el constructor sigue
+                                 en segundo plano. */
 } metro_sync_state_t;
 
 /* Reads /.aura/sync-pending.json if present and decides what to do --
@@ -113,5 +119,9 @@ bool metro_sync_write_music_pending_marker(void);
 void metro_sync_record_db_stamp(void);
 bool metro_sync_db_stamp_is_current(void);
 bool metro_sync_switch_needs_rebuild(void);
+
+/* D-061: progreso de la fase de imagenes, para la pantalla. false si no
+ * estamos en esa fase. `total` 0 = desconocido. */
+bool metro_sync_art_progress(moonlit_master_art_phase_t *phase, int *done, int *total);
 
 #endif /* METRO_SYNC_H */
