@@ -27,6 +27,19 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SRC_DIR="$ROOT_DIR/firmware/rockbox"
 TC_BIN="${RBDEV_TOOLCHAIN:-$ROOT_DIR/firmware/toolchain/bin}"
 
+# moonlit (D-062): TC_BIN se vuelve ABSOLUTO aqui. build_one() hace `cd`
+# al directorio de build antes de usar PATH="$TC_BIN:$PATH", asi que un
+# RBDEV_TOOLCHAIN relativo -- que es justo como lo escriben los planes
+# de la ronda ("../Metro-Aura/firmware/toolchain/bin") -- se resolvia
+# contra el directorio equivocado y `configure`/`make` no encontraban
+# arm-elf-eabi-gcc. No se notaba en un build incremental porque el
+# Makefile ya generado lleva las rutas absolutas del configure anterior;
+# solo rompia el build LIMPIO, que es del que tiene que salir el
+# paquete.
+if [[ -d "$TC_BIN" ]]; then
+  TC_BIN="$(cd "$TC_BIN" && pwd)"
+fi
+
 if [[ ! -d "$TC_BIN" ]]; then
   echo "ERROR: no se encontro el toolchain en $TC_BIN" >&2
   echo "       corre firmware/tools/build_toolchain.sh primero," >&2

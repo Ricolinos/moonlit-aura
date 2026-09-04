@@ -62,6 +62,11 @@ BUILD_DIR="$ROOT_DIR/firmware/build-ipod6g"
 BOOT_BUILD_DIR="$ROOT_DIR/firmware/build-ipod6g-boot"
 DIST_DIR="$ROOT_DIR/firmware/dist"
 TC_BIN="${RBDEV_TOOLCHAIN:-$ROOT_DIR/firmware/toolchain/bin}"
+# moonlit (D-062): absoluto, por el mismo motivo que build_target.sh --
+# este script tambien hace `cd` antes de usarlo (make zip, mks5lboot).
+if [[ -d "$TC_BIN" ]]; then
+  TC_BIN="$(cd "$TC_BIN" && pwd)"
+fi
 
 if [[ ! -d "$TC_BIN" ]]; then
   echo "ERROR: no se encontró el toolchain en $TC_BIN" >&2

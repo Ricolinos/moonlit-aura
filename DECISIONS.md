@@ -2657,6 +2657,45 @@ trabaja **solo con locales**. Deliberadamente no se reutilizó
 `metro_fsutil_list_by_ext_mtime()`, que sí tiene un `s_scan[]` estático
 y habría introducido exactamente la carrera que este punto buscaba.
 
+### D-062, addendum 2 — el build LIMPIO, y un pie en el que este repo no cayó
+
+Aviso de la sesión de Metro (R7-3, vía la supervisora): allí un build
+**limpio** del target llevaba roto desde el 19-ago sin que nadie lo
+notara, porque `mkdepfile` (`tools/functions.make:57`) arma su línea con
+`PPCFLAGS + OTHER_INC` y **no** con `MPEGCFLAGS`, así que el
+`-I$(APPSDIR)/metro` de M-059 no le llegaba; `-MG` convertía el header
+de paleta en un fantasma, y `build-ipod6g/` arrastraba un `make.dep`
+anterior que lo tapaba.
+
+**Verificado: aquí no pasa, y por una razón concreta.**
+`firmware/build-ipod6g` y `-boot` se borraron enteros y se reconstruyó
+desde cero: **exit 0, cero errores**. moonlit se salva porque
+`mpegplayer.c:120` incluye `"../../metro/moonlit_tokens.h"` con **ruta
+relativa**, que el preprocesador resuelve contra el directorio del
+propio archivo que la incluye — no depende de que ningún `-I` llegue a
+`mkdepfile`. El `MPEGCFLAGS += -I$(APPSDIR)/metro` de M-059 sigue ahí
+(heredado del fork) pero no es lo que sostiene la compilación.
+
+Build limpio vs. incremental: `text`/`data`/`bss` **byte a byte
+idénticos** (1 243 156 / 12 308 / 8 460 732); `rockbox.bin` difiere en
+**22 bytes**, que son la cadena `RBVERSION` (el hash de git del commit
+de cada corrida). Nada más.
+
+**Lo que sí estaba roto, y es de este repo.** El build limpio falló en
+el primer intento con `arm-elf-eabi-gcc: No such file or directory`.
+Causa: `build_target.sh` hace `cd` al directorio de build **antes** de
+usar `PATH="$TC_BIN:$PATH"`, así que un `RBDEV_TOOLCHAIN` **relativo**
+se resolvía contra el directorio equivocado. Y relativo es exactamente
+como lo escriben los planes de esta ronda
+(`RBDEV_TOOLCHAIN=../Metro-Aura/firmware/toolchain/bin`). No se notaba
+nunca en un build incremental, porque el `Makefile` ya generado lleva
+las rutas absolutas del `configure` anterior: **solo rompía el build
+limpio**, que es justo del que tiene que salir el paquete. Corregido en
+`build_target.sh` y en `package_dist.sh` (que hace `cd` por el mismo
+motivo, para `make zip` y `mks5lboot`): `TC_BIN` se vuelve absoluto
+apenas se resuelve. Confirmado reconstruyendo desde cero **con la ruta
+relativa**: exit 0.
+
 ## D-063 — Caché de carátulas con versión de formato y clave de álbum v18
 
 **Encargo** (maestro §A.2/§A.3, plan hijo Fase 1.2). Dos agujeros que
