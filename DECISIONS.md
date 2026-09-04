@@ -3788,6 +3788,10 @@ sigue solo se puede confirmar en el iPod real.
 - [ ] Ninguno — verificado enteramente en esta sesión (simulador +
   tests host); es dibujo, no temporización ni hardware específico.
 
+**Verificado en hardware por el dueño el 2026-09-04 (v0.2.0):** arranque,
+Marea, fuentes, bloqueo, ajustes y fotos correctos; ajustes menores
+pendientes para la siguiente ronda.
+
 ## D-074 — Fuente de puntuación uniforme: seis roles, medida por intersección
 
 **Fase 8, condicionada por la supervisora al cierre en verde de todo lo
