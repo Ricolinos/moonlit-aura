@@ -3595,68 +3595,202 @@ se aprueba tiene que ser lo que se va a ver. El simulador **no** ejecuta
 el bootloader, así que la pantalla real queda para la lista de hardware
 (y es lo que hay que mirar antes de flashear).
 
+
 ---
 
-# REANUDAR (2026-09-04 05:40) — dónde se quedó la ronda "pulido"
+## D-075 — Reproducibilidad: `make dep` que nunca se refrescaba, y un `zip -r` que agregaba en vez de reemplazar
 
-Pausa por cuota, pedida por la sesión supervisora. El árbol queda
-**limpio y en verde**: `build_target.sh` (firmware + bootloader) exit 0
-con 0 warnings nuevos, 18 suites host en verde, `.bss` **8 467 612**
-bajo el techo D-043 (margen **106 464 B**), `stack_report.py` OK.
+**Encargo** (maestro §I.5, nota de Aura D-348): la regla `$(DEPFILE) dep:`
+de `tools/root.make` —heredada de Rockbox, **compartida por los tres
+repos del fork**— no tiene prerrequisitos: `make.dep` se genera **una
+vez**, al crear el directorio de build, y nunca se refresca solo. Un
+`#include` agregado después queda invisible para `make`, y el `.o` que
+lo usa no se recompila cuando esa cabecera cambia — el binario terminaría
+dependiendo de **cuándo** se creó el directorio de build, no solo del
+commit. Aura lo midió en su propio árbol: 7 bytes de diferencia entre un
+build limpio y uno incremental del mismo commit.
 
-**Cerrado**: Fase 0 (D-061) · Fase 1 (D-062 con dos addenda, D-063,
-D-064) · Fase 2 (D-065) · Fase 3 (D-066 con addendum, D-067 con
-addendum) · Fase 4 (D-068, D-069, D-070) · Fase 5 (D-071 con addendum de
-replaygain, D-072) · **Fase 6 (D-073), completa**.
+**La corrección, en `build_target.sh`**: `build_one()` corre `make dep`
+**siempre**, después de configurar y antes de compilar — no solo para un
+release. Cuesta ~25 s por directorio en este árbol (medido), barato
+frente al riesgo de un binario que no es reproducible.
 
-**Lo que queda, en orden:**
+**`BUILD_TARGET_CLEAN=1`**: `package_dist.sh` lo exporta cuando se pasa
+`--release-tag`, y `build_one()` borra el directorio de build entero
+antes de reconfigurar. Un release tiene que ser reproducible byte a
+byte — es lo que sostiene la actualización selectiva por CRC32 de
+Studio (contrato v18) — y `make dep` sobre un directorio viejo no lo
+garantiza tanto como empezar de cero.
 
-1. **Fase 7 — cierre.** No empezada. Falta:
-   - `package_dist.sh` **sin** `--release-tag`, comprobando que
-     `stack_report.py` corre en verde dentro de él.
-   - Reproducibilidad: la nota de Aura D-348 dice que la regla
-     `$(DEPFILE) dep:` de `tools/root.make` no tiene prerrequisitos, así
-     que `make.dep` nunca se refresca; estándar de los tres repos:
-     **siempre `make dep` antes de `make`**, y con `--release-tag`
-     borrar y reconfigurar el directorio de build. **Pendiente de
-     aplicar en `package_dist.sh`.** (El build limpio de este repo ya se
-     verificó en el addendum 2 de D-062: limpio e incremental dan
-     `text`/`data`/`bss` idénticos y `rockbox.bin` difiere solo en los
-     22 bytes de `RBVERSION`.)
-   - Sección **"Lista de verificación en hardware — ronda pulido"** en
-     este archivo, juntando los pendientes ya anotados en cada decisión:
-     pila real y marca de agua (D-062), pantalla USB tras apagar los
-     skins (D-062 addendum), purga en un disco con miles de entradas
-     (D-063), SELECT sostenido (D-064), 60 cuadros de Marea contra el
-     techo de 33 ms y que el peor caso no cambió (D-065), barrido de
-     marquesina y su costo en batería (D-067), alineación de la barra en
-     el panel real (D-068), rebotes del interruptor Hold y
-     retroiluminación con la pantalla en reposo (D-069), **autonomía en
-     reposo con el bloqueo desactivado vs. activado** (aviso de la
-     supervisora, ver abajo), y la pantalla real del bootloader antes de
-     flashear (D-073).
-   - Tag sugerido `v0.2.0` — **el release lo dispara el dueño**, esta
-     sesión no hace tag ni release.
+**Verificación de la reproducibilidad, con los tres pasos que importan
+por separado:**
 
-2. **Sondeo de Hold con la pantalla dormida — NO hay nada que aplicar.**
-   Llegó como aviso durante la Fase 6 y se cerró en falso: Metro rastreó
-   que `button_hold()` en el S5L8702 es una **lectura de memoria** que
-   actualiza la interrupción del PMU
-   (`button-clickwheel.c:419` → `pmu_holdswitch_locked()`), no una
-   transacción I²C, y el bucle de moonlit ya esperaba `HZ/10` **antes**
-   de D-069 — el sondeo no agregó ni una vuelta. Una puerta
-   `lcd_active()` ahorraría exactamente cero y añadiría una rama que
-   habría que mantener. Lo único que queda es **medir**: "comparar
-   autonomía en reposo con el bloqueo desactivado y activado" va a la
-   lista de hardware, no a una corrección de código.
+1. **`make dep` no rompe el incremental.** `build_target.sh` normal
+   (sin `BUILD_TARGET_CLEAN`) sobre el árbol ya compilado: `make dep`
+   corre, no encuentra nada nuevo que recompilar (`Nothing to be done`),
+   exit 0.
+2. **Limpio vs. incremental, byte a byte.** `BUILD_TARGET_CLEAN=1`
+   reconstruyó `firmware/build-ipod6g` desde cero (`rm -rf` +
+   reconfigurar + `make dep` + `make`, ~4m46s) sobre el mismo commit
+   del incremental de arriba. `cmp` de los dos `rockbox.bin`:
+   **idénticos byte a byte** (`cmp -l` → 0 diferencias). `text`/`data`/
+   `bss` idénticos: `1 250 476 / 12 308 / 8 467 612`. Es un resultado
+   **más fuerte** que el del addendum 2 de D-062 (que solo comparaba
+   `.bss` y toleraba los 22 bytes de `RBVERSION`): aquí el árbol estaba
+   limpio en las dos corridas, así que `RBVERSION` también coincidió.
+3. **Los módulos nuevos de esta ronda SÍ quedan rastreados.**
+   `make.dep` del build limpio tiene una entrada propia para cada `.o`
+   nuevo de la ronda (`moonlit_translit.o`, `moonlit_marquee.o`,
+   `moonlit_marquee_cycle.o`, `metro_screen_adjust.o`,
+   `metro_screen_text.o`), cada uno con su `.c` y sus `.h` como
+   prerrequisito — no es una entrada heredada de un `make dep` viejo
+   que por casualidad seguía siendo válida.
 
-3. **Fase 8 — fuente de puntuación uniforme (D-074)**, decidida por la
-   supervisora tras el addendum de D-066, y **solo si el resto de la
-   ronda está cerrado y en verde**: seis roles con `.fnt` de puntuación
-   aparte (rango 8208–8482), `MAXUSERFONTS` 12→16 en `firmware/export/font.h`
-   (marca `moonlit` + `MODIFICATIONS.md`), dibujo por tramos en
-   `metro_draw_text()` con el partidor como módulo puro y test host, y
-   `metro_draw_text_width()` coherente con el dibujo. Números ya medidos
-   en el addendum de D-066 (~44 KB de disco, ~4.9 KB de tablas, 16 B de
-   `.bss`). Si no cabe en la sesión, queda como primer ítem de la ronda
-   siguiente **con esos números**.
+**Un segundo defecto, propio de este repo, cazado verificando el
+paquete real y no solo el binario.** `package_dist.sh` arma
+`rockbox.zip` con `zip -qr "$DIST_DIR/rockbox.zip" .rockbox` dentro del
+`$STAGE` temporal — y `zip -r` **agrega** a un archivo existente, no lo
+reemplaza. Un `rockbox.zip` de una corrida anterior con `--release-tag`
+dejó su `.rockbox/aura/version.txt` **sobreviviendo** dentro del zip de
+la corrida siguiente, sin el flag: esa corrida nunca escribe
+`version.txt` en `$STAGE`, así que no había nada que lo pisara, y
+`zip -r` no borra lo que no vuelve a ver. Se detectó verificando el
+contenido del zip recién armado (`unzip -l` + `grep aura`), no
+suponiendo que "sin `--release-tag`, sin `version.txt`" bastaba —
+justo la clase de verificación que esta ronda viene aplicando en vez de
+confiar en la lectura del código.
+
+**Corrección**: `rm -f "$DIST_DIR/rockbox.zip"` antes de armar el
+nuevo. Verificado con dos corridas consecutivas de `package_dist.sh`
+sin `--release-tag`: la primera (sin el `rm -f`) mostró el
+`version.txt` fantasma; con la corrección, la segunda **no** lo tiene.
+
+**Verificación completa de `package_dist.sh`** (sin `--release-tag`,
+como exige esta ronda — nunca se pasó `--release-tag` con éxito: el
+único intento abortó por el árbol sucio, que es el comportamiento
+correcto de D-297/M-056 y no se tocó):
+- Los 7 assets del contrato: `rockbox.ipod`, `rockbox.zip`,
+  `bootloader-ipod6g.ipod`, `mks5lboot`, `checksums.txt`,
+  `MODIFICATIONS.md`, `THIRD-PARTY-NOTICES.txt`.
+- 406 archivos en el árbol `.rockbox/` armado, centinelas verificados.
+- `stack_report.py` corre **dentro** del script (antes de `make zip`)
+  y sale en verde.
+- `checksums.txt` con SHA-256 de los cuatro binarios.
+- Sin `.rockbox/aura/version.txt` (correcto, sin `--release-tag`).
+
+**`.bss` y `stack_report.py`, sobre el binario del build limpio**:
+`.bss` **8 467 612** contra el techo D-043 (`8 574 076`) — margen
+**106 464 B**. `stack_report.py`: OK, peor camino 5 528 B (45.0 % de
+12 288 B).
+
+## Fase 7 — cierre
+
+Cerrada. `package_dist.sh` corre sin `--release-tag`, con
+reproducibilidad verificada (D-075) y produce los 7 assets del
+contrato. Ningún tag, ninguna release: eso lo dispara el dueño después
+de probar en hardware.
+
+### Lista de verificación en hardware — ronda "pulido"
+
+Puntos ya anotados en cada decisión, reunidos aquí para que el dueño
+tenga una sola lista. Ninguno se probó en el simulador — el simulador
+verifica geometría, máquinas de estado y ausencia de regresión; lo que
+sigue solo se puede confirmar en el iPod real.
+
+**Arranque y bootloader (D-073)**
+- [ ] La pantalla de arranque del bootloader se ve como
+  `docs/screenshots/ronda-pulido/bootloader-maqueta.png` — creciente
+  centrado, dos leyendas legibles, sin parpadeo.
+- [ ] El creciente **no salta** en el paso bootloader → firmware (es
+  el punto entero del recorte resuelto por `generate.py
+  --bootloader-crop`; en el simulador no se puede ver porque no
+  ejecuta el bootloader).
+- [ ] Flashear con `mks5lboot` desde el paquete de `package_dist.sh` y
+  confirmar que el dispositivo arranca.
+
+**Pila y estabilidad (D-062)**
+- [ ] Marca de agua de la pila principal en "Acerca de" (SELECT
+  sostenido sobre la fila de versión) tras ≥ 10 minutos de uso
+  intenso: Estilo/Temas, fotos, USB conectar/desconectar, Music Flow.
+  Debe quedar por debajo del 75 % que exige el maestro §E.3. El
+  simulador siempre muestra "n/d": los hilos SDL no tienen ese campo.
+- [ ] Que 12 KB de pila principal (subida de 8 KB, D-062) sea
+  suficiente sin que reaparezca el panic `Stkov main` original.
+
+**Skins apagados (D-062, addendum)**
+- [ ] La pantalla USB real (conectar el cable con el candado puesto y
+  sin él) — es el camino que más bajó de costo de pila (7 056 →
+  4 376 B) y el arnés headless no puede inyectar una conexión USB de
+  verdad, solo pulsaciones.
+
+**Caché de carátulas (D-063)**
+- [ ] Purga de `format.txt` en un disco con miles de entradas (el
+  maestro §A.3 pide medir si supera ~2 s; en el simulador, con tres
+  directorios planos, es instantánea).
+
+**"Acerca de" (D-064, D-062)**
+- [ ] El gesto SELECT sostenido sobre la fila de versión revela/oculta
+  la marca de agua de la pila (el arnés headless solo inyecta
+  pulsaciones cortas).
+
+**Marea (D-065, D-014/D-043 — "experimental hasta M12")**
+- [ ] 60 cuadros de scroll continuo contra el techo de 33 ms del
+  maestro §E.3 — el simulador corre sobre una CPU tres órdenes de
+  magnitud más rápida y un filesystem de host, así que su medición
+  (D-065) no puede resolver esto.
+- [ ] Confirmar que el **peor caso** (pantalla llena de carátulas
+  reales) no cambió respecto a antes de D-065 — es lo que el análisis
+  predice, no lo que el simulador puede medir.
+- [ ] Calentamiento síncrono al entrar (7 slots, destino ±3): que los
+  ≤ 150 ms del maestro se cumplan con disco real, no con el del host.
+
+**Marquesina (D-067)**
+- [ ] Que 5 000 ms de barrido se lean cómodos con un título largo de
+  verdad (~40 caracteres).
+- [ ] Costo en batería del repintado a `HZ/20` mientras una marquesina
+  desplaza — es el único mecanismo de esta ronda que pide cuadros
+  fuera de una animación puntual.
+
+**Barra de estado (D-068)**
+- [ ] Alineación por caja de tinta (`check_tones.py --align`) en el
+  panel real, no en una captura del simulador — el LCD físico puede
+  tener su propio gamma/anti-aliasing.
+
+**Bloqueo por Hold (D-069)**
+- [ ] Que el sondeo a `HZ/10` vea el flanco del interruptor Hold real
+  sin rebotes (el simulador conmuta `hold_button_state` de forma
+  instantánea y limpia; un interruptor mecánico no).
+- [ ] Que la pantalla en reposo (Hold puesto, con clave) no impida que
+  la retroiluminación se apague por su temporizador normal.
+- [ ] **Comparar autonomía en reposo con el bloqueo desactivado vs.
+  activado** (verificado por lectura de código que el sondeo de Hold
+  no agrega costo — D-062/D-069, nota de cierre—, pero la medición
+  real de batería no se puede hacer en el simulador).
+
+**Ajustes (D-071)**
+- [ ] Apagado automático: 10 min sin actividad → el aparato se apaga
+  de verdad.
+- [ ] Brillo: los 10 pasos se notan como pasos reales en el panel
+  físico, no solo como números.
+
+**Fotos (D-072)**
+- [ ] Deslizamiento del visor (topado a 150 ms) se siente fluido con
+  fotos grandes decodificándose de disco real.
+
+**Reproducibilidad y empaquetado (D-075)**
+- [ ] Ninguno — verificado enteramente en esta sesión (build limpio
+  byte-idéntico al incremental, paquete completo sin `--release-tag`).
+
+### Cierre de la ronda
+
+Doce decisiones cerradas (D-061 a D-075, sin contar addenda): pila y
+estabilidad, caché de carátulas v18, "Acerca de" navegable, Marea sin
+fases visibles, glifos faltantes y marquesina, barra de estado
+alineada, bloqueo por Hold, tiles con selección visible, ajustes
+homologados, fotos como Aura, bootloader con pantalla de arranque, y
+reproducibilidad del empaquetado.
+
+Tag sugerido para cuando el dueño termine la lista de hardware:
+**`v0.2.0`**. Esta sesión no crea el tag ni el release — package_dist.sh
+corrió únicamente sin `--release-tag`, tal como pide el protocolo de
+la ronda.

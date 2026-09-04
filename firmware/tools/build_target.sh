@@ -51,12 +51,39 @@ WHAT="${1:---all}"
 
 build_one() {
   local dir="$1" type="$2"
-  mkdir -p "$ROOT_DIR/firmware/$dir"
-  cd "$ROOT_DIR/firmware/$dir"
+  local build_path="$ROOT_DIR/firmware/$dir"
+
+  # moonlit (D-348, hallazgo de Aura AF D-348 sobre un mecanismo
+  # COMPARTIDO por los tres repos): con BUILD_TARGET_CLEAN=1 se borra el
+  # directorio entero antes de configurar -- lo que package_dist.sh pide
+  # con --release-tag, porque un release tiene que ser reproducible byte
+  # a byte y un directorio de build viejo no lo garantiza (ver el `make
+  # dep` de abajo).
+  if [[ "${BUILD_TARGET_CLEAN:-}" == "1" ]]; then
+    echo "==> Limpiando $dir para una compilacion reproducible (D-348)"
+    rm -rf "$build_path"
+  fi
+
+  mkdir -p "$build_path"
+  cd "$build_path"
   if [[ ! -f Makefile ]]; then
     echo "==> Configurando $dir (type=$type)"
     PATH="$TC_BIN:$PATH" "$SRC_DIR/tools/configure" --target=ipod6g --type="$type"
   fi
+
+  # moonlit (D-348): la regla `$(DEPFILE) dep:` de tools/root.make
+  # (heredada de Rockbox, compartida por los tres repos del fork) no
+  # tiene prerrequisitos -- make.dep se genera UNA vez al crear el
+  # directorio de build y nunca se refresca solo. Un #include agregado
+  # despues (un modulo nuevo que empieza a incluir moonlit_tokens.h, por
+  # ejemplo) queda invisible para make, y el .o que lo usa no se
+  # recompila cuando esa cabecera cambia -- el binario terminaria
+  # dependiendo de CUANDO se creo el directorio de build, no solo del
+  # commit. `make dep` solo escanea dependencias (~25 s en este arbol,
+  # medido) y se corre siempre, no solo para un release.
+  echo "==> Regenerando la base de dependencias ($dir, make dep, D-348)"
+  PATH="$TC_BIN:$PATH" make dep
+
   echo "==> Compilando $dir"
   PATH="$TC_BIN:$PATH" make -j"$(sysctl -n hw.ncpu)" ${VERSION:+VERSION="$VERSION"}
 }

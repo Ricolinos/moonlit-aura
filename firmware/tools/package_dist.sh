@@ -104,6 +104,17 @@ export VERSION="${GIT_HASH}${GIT_DIRTY}-$(date -u +%y%m%d)"
 echo "==> Versión: $VERSION"
 
 echo "==> Compilando firmware + bootloader (build_target.sh)"
+# moonlit (D-348): con --release-tag, build_target.sh borra y reconfigura
+# cada directorio de build antes de compilar (BUILD_TARGET_CLEAN=1) --
+# un release tiene que ser reproducible byte a byte (contrato v18,
+# actualizacion selectiva por CRC32 de Studio), y un directorio de build
+# reutilizado no lo garantiza aunque `make dep` regenere la base de
+# dependencias (ver el comentario en build_target.sh). Sin el flag
+# (build de desarrollo) solo corre `make dep`, que ya es lo que hace
+# falta para que el binario no dependa de cuando se creo el directorio.
+if [[ -n "$RELEASE_TAG" ]]; then
+  export BUILD_TARGET_CLEAN=1
+fi
 "$ROOT_DIR/firmware/tools/build_target.sh"
 
 # moonlit (D-062, maestro §E.3): antes de empaquetar, el reporte de pila
@@ -187,6 +198,16 @@ if [[ -n "$RELEASE_TAG" ]]; then
   echo "$RELEASE_TAG" > "$STAGE/.rockbox/aura/version.txt"
 fi
 
+# moonlit (D-348, hallazgo propio de esta pasada): `zip -r` AGREGA a un
+# archivo existente, no lo reemplaza -- un `rockbox.zip` de una corrida
+# anterior con --release-tag dejaba su `.rockbox/aura/version.txt`
+# sobreviviendo dentro del zip de una corrida SIN el flag, porque esta
+# nunca escribe ese archivo en $STAGE y `zip -r` no borra lo que no
+# vuelve a ver. Se detectó verificando el zip recién armado, no
+# suponiendo que "sin --release-tag, sin version.txt" bastaba. Borrar
+# el zip anterior antes de armar el nuevo es lo que hace que el
+# contenido dependa solo de $STAGE, nunca del historial de corridas.
+rm -f "$DIST_DIR/rockbox.zip"
 (cd "$STAGE" && zip -qr "$DIST_DIR/rockbox.zip" .rockbox)
 
 echo "==> Copiando MODIFICATIONS.md (asset del Release, cumplimiento GPL §2a)"
