@@ -39,6 +39,13 @@ void metro_fb_capture(fb_data *dst);
  * off-screen (no lcd_update(), the real LCD is untouched). */
 void metro_fb_render(fb_data *dst, metro_fb_draw_fn draw_fn);
 
+/* moonlit (D-065): igual, pero contra un buffer cuadrado de `size` x
+ * `size` (stride = size) en vez de uno del tamano de la pantalla, con
+ * el viewport acotado a esa caja. Para rasterizar una tapa de Marea
+ * fuera de pantalla: el consumidor de la tapa no tiene por que
+ * distinguir si lleva una caratula real o un monograma. */
+void metro_fb_render_tile(fb_data *dst, int size, metro_fb_draw_fn draw_fn);
+
 /* moonlit (D-052 C1/C3): composes a horizontal slide of `from`/`to` at
  * a signed pixel offset dx directly into the real LCD, WITHOUT calling
  * lcd_update() -- the transition loop paints CONTINUUM's flying title

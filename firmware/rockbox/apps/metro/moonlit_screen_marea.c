@@ -68,6 +68,7 @@
 #include <stdio.h>   /* snprintf() */
 #include <stdlib.h>  /* abs() */
 #include <string.h>  /* memcpy() */
+#include "string-extra.h" /* strlcpy() -- moonlit (D-065) */
 
 #include "file.h"    /* MAX_PATH */
 #include "kernel.h"  /* current_tick, HZ */
@@ -78,6 +79,29 @@
  * por archivo, misma razon que metro_transitions.c). */
 #define LOGF_ENABLE
 #include "logf.h"
+
+/* moonlit (D-065): medicion por cuadro. current_tick tiene 10 ms de
+ * resolucion (HZ = 100) -- inservible frente a un presupuesto de 33 ms
+ * --, asi que en el SIMULADOR se cronometra con el reloj del host en
+ * microsegundos. En el target no se agrega nada: ahi la medicion que
+ * vale es la de hardware (techo D-043), y esto no gasta ni un ciclo. */
+#ifdef SIMULATOR
+#include <sys/time.h>
+static long marea_now_us(void)
+{
+    struct timeval tv;
+
+    gettimeofday(&tv, NULL);
+    return (long)tv.tv_sec * 1000000L + tv.tv_usec;
+}
+#define MAREA_FRAME_T0()   long t_us = marea_now_us(); static int s_frame_n
+#define MAREA_FRAME_T1(kind) \
+    DEBUGF("marea-frame %d %s %ld us\n", ++s_frame_n, (kind), \
+           marea_now_us() - t_us)
+#else
+#define MAREA_FRAME_T0()   do { } while (0)
+#define MAREA_FRAME_T1(kind) do { (void)(kind); } while (0)
+#endif
 
 #include "moonlit_screen_marea.h"
 #include "moonlit_flow.h"
@@ -90,7 +114,7 @@
 #include "moonlit_palette.h"
 #include "moonlit_elevation.h"
 #include "moonlit_fonts.h"
-#include "metro_fb.h"     /* metro_fb_blend_color() -- laterales sin arte */
+#include "metro_fb.h"     /* moonlit (D-065): metro_fb_render_tile() -- monograma fuera de pantalla */
 #include "metro_draw.h"
 #include "metro_widgets.h"
 #include "metro_motion.h" /* metro_ease() */
@@ -216,6 +240,15 @@ typedef struct {
 #define MAREA_TICK_BUDGET_MS        15
 #define MAREA_TICK_BUDGET_MAX_LOADS 4
 
+/* moonlit (D-065): una tapa YA CARGADA dentro de este radio del destino
+ * no se desaloja nunca. Es la ventana de precarga completa
+ * (max(FWD, BACK) = 10) mas holgura, y cabe con margen en los 37 slots:
+ * 2*15+1 = 31 protegidos como MUCHO -- y solo si estan todos cargados
+ * --, asi que siempre quedan slots que reclamar. Sin esto, el LRU por
+ * distancia pura podia tirar una tapa que costo una lectura de 34 KB y
+ * que el usuario iba a volver a ver enseguida si seguia girando. */
+#define MAREA_KEEP_LOADED_RADIUS    15
+
 static marea_slot_t s_slots[MAREA_CACHE_SLOTS];
 static int s_slots_theme = -1;
 
@@ -284,6 +317,8 @@ static const struct metro_pivot sentinel_pivots[] = {
 };
 static const struct metro_page sentinel_page = { LANG_MAREA_TITLE, sentinel_pivots, 1, NULL };
 
+static void warm_up_visible(void); /* moonlit (D-065): definida mas abajo */
+
 bool moonlit_screen_marea_push(void)
 {
     if (!metro_screen_list_push(&sentinel_page))
@@ -296,6 +331,7 @@ bool moonlit_screen_marea_push(void)
     s_settled = true;
     s_songs_for_index = -1;
     s_last_scroll_dir = 1;
+    warm_up_visible(); /* moonlit (D-065): antes del primer cuadro */
     return true;
 }
 
@@ -334,6 +370,53 @@ static marea_slot_t *find_slot(int album_index)
     return NULL;
 }
 
+/* moonlit (D-065): el monograma se RASTERIZA dentro de slot->cover, con
+ * el mismo formato exacto que una caratula real (120x120 fila-contigua,
+ * esquinas horneadas contra `surface`), en vez de ser un camino de
+ * dibujo aparte.
+ *
+ * El defecto que cierra: Marea tenia TRES caminos de dibujo -- la
+ * caratula proyectada, un relleno liso proyectado para las laterales
+ * sin arte (draw_slide_flat(), que existia solo para no reservar un
+ * segundo buffer de 120x120) y una tarjeta plana con la inicial
+ * exactamente en el centro (draw_monogram(), sin perspectiva porque en
+ * offset 0 no hay ninguna que aplicar). Al desplazarse, un album sin
+ * caratula CAMBIABA DE FORMA tres veces: barra lisa, tarjeta con letra,
+ * barra lisa. Ahora hay uno solo. Es el mismo criterio que
+ * aura_albumart_load_default(): el consumidor no tiene por que
+ * distinguir de donde salio el pixel.
+ *
+ * Se dibuja con un viewport fuera de pantalla acotado a la tapa
+ * (metro_fb_render_tile(), viewport_set_defaults() + buffer del slot),
+ * asi que el relleno y el texto pasan por las MISMAS primitivas que
+ * todo lo demas -- lcd_fillrect() y metro_draw_text() (M-051), colores
+ * por rol -- y las esquinas las hornea moonlit_art_mask_corners(), la
+ * misma que se aplica a una maestra derivada (D-020/D-059). */
+static char s_monogram_initial[sizeof(((marea_slot_t *)0)->initial)];
+
+static void draw_monogram_into_tile(void)
+{
+    const char *initial = s_monogram_initial[0] ? s_monogram_initial : "?";
+    int w, h;
+
+    lcd_set_foreground(moonlit_color(MROLE_PRIMARY_CONTAINER));
+    lcd_fillrect(0, 0, MAREA_COVER_SIZE, MAREA_COVER_SIZE);
+
+    lcd_setfont(metro_font_id(MFONT_HEADLINE));
+    lcd_getstringsize((const unsigned char *)initial, &w, &h);
+    metro_draw_text(MFONT_HEADLINE, (MAREA_COVER_SIZE - w) / 2,
+                     (MAREA_COVER_SIZE - h) / 2, initial,
+                     moonlit_color(MROLE_ON_PRIMARY_CONTAINER));
+}
+
+static void rasterize_monogram(marea_slot_t *slot)
+{
+    strlcpy(s_monogram_initial, slot->initial, sizeof(s_monogram_initial));
+    metro_fb_render_tile(slot->cover, MAREA_COVER_SIZE, draw_monogram_into_tile);
+    moonlit_art_mask_corners(slot->cover, MAREA_COVER_SIZE, MAREA_CORNER_RADIUS,
+                              moonlit_color(MROLE_SURFACE));
+}
+
 /* Reclama un slot para `album_index` (libre, o el mas lejano al
  * destino) -- sin disco. D-057 (5): un slot visible en el destino
  * ACTUAL nunca se desaloja -- el primer barrido de abajo ignora
@@ -359,6 +442,14 @@ static marea_slot_t *claim_slot(int album_index)
         dist = abs(s_slots[i].album_index - s_target_index);
         if (dist <= visible_span)
             continue; /* D-057: nunca desalojar lo visible en el destino */
+        /* moonlit (D-065): una tapa YA CARGADA dentro de la ventana de
+         * precarga no se tira -- volver a leerla y remuestrearla cuesta
+         * una lectura de 34 KB, y es justo la que el usuario va a
+         * volver a ver si sigue girando la rueda en esa direccion. Los
+         * slots sin cargar de esa franja si son desalojables: no hay
+         * nada que perder en ellos. */
+        if (s_slots[i].art == MAREA_ART_LOADED && dist <= MAREA_KEEP_LOADED_RADIUS)
+            continue;
         if (dist > farthest_dist)
         {
             farthest_dist = dist;
@@ -388,6 +479,8 @@ static marea_slot_t *claim_slot(int album_index)
     s_slots[i].art = MAREA_ART_PENDING;
     metro_lang_initial(s_albums[album_index].label, s_slots[i].initial,
                         sizeof(s_slots[i].initial));
+    /* moonlit (D-065): el slot nace DIBUJABLE. Ver rasterize_monogram(). */
+    rasterize_monogram(&s_slots[i]);
     return &s_slots[i];
 }
 
@@ -622,6 +715,78 @@ static bool try_frame_bounded_read(void)
     return false;
 }
 
+/* moonlit (D-065): calentamiento SINCRONO al entrar a Marea. Antes del
+ * primer cuadro se intentan hasta MAREA_WARMUP_RADIUS slots a cada lado
+ * del destino (7 en total), leyendo SOLO la maestra ya escrita: una
+ * lectura de ~34 KB y su remuestreo 130->120 por album.
+ *
+ * Deliberadamente NO usa moonlit_art_load_for_album(), que ademas
+ * decodificaria el JPEG si el constructor esta ocioso: un decode aqui
+ * costaria cientos de ms con el usuario mirando una pantalla vacia. El
+ * album que no tenga maestra todavia se queda con su monograma (que ya
+ * es dibujable, D-065) y entra por el tick presupuestado de siempre.
+ *
+ * Esto SI puede tocar tagcache -- moonlit_art_master_path(), no la
+ * variante _peek() -- y es correcto: push() no es un cuadro de
+ * animacion, es justo el momento anterior al primero. La regla dura de
+ * D-030/D-053 acota los BUCLES de animacion, no la entrada. */
+#define MAREA_WARMUP_RADIUS 3
+
+static bool warm_up_one(int idx)
+{
+    marea_slot_t *slot;
+    char path[MAX_PATH];
+    char none[MAX_PATH];
+
+    if (idx < 0 || idx >= s_album_n)
+        return false;
+
+    slot = get_slot_for(idx);
+    if (slot->art != MAREA_ART_PENDING)
+        return false;
+    if (!moonlit_art_master_path(s_albums[idx].seek, path, sizeof(path)))
+        return false;
+
+    if (moonlit_art_derive_from_master(path, s_tick_scratch))
+    {
+        memcpy(slot->cover, s_tick_scratch, sizeof(s_tick_scratch));
+        slot->art = MAREA_ART_LOADED;
+        return true;
+    }
+
+    /* Sin maestra pero con ".none" compartido: monograma definitivo,
+     * gratis, sin gastar otra vuelta del tick (D-056/D-059). */
+    if (moonlit_master_art_none_path(path, none, sizeof(none)) &&
+        moonlit_master_art_none_exists(none))
+        slot->art = MAREA_ART_MISSING;
+    return false;
+}
+
+static void warm_up_visible(void)
+{
+    int loaded = 0, i;
+    MAREA_FRAME_T0();
+
+    if (s_album_n <= 0)
+        return;
+
+    /* del centro hacia afuera: si algo se queda sin cargar, que sea lo
+     * mas lejano del destino. */
+    if (warm_up_one(s_target_index))
+        loaded++;
+    for (i = 1; i <= MAREA_WARMUP_RADIUS; i++)
+    {
+        if (warm_up_one(s_target_index - i))
+            loaded++;
+        if (warm_up_one(s_target_index + i))
+            loaded++;
+    }
+
+    MAREA_TRACE("warm-up: %d/%d tapa(s) desde la maestra", loaded,
+                 1 + 2 * MAREA_WARMUP_RADIUS);
+    MAREA_FRAME_T1("warm-up");
+}
+
 /* --- dibujo: proyeccion por filas (D-041/moonlit_flow.h), eje x=76 --- */
 
 static int lerp256(int a, int b, int t256)
@@ -716,71 +881,18 @@ static void draw_slide_perspective(const fb_data *cover, int offset256)
     }
 }
 
-/* Tapa sin carátula que NO cayó exacto al centro: en vez de reservar
- * un segundo buffer de 120x120 solo para un color plano (D.3's límite
- * de .bss ya está ajustado con los MAREA_CACHE_SLOTS), se proyecta un
- * relleno liso -- mismo eje/angulo/fundido que la real, sin muestreo
- * de textura. */
-static void draw_slide_flat(int offset256)
-{
-    moonlit_flow_slide_t slide;
-    moonlit_flow_projection_t proj;
-    int fade;
-    unsigned color;
-
-    slide_geometry(offset256, &slide, &fade);
-    color = metro_fb_blend_color(moonlit_color(MROLE_PRIMARY_CONTAINER),
-                                  moonlit_color(MROLE_SURFACE), 255 - fade);
-
-    moonlit_flow_begin_projection(&proj, &slide, MAREA_COVER_SIZE);
-    lcd_set_foreground(color);
-
-    while (proj.screen_y < MOONLIT_FLOW_AXIS_LEN)
-    {
-        int dx = moonlit_flow_cross_scale(&proj);
-        int cover_disp = (MAREA_COVER_SIZE << MOONLIT_FLOW_SHIFT) / dx;
-        int x0 = MAREA_AXIS_X - cover_disp / 2;
-
-        if (cover_disp > 0)
-            lcd_hline(x0, x0 + cover_disp - 1, proj.screen_y + MAREA_Y_OFFSET);
-
-        if (!moonlit_flow_advance_column(&proj))
-            break;
-    }
-}
-
-/* D-030 D.5: tapa central sin carátula -- tarjeta plana (nivel 2) con
- * la inicial en primary, dibujada directo (sin pasar por el motor de
- * flujo: en offset==0 no hay perspectiva que proyectar). */
-static void draw_monogram(const marea_slot_t *slot)
-{
-    const char *initial = slot->initial[0] ? slot->initial : "?";
-    int w, h;
-
-    moonlit_draw_surface(MAREA_CENTER_X, MAREA_CENTER_Y, MAREA_COVER_SIZE, MAREA_COVER_SIZE,
-                          MSURFACE_BASE, MAREA_CORNER_RADIUS);
-    lcd_setfont(metro_font_id(MFONT_HEADLINE));
-    lcd_getstringsize((const unsigned char *)initial, &w, &h);
-    metro_draw_text(MFONT_HEADLINE,
-                     MAREA_CENTER_X + (MAREA_COVER_SIZE - w) / 2,
-                     MAREA_CENTER_Y + (MAREA_COVER_SIZE - h) / 2,
-                     initial, moonlit_color(MROLE_PRIMARY));
-}
-
+/* moonlit (D-065): UN solo camino. `slot->cover` siempre tiene pixeles
+ * validos -- la caratula real si se cargo, el monograma rasterizado por
+ * claim_slot() si todavia no (o si el album no tiene ninguna) -- asi
+ * que el estado del arte ya no decide COMO se dibuja, solo QUE hay
+ * dentro del buffer. draw_slide_flat() y draw_monogram() se retiran con
+ * esto: eran los otros dos caminos, y con ellos las dos fases visibles
+ * que un album sin caratula atravesaba al desplazarse. */
 static void draw_slide(int idx, int offset256)
 {
     marea_slot_t *slot = get_slot_for(idx);
 
-    if (offset256 == 0 && slot->art != MAREA_ART_LOADED)
-    {
-        draw_monogram(slot);
-        return;
-    }
-
-    if (slot->art == MAREA_ART_LOADED)
-        draw_slide_perspective(slot->cover, offset256);
-    else
-        draw_slide_flat(offset256);
+    draw_slide_perspective(slot->cover, offset256);
 }
 
 static void draw_panel(void)
@@ -933,12 +1045,16 @@ void moonlit_screen_marea_show_carousel(void)
         /* ya asentada: solo la banda (p.ej. una tapa recien cargada) */
     }
 
+    {
+    MAREA_FRAME_T0();
     cpu_boost(true);
     lcd_set_foreground(moonlit_color(MROLE_SURFACE));
     lcd_fillrect(0, MAREA_Y_OFFSET, MAREA_LEFT_BAND_W, MOONLIT_FLOW_AXIS_LEN);
     draw_carousel(pos256);
     lcd_update_rect(0, MAREA_Y_OFFSET, MAREA_LEFT_BAND_W, MOONLIT_FLOW_AXIS_LEN);
     cpu_boost(false);
+    MAREA_FRAME_T1(did_read ? "read" : "noread");
+    }
 
     MAREA_TRACE("scroll frame %s bounded read: %ld ms", did_read ? "with" : "without",
                 (current_tick - t0) * 1000L / HZ);

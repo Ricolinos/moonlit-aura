@@ -65,6 +65,58 @@ void metro_fb_render(fb_data *dst, metro_fb_draw_fn draw_fn)
     viewport_set_buffer(NULL, NULL, SCREEN_MAIN);
 }
 
+/* moonlit (D-065): mismo mecanismo que metro_fb_render(), pero contra
+ * un buffer CUADRADO de `size` x `size` en vez de uno del tamano de la
+ * pantalla -- la tapa de 120x120 de un slot de Marea. El puntero y el
+ * stride viven aqui, en modulo, por la misma razon que s_render_target
+ * de arriba: get_address_fn recibe solo (x, y), sin contexto propio.
+ * Igual de seguro: solo hay un render en vuelo a la vez (los llamadores
+ * son sincronos y no reentrantes).
+ *
+ * El viewport se inicializa con viewport_set_defaults() ANTES de
+ * asignarle el buffer (M-027) y se acota a size x size, de modo que
+ * cualquier dibujo que se salga -- una inicial mas ancha que la tapa,
+ * por ejemplo -- lo recorta el LCD como en cualquier otra pantalla, en
+ * vez de escribir fuera del buffer del slot. */
+static fb_data *s_tile_target;
+static int s_tile_stride;
+
+static void *metro_fb_tile_address(int x, int y)
+{
+    return &s_tile_target[(size_t)y * s_tile_stride + x];
+}
+
+void metro_fb_render_tile(fb_data *dst, int size, metro_fb_draw_fn draw_fn)
+{
+    struct frame_buffer_t fb;
+    struct viewport vp, *old;
+
+    if (!dst || size <= 0)
+        return;
+
+    fb.fb_ptr = dst;
+    fb.get_address_fn = &metro_fb_tile_address;
+    fb.stride = size;
+    fb.elems = (size_t)size * size;
+
+    s_tile_target = dst;
+    s_tile_stride = size;
+
+    viewport_set_defaults(&vp, SCREEN_MAIN); /* M-027 */
+    vp.x = 0;
+    vp.y = 0;
+    vp.width = size;
+    vp.height = size;
+    vp.buffer = &fb;
+
+    old = lcd_set_viewport(&vp);
+    draw_fn();
+    lcd_set_viewport(old);
+
+    s_tile_target = NULL;
+    s_tile_stride = 0;
+}
+
 /* moonlit (D-052 C1/C3): composes the slide WITHOUT updating -- the
  * caller (metro_transitions.c's slide loop) may still paint CONTINUUM's
  * flying title on top before its single lcd_update() per frame. The

@@ -28,12 +28,26 @@ la escala horizontal por fila; el ancho proyectado de cada fila
 ## Carátulas y monograma
 
 `get_slot_for()` cachea hasta `MAREA_CACHE_SLOTS` (37, LRU por distancia al
-índice comprometido, nunca desaloja un slot visible en el destino actual,
-D-057 item 5) y **nunca decodifica JPEG ni toca tagcache dentro de
-`show()`/`show_carousel()`** (D-053/D-057): un cache-miss reclama el slot
-en estado `MAREA_ART_PENDING` y dibuja un relleno liso proyectado (tapas
-laterales) o, exactamente en el centro, una tarjeta plana con la inicial
-del álbum en `primary` (D.5).
+índice comprometido, nunca desaloja un slot visible en el destino actual
+—D-057 item 5— ni una tapa **ya cargada** dentro de ±15 —D-065—) y
+**nunca decodifica JPEG ni toca tagcache dentro de
+`show()`/`show_carousel()`** (D-053/D-057).
+
+**D-065 — un solo camino de dibujo.** Un cache-miss reclama el slot en
+estado `MAREA_ART_PENDING` y **rasteriza el monograma dentro de
+`slot->cover`**: mismo formato exacto que una carátula real (120×120
+fila-contigua, relleno `primary_container`, inicial en
+`on_primary_container` en `MFONT_HEADLINE`, esquinas horneadas contra
+`surface`), dibujado con un viewport fuera de pantalla
+(`metro_fb_render_tile()`). `draw_slide()` siempre proyecta
+`slot->cover`; `draw_slide_flat()` (relleno liso proyectado) y
+`draw_monogram()` (tarjeta plana solo en offset 0) se retiraron. Antes,
+un álbum sin carátula cambiaba de forma tres veces al desplazarse —barra
+lisa, tarjeta con letra, barra lisa—; ahora el monograma tiene
+perspectiva desde el primer cuadro y `MAREA_ART_PENDING` solo significa
+"todavía no se intentó cargar la de verdad". Al entrar, `push()` calienta
+hasta 7 slots (destino ±3) leyendo **solo** la maestra ya escrita, nunca
+decodificando (D-065).
 
 D-057 (reporte del dueño en hardware real, iPod 6G/1083 álbumes: "las
 carátulas tardan en aparecer" pese a estar ya todas cacheadas) relaja

@@ -2851,3 +2851,136 @@ estado en el que el plan las pedía.
 - Sin probar: el gesto de SELECT sostenido (el arnés headless de
   `sim_shot.sh` solo inyecta pulsaciones cortas). Va a la lista de
   hardware.
+
+## D-065 — Marea deja de tener fases visibles: un solo camino de dibujo
+
+**El defecto** (§2 del informe de la ronda, plan hijo Fase 2). Marea
+tenía **tres** caminos de dibujo, y un álbum sin carátula los recorría
+todos al desplazarse:
+
+1. `draw_slide_flat()` — un relleno liso proyectado, para una tapa sin
+   arte que no cayera exactamente al centro. Existía por una razón
+   concreta y honesta: no reservar un segundo buffer de 120×120 solo
+   para un color plano.
+2. `draw_monogram()` — exactamente en el centro (`offset256 == 0`), una
+   tarjeta plana con la inicial en `primary`, dibujada directo, sin
+   pasar por el motor de flujo (en offset 0 no hay perspectiva que
+   aplicar).
+3. `draw_slide_perspective()` — la carátula real, proyectada.
+
+Girando la rueda sobre una biblioteca sin carátulas, cada álbum
+**cambiaba de forma tres veces**: barra lisa al acercarse, tarjeta con
+letra al pasar por el centro, barra lisa al alejarse. Y cuando la
+carátula real llegaba, cambiaba una cuarta.
+
+**Decisión: el monograma se RASTERIZA dentro de `slot->cover`.** Un
+slot nace dibujable. `claim_slot()` llama a `rasterize_monogram()`, que
+produce exactamente el mismo formato que una carátula real —120×120
+fila-contigua, relleno `primary_container`, inicial en
+`on_primary_container` (`MFONT_HEADLINE`), esquinas horneadas contra
+`surface` por `moonlit_art_mask_corners()`, la misma que se aplica a
+una maestra derivada (D-020/D-059)—. `MAREA_ART_PENDING` deja de
+significar "no dibujable" y pasa a significar solo "todavía no se
+intentó cargar la de verdad". `draw_slide()` queda en una línea:
+`draw_slide_perspective(slot->cover, offset256)`. `draw_slide_flat()` y
+`draw_monogram()` se retiran.
+
+Es el criterio de `aura_albumart_load_default()` que el plan cita: **el
+consumidor no tiene por qué distinguir de dónde salió el píxel**.
+
+**Cómo se dibuja fuera de pantalla.** `metro_fb_render_tile()`
+(`metro_fb.c`, no duplicado en Marea): arma un `struct frame_buffer_t`
+con `stride = size` apuntando al buffer del slot, inicializa un
+viewport con `viewport_set_defaults()` **antes** de asignarle ese buffer
+(M-027) y lo acota a `size × size`. Así el relleno y el texto pasan por
+las mismas primitivas que todo lo demás —`lcd_fillrect()` y
+`metro_draw_text()` (M-051), colores por rol— y cualquier dibujo que se
+saliera de la tapa lo recorta el LCD, en vez de escribir fuera del
+buffer del slot. El puntero y el stride son estáticos de módulo por la
+misma razón que `s_render_target` de `metro_fb_render()`:
+`get_address_fn` recibe solo `(x, y)`, sin contexto propio; igual de
+seguro, porque los llamadores son síncronos y no reentrantes.
+
+**Calentamiento síncrono al entrar.** `moonlit_screen_marea_push()`
+intenta hasta 7 slots (destino ±3) **antes del primer cuadro**, leyendo
+solo la maestra ya escrita. Deliberadamente **no** usa
+`moonlit_art_load_for_album()`, que además decodificaría el JPEG si el
+constructor está ocioso: un decode ahí costaría cientos de ms con el
+usuario mirando una pantalla vacía. El álbum sin maestra se queda con
+su monograma —que ya es dibujable— y entra por el tick de siempre. Esto
+sí puede tocar tagcache (`moonlit_art_master_path()`, no la variante
+`_peek()`) y es correcto: `push()` no es un bucle de animación, es el
+momento anterior al primero; la regla dura de D-030/D-053 acota los
+bucles, no la entrada.
+
+**LRU: una tapa cargada dentro de ±15 no se desaloja.**
+`MAREA_KEEP_LOADED_RADIUS` = 15, sobre la protección de D-057 (lo
+visible en el destino). Volver a leer una tapa cuesta 34 KB, y es justo
+la que el usuario va a volver a ver si sigue girando en esa dirección.
+Los slots **sin cargar** de esa franja siguen siendo desalojables: no
+hay nada que perder en ellos. Cabe con margen — como mucho 31 de 37
+slots protegidos, y solo si están todos cargados.
+
+**Medición (simulador, `#ifdef SIMULATOR`).** `current_tick` tiene
+10 ms de grano (HZ = 100), inservible frente a un presupuesto de 33 ms,
+así que en el simulador el cronómetro es el del host en microsegundos
+(`gettimeofday`); en el target no se agrega ni un ciclo. 60 cuadros de
+scroll continuo, mismo recorrido (`SELECT,SELECT` + 20 `SCROLL_FWD`),
+mismo simdisk:
+
+| | Antes (D-057) | Después (D-065) | Después, caché vacía |
+|---|---|---|---|
+| media | 1.30 ms | 1.25 ms | 1.55 ms |
+| p50 | 0.46 ms | 0.43 ms | 0.53 ms |
+| p90 | 8.19 ms | 7.19 ms | 7.52 ms |
+| máx | 9.03 ms | **9.35 ms** | 8.89 ms |
+
+Calentamiento: **1.43 ms** con la caché maestra completa (3 tapas
+leídas + 4 resueltas por `.none`), **0.91 ms** con la caché recién
+purgada. Muy por debajo de los 150 ms que el plan puso de tope — en el
+simulador.
+
+**Lo que esta medición NO dice, y hay que decirlo.** El simulador corre
+sobre el sistema de archivos del host y una CPU tres órdenes de
+magnitud más rápida que un S5L8702 a 54 MHz: el piso de cada cuadro lo
+pone el relleno de la banda + `lcd_update_rect` (33 440 px), y contra
+ese piso la diferencia entre proyectar textura y pintar un relleno liso
+se pierde en el ruido. Analíticamente el cambio **sí** tiene costo: una
+tapa sin carátula pasaba de ~120 `lcd_hline()` a la misma cadena de
+muestreo que una carátula real (~14 400 px). Lo que no cambia es el
+**peor caso**: una pantalla llena de carátulas reales cuesta hoy
+exactamente lo que costaba antes. Lo que sube es el caso mejor, hasta
+igualarlo. El criterio de los 33 ms sigue siendo de hardware, y sigue
+pendiente — que es literalmente lo que D-014/D-043 ya dicen de Marea
+("experimental hasta la medición en hardware real de M12").
+
+**Verificado además por lectura, no por suposición**: el constructor de
+fondo sigue pausado durante el scroll — `metro_main.c` espeja
+`moonlit_screen_marea_animating()` en
+`moonlit_master_art_builder_pause()` y este commit no toca ninguna de
+las dos (D-057/D-059).
+
+**Un susto que resultó no serlo.** Una captura mostró una banda gris
+clara de 6 px sobre la tapa más lejana, que no aparecía antes. Se
+sospechó de un desbordamiento de fila al proyectar (ahora TODAS las
+tapas pasan por el muestreo, también las de los extremos, donde antes
+solo iba el relleno liso). Se descartó por dos vías: `moonlit_flow_source_row()`
+acota la fila a `[0, slide_width_px-1]`, y un volcado temporal de los
+píxeles del propio buffer confirmó relleno correcto en las filas 0, 1,
+60 y 119 de cada monograma. La banda es una carátula de la fixture que
+es literalmente gris claro, proyectada en la posición más lejana. Se
+deja anotado porque el volcado es la clase de verificación que conviene
+repetir si aparece algo parecido.
+
+**Verificación.**
+- `build_target.sh` (firmware + bootloader): exit 0, **0 warnings
+  nuevos**. `build_sim.sh`: exit 0. Tests host: 16 suites, 0 fallos.
+- `.bss`: **8 460 764** (+32 B: `s_monogram_initial[5]` y los dos
+  estáticos de `metro_fb_render_tile()`; ningún buffer nuevo de tapa —
+  el monograma se escribe **dentro** del slot que ya existía). Bajo el
+  techo D-043 de 8 574 076, margen **113 312 B**.
+- `stack_report.py`: OK, peor camino 5 512 B (44.9 %).
+- Capturas: `f2-marea-01-entrada.png` (carátula real al centro),
+  `f2-marea-02-monogramas.png`, `f2-marea-03-monograma-centro.png` —
+  monograma al centro **y** monograma en perspectiva arriba, la prueba
+  de que ya no hay dos formas distintas para lo mismo.
