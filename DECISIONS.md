@@ -4693,3 +4693,13 @@ Tag sugerido para cuando el dueño termine la lista de hardware:
 **`v0.2.1`**. Esta sesión no crea el tag ni el release --
 `package_dist.sh` corrió únicamente sin `--release-tag`, tal como pide
 el protocolo de la ronda (maestro §F).
+
+**Nota para la próxima ronda que toque `.bss`.** El margen bajo el
+techo D-043 quedó en **89 472 B**, el más bajo de los cerrados hasta
+hoy -- esta ronda sola se comió unos 16 KB (12 800 B del preview de
+scrubbing del visor, D-082, más los estáticos de D-079 addendum). Una
+ronda de un idioma con alfabeto grande y sin mapeo 1:1 a Unicode básico
+(japonés, con caché de glifos en vez de un `.fnt` denso como el
+cirílico de D-081) necesita presupuestar ese costo ANTES de
+implementar, no medirlo al final: a este ritmo de consumo, dos rondas
+más de este tamaño agotan el margen actual.
