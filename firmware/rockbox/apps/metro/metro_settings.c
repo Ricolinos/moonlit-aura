@@ -55,6 +55,7 @@ static const metro_settings_t defaults = {
     .first_boot_done = false,
     .screen_lock = false,
     .screen_lock_pin = "",
+    .screen_lock_require = METRO_LOCK_REQUIRE_HOLD, /* moonlit (D-069) */
 };
 
 static int clamp_enum(int v, int count)
@@ -99,6 +100,17 @@ void metro_settings_load(void)
                 metro_settings.first_boot_done = (v != 0);
             else if (!strcmp(name, "screen_lock"))
                 metro_settings.screen_lock = (v != 0);
+            else if (!strcmp(name, "screen_lock_require"))
+            {
+                /* moonlit (D-069): un valor fuera de rango cae al
+                 * predeterminado, nunca a un estado invalido -- mismo
+                 * criterio de "fallar abierto" que el resto del
+                 * candado (metro_screen_lock.h). */
+                metro_settings.screen_lock_require =
+                    (v >= 0 && v < METRO_LOCK_REQUIRE_COUNT)
+                        ? (enum metro_lock_require)v
+                        : METRO_LOCK_REQUIRE_HOLD;
+            }
             else if (!strcmp(name, "screen_lock_pin"))
             {
                 /* Cadena, no atoi() -- los ceros a la izquierda son
@@ -153,6 +165,8 @@ void metro_settings_save(void)
     {
         fdprintf(fd, "screen_lock: 1\n");
         fdprintf(fd, "screen_lock_pin: %s\n", metro_settings.screen_lock_pin);
+        fdprintf(fd, "screen_lock_require: %d\n",
+                 (int)metro_settings.screen_lock_require);
     }
 
     close(fd);

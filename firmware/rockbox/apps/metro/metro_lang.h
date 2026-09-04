@@ -211,6 +211,16 @@ enum metro_lang_id {
     LANG_ABOUT_STACK_FMT,
     LANG_ABOUT_STACK_NA,
 
+    /* moonlit (D-069, maestro SS D): sub-pagina de bloqueo. */
+    LANG_LOCK_ENABLE,
+    LANG_LOCK_CHANGE,
+    LANG_LOCK_REQUIRE,
+    LANG_LOCK_REQUIRE_HOLD,
+    LANG_LOCK_REQUIRE_1MIN,
+    LANG_LOCK_REQUIRE_5MIN,
+    LANG_LOCK_REQUIRE_BOOT,
+    LANG_LOCK_REMOVE,
+
     LANG_COUNT
 };
 

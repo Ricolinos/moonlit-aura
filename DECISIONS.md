@@ -3300,3 +3300,82 @@ warnings nuevos; 18 suites en verde; `.bss` **8 461 404**, sin cambio
 frente a D-067 (ninguna estática nueva: el ink box viaja en la tabla de
 íconos, que es `.rodata`), bajo el techo D-043 con **112 672 B** de
 margen.
+
+## D-069 — El bloqueo deja de servir solo al arrancar: Hold, y cuándo volver a pedir el código
+
+**El defecto** (maestro §D). El bloqueo existía desde M-068, pero solo se
+pedía **al arrancar**: una vez desbloqueado, el aparato quedaba abierto
+hasta el siguiente encendido. Es decir, no servía para lo único que la
+gente hace con un bloqueo — guardarse el aparato en el bolsillo. Y el
+interruptor **Hold**, que es el gesto que el dueño ya hace, no se leía en
+ningún lado de `apps/metro/`.
+
+**Estado nuevo**: `screen_lock_require` ∈ {`al bloquear` (predeterminado),
+`tras 1 minuto`, `tras 5 minutos`, `solo al encender`}, persistido en
+`aura.cfg` junto a las otras dos claves del bloqueo y **solo cuando hay
+bloqueo** (misma regla de M-068, para que la salida de emergencia siga
+siendo "borra estas líneas"). Un valor fuera de rango cae al
+predeterminado: mismo criterio de **fallar abierto** que el resto del
+módulo — un archivo dañado no puede dejar el aparato inservible.
+
+**La máquina de estados vive en el bucle principal**, no en una pantalla
+— igual que el bloqueo mismo, tiene que alcanzar a todo el aparato:
+
+- El Hold **no genera eventos** (`pmu_holdswitch_locked()` es sondeo),
+  así que se compara su valor con el de la vuelta anterior.
+- **No hizo falta tocar ningún timeout.** El maestro pedía bajar la
+  espera a ≤ HZ/2; el bucle ya esperaba como mucho **HZ/10**, así que el
+  flanco se ve dentro de los 100 ms. Se verificó antes de cambiar nada,
+  en vez de aplicar la receta a ciegas.
+- Flanco **OFF→ON**: se anota el tick. Con clave configurada queda la
+  **pantalla en reposo**, redibujada **una vez por segundo** y solo bajo
+  `lcd_active()` — lo único que cuesta energía aquí.
+- Flanco **ON→OFF**: si el ajuste lo pide y el Hold duró lo suficiente,
+  se rearma; la vuelta siguiente lo cobra
+  `metro_screen_lock_run_if_active()`, que **sigue siendo el único punto
+  de interceptación**. `solo al encender` devuelve −1 y nunca rearma.
+
+**La pantalla en reposo no lleva casillas de clave.** Con el Hold puesto
+no se puede teclear nada, y unas casillas vacías que no responden
+invitan a probar. Lleva lo que uno sí quiere poder mirar con el aparato
+en el bolsillo —reloj y batería, que ya dibuja `metro_draw_header()`— más
+el creciente de 64 px y el candado como marca de "esto está guardado".
+
+**Sub-página de Ajustes › bloqueo** (la fila deja de hacer una sola cosa
+y empuja una página, mismo patrón que "cambiar sistema", D-047): sin
+clave muestra **solo "activar"** —cambiar, quitar o elegir cuándo pedir
+una clave que no existe son filas muertas—; con clave, las tres
+restantes. La fila se renombra de **"candado" a "bloqueo"** (§C).
+
+**Verificado headless, que es lo que importa aquí.** El Hold no es un
+botón y no se puede postear a la cola de eventos, así que sin
+instrumentación esto habría quedado "probado a mano". Se portó de Metro
+(M-104, leído de `../Metro-Aura`) el token **`HOLD`** de
+`METRO_SIM_BUTTONS`, que conmuta `hold_button_state` —la misma variable
+que la tecla `h` del simulador— y queda anotado en `MODIFICATIONS.md`.
+Y los umbrales de 1/5 minutos se escalan a **3/8 segundos bajo
+`#ifdef SIMULATOR`**: lo que hay que verificar es la máquina de estados,
+no la aritmética de `HZ`, y un minuto de espera real haría imposible
+capturar las dos ramas.
+
+| captura | qué prueba |
+|---|---|
+| `f4-bloqueo-subpagina.png` | las cuatro filas con clave puesta, con "pedir código · al bloquear" |
+| `f4-bloqueo-reposo.png` | Hold puesto: creciente + candado, sin casillas, con reloj y batería |
+| `f4-bloqueo-pide-codigo.png` | Hold soltado con `al bloquear`: pide la clave |
+| `f4-bloqueo-1min-antes.png` | `tras 1 minuto`, soltado **antes** del umbral: vuelve al hub, **no** pide nada |
+| `f4-bloqueo-1min-despues.png` | el mismo ajuste, soltado **después**: pide la clave |
+
+Las dos últimas son el par que de verdad prueba la máquina: la diferencia
+entre ellas es solo el tiempo con el Hold puesto.
+
+**Verificación**: target y simulador en 0 errores, **0 warnings nuevos**;
+18 suites host en verde; `.bss` **8 461 404**, sin cambio frente a D-067
+(el estado del Hold son tres locales del bucle, no estáticas), bajo el
+techo D-043 con **112 672 B** de margen; `stack_report.py` OK, 5 528 B
+(45.0 %).
+
+**Pendiente de hardware** (a la lista de la ronda): que el sondeo a
+HZ/10 vea el flanco del interruptor real sin rebotes, y que la pantalla
+en reposo no impida que la retroiluminación se apague por su
+temporizador normal.

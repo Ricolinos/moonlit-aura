@@ -137,7 +137,7 @@ static const char *const strings_es[LANG_COUNT] = {
 
     [LANG_NP_RATING]           = "calificación",
 
-    [LANG_SETTING_LOCK]         = "candado",
+    [LANG_SETTING_LOCK]         = "bloqueo", /* moonlit (D-069): era "candado" */
     [LANG_LOCK_TITLE_LOCKED]    = "bloqueado",
     [LANG_LOCK_TITLE_SET]       = "clave nueva",
     [LANG_LOCK_TITLE_CONFIRM]   = "confirma",
@@ -146,7 +146,7 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_LOCK_HINT_SET]        = "elige 4 dígitos con la rueda",
     [LANG_LOCK_HINT_CONFIRM]    = "márcala otra vez para confirmar",
     [LANG_LOCK_HINT_MISMATCH]   = "no coincidieron -- empieza de nuevo",
-    [LANG_DIALOG_LOCK_OFF_TITLE] = "¿quitar el candado?",
+    [LANG_DIALOG_LOCK_OFF_TITLE] = "¿quitar el bloqueo?",
 
     [LANG_SETTING_SLEEP]      = "temporizador de sueño",
     [LANG_SETTING_EQ]         = "ecualizador",
@@ -195,6 +195,16 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_ABOUT_VERSION_FMT] = "versión %s",
     [LANG_ABOUT_STACK_FMT]   = "pila principal %d %%",
     [LANG_ABOUT_STACK_NA]    = "pila principal n/d",
+
+    /* moonlit (D-069) */
+    [LANG_LOCK_ENABLE]       = "activar",
+    [LANG_LOCK_CHANGE]       = "cambiar código",
+    [LANG_LOCK_REQUIRE]      = "pedir código",
+    [LANG_LOCK_REQUIRE_HOLD] = "al bloquear",
+    [LANG_LOCK_REQUIRE_1MIN] = "tras 1 minuto",
+    [LANG_LOCK_REQUIRE_5MIN] = "tras 5 minutos",
+    [LANG_LOCK_REQUIRE_BOOT] = "solo al encender",
+    [LANG_LOCK_REMOVE]       = "quitar bloqueo",
 };
 
 static const char *const strings_en[LANG_COUNT] = {
@@ -365,6 +375,16 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_ABOUT_VERSION_FMT] = "version %s",
     [LANG_ABOUT_STACK_FMT]   = "main stack %d %%",
     [LANG_ABOUT_STACK_NA]    = "main stack n/a",
+
+    /* moonlit (D-069) */
+    [LANG_LOCK_ENABLE]       = "turn on",
+    [LANG_LOCK_CHANGE]       = "change code",
+    [LANG_LOCK_REQUIRE]      = "ask for code",
+    [LANG_LOCK_REQUIRE_HOLD] = "when locking",
+    [LANG_LOCK_REQUIRE_1MIN] = "after 1 minute",
+    [LANG_LOCK_REQUIRE_5MIN] = "after 5 minutes",
+    [LANG_LOCK_REQUIRE_BOOT] = "only at power-on",
+    [LANG_LOCK_REMOVE]       = "remove lock",
 };
 
 void metro_lang_set(enum metro_language lang)

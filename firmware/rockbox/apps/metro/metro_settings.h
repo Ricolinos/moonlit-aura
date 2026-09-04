@@ -52,6 +52,16 @@ enum metro_gfx_level {
 };
 #define METRO_GFX_DEFAULT METRO_GFX_FULL
 
+/* moonlit (D-069, maestro SS D): los cuatro valores de "pedir codigo".
+ * `HOLD` es el predeterminado -- es el gesto que el dueno ya hace. */
+enum metro_lock_require {
+    METRO_LOCK_REQUIRE_HOLD = 0, /* al poner Hold */
+    METRO_LOCK_REQUIRE_1MIN,     /* si estuvo con Hold >= 1 minuto */
+    METRO_LOCK_REQUIRE_5MIN,     /* ... >= 5 minutos */
+    METRO_LOCK_REQUIRE_BOOT,     /* solo al encender (lo de siempre) */
+    METRO_LOCK_REQUIRE_COUNT
+};
+
 typedef struct {
     enum metro_theme_kind theme;
     enum metro_accent accent;
@@ -69,6 +79,11 @@ typedef struct {
      * datos -- ver metro_screen_lock.h. Cadena vacía = sin clave. */
     bool screen_lock;
     char screen_lock_pin[5];
+    /* moonlit (D-069, maestro SS D): cuando se vuelve a pedir la clave.
+     * Hasta ahora solo se pedia al arrancar, asi que el bloqueo no
+     * servia para lo unico que la gente hace con el: guardarse el
+     * aparato en el bolsillo. */
+    enum metro_lock_require screen_lock_require;
 } metro_settings_t;
 
 extern metro_settings_t metro_settings;

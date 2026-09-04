@@ -33,6 +33,8 @@
 #include "metro_input.h"
 #include "metro_keymap.h"
 #include "metro_draw.h"
+#include "moonlit_icons.h" /* candado en reposo -- moonlit (D-069) */
+#include "moonlit_logo.h" /* creciente de la pantalla en reposo -- moonlit (D-069) */
 #include "moonlit_fonts.h"
 #include "metro_theme.h"
 #include "metro_lang.h"
@@ -127,6 +129,63 @@ void metro_screen_lock_init(void)
 enum metro_lock_state metro_screen_lock_state(void)
 {
     return s_state;
+}
+
+/* --- moonlit (D-069, maestro SS D): bloqueo por Hold --------------- */
+
+void metro_screen_lock_arm_now(void)
+{
+    if (metro_settings.screen_lock && pin_is_valid(metro_settings.screen_lock_pin))
+        s_state = METRO_LOCK_ACTIVE;
+}
+
+/* Umbrales en TICKS. Bajo SIMULATOR se escalan a segundos: un minuto de
+ * espera real haria imposible capturar "soltar antes / despues" en el
+ * arnes headless, y lo que hay que verificar es la MAQUINA DE ESTADOS,
+ * no la aritmetica de HZ. En el aparato son minutos de verdad. */
+#ifdef SIMULATOR
+#define LOCK_REQUIRE_1MIN_TICKS (HZ * 3)
+#define LOCK_REQUIRE_5MIN_TICKS (HZ * 8)
+#else
+#define LOCK_REQUIRE_1MIN_TICKS (HZ * 60)
+#define LOCK_REQUIRE_5MIN_TICKS (HZ * 60 * 5)
+#endif
+
+long metro_screen_lock_require_ticks(void)
+{
+    switch (metro_settings.screen_lock_require)
+    {
+        case METRO_LOCK_REQUIRE_HOLD: return 0;
+        case METRO_LOCK_REQUIRE_1MIN: return LOCK_REQUIRE_1MIN_TICKS;
+        case METRO_LOCK_REQUIRE_5MIN: return LOCK_REQUIRE_5MIN_TICKS;
+        case METRO_LOCK_REQUIRE_BOOT:
+        default:                      return -1;
+    }
+}
+
+/* Pantalla en reposo. Deliberadamente NO lleva las casillas de la clave:
+ * mientras el Hold esta puesto no se puede teclear nada, y unas casillas
+ * vacias que no responden invitan a probar. Lo que si lleva es lo que
+ * uno quiere poder mirar con el aparato en el bolsillo -- reloj y
+ * bateria, que ya los dibuja metro_draw_header() -- mas el creciente
+ * grande como marca de "esto esta guardado". */
+void metro_screen_lock_draw_idle(void)
+{
+    int wordmark_y;
+
+    metro_draw_clear();
+    metro_draw_header("");
+
+    moonlit_logo_draw_crescent(MOONLIT_LOGO_CRESCENT_SIZE_64,
+                                (LCD_WIDTH - MOONLIT_LOGO_CRESCENT_SIZE_64) / 2,
+                                72, metro_color_secondary());
+
+    wordmark_y = 72 + MOONLIT_LOGO_CRESCENT_SIZE_64 + 20;
+    moonlit_icon_draw(MOONLIT_ICON_LOCK, MOONLIT_ICON_SIZE_24,
+                       (LCD_WIDTH - MOONLIT_ICON_SIZE_24) / 2, wordmark_y,
+                       metro_color_tertiary());
+
+    lcd_update();
 }
 
 static void draw_entry(enum lock_mode mode, bool mismatch)

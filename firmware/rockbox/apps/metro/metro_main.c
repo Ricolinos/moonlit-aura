@@ -279,6 +279,10 @@ void metro_main(void)
      * seen while a thumb decode came back WAITING -- see the
      * metro_thumbs_tick() branch below. */
     unsigned last_thumbs_wait_gen = 0;
+    /* moonlit (D-069): estado del sondeo del interruptor Hold. */
+    bool hold_was = false;
+    long hold_since = 0;
+    long hold_idle_drawn = 0;
 
     /* moonlit (D-059): mutex init only -- no thread yet
      * (moonlit_master_art_builder_poll() creates it once the database
@@ -382,6 +386,59 @@ void metro_main(void)
          * vuelve estructuralmente cierto que ninguna otra pantalla es
          * alcanzable con el candado puesto. */
         metro_screen_lock_run_if_active();
+
+        /* moonlit (D-069, maestro SS D): la maquina del Hold, aqui y no
+         * dentro de una pantalla -- igual que el candado mismo, tiene
+         * que alcanzar a todo el aparato.
+         *
+         * El interruptor Hold del 6G NO genera eventos de boton
+         * (pmu_holdswitch_locked() es sondeo), asi que se compara su
+         * valor con el de la vuelta anterior. El bucle ya espera como
+         * mucho HZ/10, por debajo del HZ/2 que pide el maestro, asi que
+         * NO hizo falta tocar ningun timeout: el flanco se ve dentro de
+         * los 100 ms siguientes.
+         *
+         * Flanco OFF->ON: se anota cuando. Con clave configurada, la
+         * pantalla en reposo se queda puesta mientras el Hold siga --
+         * redibujada una vez por segundo y solo con lcd_active(), que
+         * es lo unico que cuesta energia aqui.
+         *
+         * Flanco ON->OFF: si el ajuste lo pide y el Hold duro lo
+         * suficiente, se rearma el candado; la vuelta siguiente lo cobra
+         * en metro_screen_lock_run_if_active(), que sigue siendo el
+         * unico punto de interceptacion. Si no, se repinta y ya. */
+        {
+            bool hold_now = button_hold();
+
+            if (hold_now != hold_was)
+            {
+                if (hold_now)
+                    hold_since = current_tick;
+                else
+                {
+                    long need = metro_screen_lock_require_ticks();
+
+                    if (need >= 0 && metro_screen_lock_state() == METRO_LOCK_ARMED &&
+                        current_tick - hold_since >= need)
+                        metro_screen_lock_arm_now();
+                }
+                hold_was = hold_now;
+                hold_idle_drawn = 0;
+                /* El icono de candado de la barra (D-068) cambia con el
+                 * flanco, y sin esto no se veria hasta el siguiente
+                 * repintado por otra causa. */
+                if (!hold_now)
+                    redraw_current();
+            }
+
+            if (hold_now && metro_screen_lock_state() == METRO_LOCK_ARMED &&
+                lcd_active() &&
+                (hold_idle_drawn == 0 || current_tick - hold_idle_drawn >= HZ))
+            {
+                metro_screen_lock_draw_idle();
+                hold_idle_drawn = current_tick;
+            }
+        }
 
         at_root = metro_nav_is_root(metro_screen_nav());
         at_player = !at_root && metro_screen_nowplaying_is_current();

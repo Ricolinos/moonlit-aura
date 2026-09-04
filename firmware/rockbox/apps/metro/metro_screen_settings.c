@@ -232,6 +232,111 @@ static const struct metro_page switch_page = {
     LANG_SETTING_SWITCH_SYSTEM, switch_pivots, 1, NULL
 };
 
+/* --- moonlit (D-069, maestro SS D): sub-pagina de Bloqueo ---------- */
+
+/* Sin clave configurada solo tiene sentido "activar": cambiar, quitar o
+ * elegir cuando pedir una clave que no existe son filas muertas. Con
+ * clave, las cuatro. Mismo criterio que Metro (M-104). */
+enum {
+    LOCK_ROW_ENABLE = 0,   /* sin clave: la unica fila */
+    LOCK_ROW_CHANGE = 0,   /* con clave, primera */
+    LOCK_ROW_REQUIRE,
+    LOCK_ROW_REMOVE,
+    LOCK_ROW_COUNT_ON,
+};
+
+static bool lock_is_set(void)
+{
+    return metro_screen_lock_state() != METRO_LOCK_NONE;
+}
+
+static int lock_count(void *ctx)
+{
+    (void)ctx;
+    return lock_is_set() ? LOCK_ROW_COUNT_ON : 1;
+}
+
+static enum metro_lang_id lock_require_label(void)
+{
+    switch (metro_settings.screen_lock_require)
+    {
+        case METRO_LOCK_REQUIRE_1MIN: return LANG_LOCK_REQUIRE_1MIN;
+        case METRO_LOCK_REQUIRE_5MIN: return LANG_LOCK_REQUIRE_5MIN;
+        case METRO_LOCK_REQUIRE_BOOT: return LANG_LOCK_REQUIRE_BOOT;
+        case METRO_LOCK_REQUIRE_HOLD:
+        default:                      return LANG_LOCK_REQUIRE_HOLD;
+    }
+}
+
+static void lock_get_row(void *ctx, int index, struct metro_row *out)
+{
+    (void)ctx;
+    out->subtitle = NULL;
+    out->kind = METRO_ROW_ACTION;
+
+    if (!lock_is_set())
+    {
+        out->title = metro_lang_str(LANG_LOCK_ENABLE);
+        return;
+    }
+
+    switch (index)
+    {
+        case LOCK_ROW_CHANGE:
+            out->title = metro_lang_str(LANG_LOCK_CHANGE);
+            break;
+        case LOCK_ROW_REQUIRE:
+            out->title = metro_lang_str(LANG_LOCK_REQUIRE);
+            out->subtitle = metro_lang_str(lock_require_label());
+            out->kind = METRO_ROW_SETTING;
+            break;
+        case LOCK_ROW_REMOVE:
+        default:
+            out->title = metro_lang_str(LANG_LOCK_REMOVE);
+            break;
+    }
+}
+
+static void lock_on_select(void *ctx, int index)
+{
+    (void)ctx;
+
+    if (!lock_is_set())
+    {
+        metro_screen_lock_setup();
+        return;
+    }
+
+    switch (index)
+    {
+        case LOCK_ROW_CHANGE:
+            metro_screen_lock_setup();
+            break;
+        case LOCK_ROW_REQUIRE:
+            metro_settings.screen_lock_require =
+                (enum metro_lock_require)((metro_settings.screen_lock_require + 1)
+                                           % METRO_LOCK_REQUIRE_COUNT);
+            metro_settings_save();
+            break;
+        case LOCK_ROW_REMOVE:
+        default:
+            /* Quitar pide confirmacion (destruye la clave guardada);
+             * poner no la necesita -- la doble captura ya lo es. */
+            if (metro_widgets_confirm(metro_lang_str(LANG_SETTING_LOCK),
+                                       metro_lang_str(LANG_DIALOG_LOCK_OFF_TITLE)))
+                metro_screen_lock_clear();
+            break;
+    }
+}
+
+static const struct metro_pivot lock_pivots[] = {
+    { .name = LANG_SETTING_LOCK, .count = lock_count,
+      .get_row = lock_get_row, .on_select = lock_on_select },
+};
+static const struct metro_page lock_page = {
+    LANG_SETTING_LOCK, lock_pivots, 1, NULL
+};
+
 static int general_count(void *ctx)
 {
     (void)ctx;
@@ -347,19 +452,13 @@ static void general_on_select(void *ctx, int index)
             break;
 
         case 6:
-            /* R3-F7/DD-8 (M-068): con candado -> confirmar y quitarlo;
-             * sin candado -> configurar uno nuevo (dos capturas). Quitar
-             * pide confirmación (destruye la clave guardada), poner no
-             * la necesita: la propia doble captura ya es la confirmación,
-             * y MENU cancela en cualquier momento. */
-            if (metro_screen_lock_state() != METRO_LOCK_NONE)
-            {
-                if (metro_widgets_confirm(metro_lang_str(LANG_HUB_SETTINGS),
-                                           metro_lang_str(LANG_DIALOG_LOCK_OFF_TITLE)))
-                    metro_screen_lock_clear();
-            }
-            else
-                metro_screen_lock_setup();
+            /* moonlit (D-069): la fila deja de hacer una sola cosa y
+             * empuja la sub-pagina de Bloqueo -- ahora hay cuatro
+             * (activar, cambiar codigo, pedir codigo, quitar), y la de
+             * "pedir codigo" es la que hace que el bloqueo sirva para
+             * algo mas que el arranque. Mismo patron que "cambiar
+             * sistema" (D-047). */
+            metro_screen_list_push(&lock_page);
             break;
 
         case 7:

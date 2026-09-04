@@ -91,4 +91,26 @@ bool metro_screen_lock_setup(void);
  * agregaría ninguna protección real. */
 void metro_screen_lock_clear(void);
 
+/* --- moonlit (D-069, maestro SS D): bloqueo por Hold --------------- */
+
+/* Vuelve a ACTIVE si hay clave configurada. Lo llama el bucle principal
+ * en el flanco Hold ON->OFF cuando `screen_lock_require` lo pide. No
+ * dibuja nada: solo cambia el estado, y el
+ * metro_screen_lock_run_if_active() de la vuelta siguiente es quien
+ * pide la clave -- asi el candado sigue teniendo UN solo punto de
+ * interceptacion. */
+void metro_screen_lock_arm_now(void);
+
+/* La PANTALLA EN REPOSO: creciente + reloj + bateria, SIN casillas de
+ * clave. Es lo que se ve mientras el Hold esta puesto y hay clave
+ * configurada -- todavia no se pide nada, solo se deja de mostrar lo
+ * que hubiera debajo. No bloquea: dibuja un cuadro y vuelve, para que
+ * el bucle principal siga sondeando el interruptor. */
+void metro_screen_lock_draw_idle(void);
+
+/* Cuantos ticks de Hold hacen falta para que se vuelva a pedir la clave
+ * con el ajuste vigente, o -1 si con ese ajuste el Hold nunca la pide
+ * (SOLO_AL_ENCENDER). 0 = en cuanto se suelta. */
+long metro_screen_lock_require_ticks(void);
+
 #endif /* METRO_SCREEN_LOCK_H */
