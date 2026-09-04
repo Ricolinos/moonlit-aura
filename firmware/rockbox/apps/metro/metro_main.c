@@ -651,6 +651,14 @@ void metro_main(void)
                     moonlit_screen_marea_show_carousel();
                 else if (moonlit_screen_marea_tick())
                     moonlit_screen_marea_show_carousel();
+                /* moonlit (D-078): ni la animacion del carrusel ni una
+                 * tapa recien cargada ya repintaron este cuadro -- si
+                 * el titulo o el subtitulo del panel siguen barriendo,
+                 * les toca a ellos (moonlit_screen_marea_show_panel()
+                 * es la contraparte, fina, de show_carousel() de
+                 * arriba: solo el panel, nunca la banda). */
+                else if (moonlit_marquee_wants_ticks())
+                    moonlit_screen_marea_show_panel();
             }
 
             continue;

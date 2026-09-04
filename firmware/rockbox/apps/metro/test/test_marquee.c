@@ -105,6 +105,38 @@ static void test_degenerados(void)
     CHECK(moonlit_marquee_offset_px(-1, SPAN, STATIC_MS, SCROLL_MS) >= 0);
 }
 
+/* D-078: el subtitulo del panel de Marea llama a moonlit_marquee_draw_
+ * offset() con phase_ms = medio ciclo (STATIC_MS+SCROLL_MS)/2 = 3500 --
+ * la funcion de dibujo solo SUMA phase_ms a elapsed_ms antes de llamar
+ * a esta misma moonlit_marquee_offset_px(), asi que el efecto util es
+ * exactamente "adelantar el reloj de esta ranura ese tanto" sin tocar
+ * el reloj de ninguna otra. Con ambas ranuras arrancando en el mismo
+ * `since` (el panel entero cambia de album a la vez), el titulo (fase
+ * 0) esta quieto mientras el subtitulo (fase 3500) ya esta a mitad de
+ * su barrido -- nunca compiten por la mirada al mismo tiempo. */
+static void test_desfase_subtitulo(void)
+{
+    long half_cycle = (STATIC_MS + SCROLL_MS) / 2; /* 3500 */
+
+    /* t=0: titulo quieto (offset 0)... */
+    CHECK_EQ(moonlit_marquee_offset_px(0, SPAN, STATIC_MS, SCROLL_MS), 0);
+    /* ...pero el subtitulo, con el mismo `since`, ya barre -- esta en
+     * t=3500 de SU propio reloj (500 ms adentro del tramo de barrido,
+     * porque su tramo quieto de 2000 ms ya paso). */
+    CHECK(moonlit_marquee_offset_px(0 + half_cycle, SPAN, STATIC_MS, SCROLL_MS) > 0);
+    CHECK_EQ(moonlit_marquee_offset_px(half_cycle, SPAN, STATIC_MS, SCROLL_MS),
+             (SPAN * (half_cycle - STATIC_MS)) / SCROLL_MS);
+
+    /* Simetrico: cuando el titulo esta a mitad de SU barrido (mismo
+     * offset que el caso de arriba, T-F.1: 2000+2500), el subtitulo
+     * (con el desfase sumado) ya volvio a su tramo quieto del ciclo
+     * siguiente -- las dos ranuras nunca coinciden en fase. */
+    CHECK_EQ(moonlit_marquee_offset_px(2000 + 2500, SPAN, STATIC_MS, SCROLL_MS),
+             SPAN / 2);
+    CHECK_EQ(moonlit_marquee_offset_px(2000 + 2500 + half_cycle, SPAN,
+                                        STATIC_MS, SCROLL_MS), 0);
+}
+
 int main(void)
 {
     test_tramo_quieto();
@@ -112,6 +144,7 @@ int main(void)
     test_bucle();
     test_rango();
     test_degenerados();
+    test_desfase_subtitulo();
 
     printf("test_marquee: %d/%d checks OK\n", checks - failures, checks);
     if (failures)

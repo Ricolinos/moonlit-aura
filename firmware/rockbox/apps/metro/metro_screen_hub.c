@@ -754,8 +754,16 @@ static const struct metro_pivot music_pivots[] = {
      * of Música is the vertical cover flow, not Quickplay (DA-1 of
      * Metro chose Quickplay "open for the owner to flip"; the owner
      * flipped it for moonlit). Same struct, same count (7), only the
-     * order changes; Quickplay keeps its grid as the second pivot. */
-    { LANG_MAREA_TITLE,     marea_count,     marea_get_row,     marea_on_select,     NULL },
+     * order changes; Quickplay keeps its grid as the second pivot.
+     * moonlit (D-077): is_launcher=true -- this pivot's one row is
+     * never actually shown as a list anymore ("Música entra directo a
+     * Marea"). metro_screen_list.c fires marea_on_select() the instant
+     * the cursor lands on pivot 0 (push, or LEFT stepping down from
+     * Quickplay) instead of drawing it; RIGHT from Marea steps back to
+     * pivot 1 (Quickplay) the normal way, since Marea always leaves
+     * this frame's pivot at 0 before popping (moonlit_screen_marea.c). */
+    { LANG_MAREA_TITLE,     marea_count,     marea_get_row,     marea_on_select,     NULL,
+      0, NULL, 0, true },
     /* R3-F4/DD-5 (M-065), DA-1: Metro's first pivot, second here. */
     { LANG_PIVOT_QUICKPLAY, quickplay_count, quickplay_get_row, quickplay_on_select,
       (void *)&s_quickplay_grid,

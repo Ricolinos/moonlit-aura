@@ -198,6 +198,14 @@ static long marea_now_us(void)
  * implicito, nunca un bucle que se alarga). */
 #define MAREA_SCROLL_ANIM_MS 220
 
+/* D-078: desfase del subtitulo respecto al titulo, medio ciclo completo
+ * de marquesina -- moonlit_tokens.h: (MOONLIT_MOTION_MARQUEE_STATIC_MS +
+ * MOONLIT_MOTION_MARQUEE_SCROLL_MS) / 2 = (2000+5000)/2 = 3500. Literal
+ * documentado, mismo patron D-037/D-035 que MAREA_SCROLL_ANIM_MS arriba
+ * (este archivo no puede incluir moonlit_tokens.h). Maestro SS E.3: para
+ * que titulo y subtitulo no compitan por la mirada a la vez. */
+#define MAREA_SUBTITLE_MARQUEE_PHASE_MS 3500
+
 /* D-053/D-055/D-059: estado del arte por slot. Un miss en get_slot_for()
  * reclama el slot SIN abrir archivos (monograma/relleno liso) y lo deja
  * en PENDING para moonlit_screen_marea_tick(), que es el unico sitio
@@ -906,18 +914,22 @@ static void draw_panel(void)
     moonlit_draw_surface(MAREA_PANEL_X, MAREA_PANEL_Y, MAREA_PANEL_W, MAREA_PANEL_H,
                           MSURFACE_LOW, MAREA_PANEL_RADIUS);
 
-    /* moonlit (D-067): el titulo del album enfocado desplaza si
-     * desborda. El artista y el conteo NO: dos textos moviendose a la
-     * vez en un panel de 152 px compiten entre si, y el titulo es el
-     * que de verdad se corta. */
+    /* moonlit (D-067, D-078): titulo Y artista/album desplazan si
+     * desbordan -- el conteo de canciones NO (siempre cabe, maestro
+     * SS E.3). El subtitulo arranca su ciclo desfasado medio ciclo
+     * completo respecto al titulo (MAREA_SUBTITLE_MARQUEE_PHASE_MS)
+     * para que, si los dos desbordan a la vez, nunca esten barriendo
+     * juntos -- uno quieto mientras el otro se lee, y viceversa. */
     moonlit_marquee_draw(MOONLIT_MARQUEE_MAREA, MFONT_HEADLINE, text_x, text_w,
                           MAREA_PANEL_Y + 24, album->label,
                           moonlit_color(MROLE_ON_SURFACE));
 
     if (album->subtitle[0])
-        metro_draw_text_cut_right(MFONT_BODY, text_x, MAREA_PANEL_Y + 56,
-                                   album->subtitle, moonlit_color(MROLE_ON_SURFACE_VARIANT),
-                                   text_w);
+        moonlit_marquee_draw_offset(MOONLIT_MARQUEE_MAREA_SUBTITLE, MFONT_BODY,
+                                    text_x, text_w, MAREA_PANEL_Y + 56,
+                                    album->subtitle,
+                                    moonlit_color(MROLE_ON_SURFACE_VARIANT),
+                                    MAREA_SUBTITLE_MARQUEE_PHASE_MS);
 
     /* D-053: barrido de tagcache solo al cambiar de album enfocado. */
     if (s_songs_for_index != s_target_index)
@@ -1066,6 +1078,26 @@ void moonlit_screen_marea_show_carousel(void)
                 (current_tick - t0) * 1000L / HZ);
 }
 
+/* D-078: un cuadro de marquesina del panel, asentado. Antes de esto no
+ * habia ningun camino que repintara el panel mientras Marea estaba
+ * quieta (sin animar el carrusel, sin tapas pendientes) -- el titulo
+ * ya tenia marquesina desde D-067 pero solo avanzaba de cuadro en
+ * cuadro POR CASUALIDAD, mientras coincidia con una lectura de tapa
+ * pendiente. Repinta SOLO el panel derecho (152x220, igual de fino que
+ * moonlit_screen_marea_show_carousel() con la banda izquierda) via
+ * lcd_update_rect() -- la banda y la cabecera no se tocan. metro_main.c
+ * la llama desde su rama ociosa, solo cuando moonlit_marquee_wants_ticks()
+ * y ninguna de las otras dos ramas (animando / tapa cargada) ya
+ * repinto este cuadro. */
+void moonlit_screen_marea_show_panel(void)
+{
+    if (s_album_n <= 0 || !lcd_active())
+        return;
+
+    draw_panel();
+    lcd_update_rect(MAREA_PANEL_X, MAREA_PANEL_Y, MAREA_PANEL_W, MAREA_PANEL_H);
+}
+
 /* --- entrada: scroll (D-030, D-053), select/playpause/back/home ----- */
 
 /* D-053 (patron aura_musicflow.c scroll_step() ~1238-1259): redirige
@@ -1127,11 +1159,32 @@ void moonlit_screen_marea_handle(int action, int steps)
             if (s_album_n > 0)
                 metro_music_play_songs_of_album(s_albums[s_target_index].seek, 0);
             break;
+        /* moonlit (D-077): "Música entra directo a Marea" -- Marea ya
+         * no tiene una pagina de pivotes debajo que valga la pena
+         * revelar con un solo pop (esa vista, pivot 0 de music_page, es
+         * un launcher que nunca se dibuja, ver is_launcher en
+         * metro_page.h). BACK y MENU llevan los dos al hub. */
         case MACT_BACK:
-            metro_screen_list_pop();
-            break;
         case MACT_HOME:
             metro_screen_list_pop_to_root();
+            break;
+        /* moonlit (D-077): RIGHT/LEFT recorren los pivotes de Música
+         * como si Marea fuera su pivot 0 -- lo es, en el frame de
+         * music_page que sigue vivo debajo del centinela mientras tanto
+         * (metro_screen_list_push()/on_select() lo dejan siempre en
+         * pivot 0 antes de mostrar Marea). Salir de Marea revela ese
+         * frame y mueve su pivot; metro_screen_list.c toma el mando de
+         * ahi en adelante con su mecanismo normal (sin wrap, F.1) hasta
+         * que LEFT en el primer pivote de lista (Quickplay, 1) vuelve
+         * a disparar Marea (maybe_auto_launch_pivot_zero()). */
+        case MACT_PIVOT_NEXT:
+            metro_screen_list_pop();
+            metro_nav_pivot_next(metro_screen_nav());
+            break;
+        case MACT_PIVOT_PREV:
+            metro_screen_list_pop();
+            metro_nav_pivot_set(metro_screen_nav(),
+                                 metro_nav_pivot_count(metro_screen_nav()) - 1);
             break;
         default:
             break;

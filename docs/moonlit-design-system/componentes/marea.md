@@ -113,14 +113,54 @@ por índice) y la cabecera se redibujan una vez, en el asentamiento. Bajo
 `animations=off` o LCD dormido el destino se dibuja directo. D-045 (v0.1.1,
 precarga síncrona) queda sustituida. `MACT_SELECT` empuja la subpágina de canciones del álbum
 enfocado (la misma que Álbumes/Quickplay/un artista, `metro_screen_hub.c`).
-`MACT_PLAYPAUSE` reproduce el álbum enfocado desde la pista 0. `MACT_BACK`
-saca a Marea de la pila. Contexto reusado: `MCTX_LIST` (D-030), sin tocar
-`metro_keymap.c`.
+`MACT_PLAYPAUSE` reproduce el álbum enfocado desde la pista 0. Contexto
+reusado: `MCTX_LIST` (D-030), sin tocar `metro_keymap.c`.
+
+**D-077 — LEFT/RIGHT recorren los pivotes de Música.** Marea actúa como
+si fuera el pivote 0 de `music_pivots[]`, aunque se dibuja aparte (es un
+centinela, no la lista genérica): **RIGHT** sale de Marea y entra al
+pivote 1 (Quickplay, "reproducir ya"); **LEFT** sale de Marea y salta
+directo al **último** pivote (Playlists) — el único punto de todo el
+esquema de pivotes que envuelve (`metro_nav_pivot_set()`, ver
+`metro_nav.h` — un escape deliberado que NO reintroduce el envolvido en
+`metro_nav_pivot_next()`/`_prev()`, que lo siguen teniendo prohibido en
+cualquier otra pantalla, F.1). En sentido contrario, **LEFT** desde el
+primer pivote de lista (Quickplay) vuelve a Marea — `music_pivots[0]`
+está marcado `is_launcher` (`metro_page.h`): nunca se dibuja como lista,
+`metro_screen_list.c` dispara su `on_select()` (empujar Marea) en cuanto
+el cursor aterriza ahí, sea al entrar a Música por primera vez o al
+retroceder con LEFT. **MENU** (`MACT_BACK`/`MACT_HOME`, ambos) vuelve
+directo al hub — ya no hay una "página de pivotes" intermedia útil que
+revelar con un solo `pop()`.
+
+**D-078 — título y subtítulo del panel con marquesina, desfasados.**
+Antes solo el título usaba `moonlit_marquee_draw()` (D-067) y el
+artista/álbum se cortaba (`metro_draw_text_cut_right()`). Ahora los dos
+desplazan si desbordan — el conteo de canciones no, siempre cabe — y el
+subtítulo arranca su ciclo desfasado medio ciclo completo (3 500 ms =
+`(marquee_static_ms + marquee_scroll_ms) / 2`) respecto al título
+(`moonlit_marquee_draw_offset()`, ranura `MOONLIT_MARQUEE_MAREA_SUBTITLE`):
+si los dos textos desbordan a la vez, nunca están barriendo juntos —
+mientras uno se lee quieto, el otro se mueve. `moonlit_screen_marea_show_panel()`
+es la contraparte fina de `show_carousel()`: repinta solo el panel
+(nunca la banda) en el cuadro ocioso en el que ninguna de las otras dos
+ramas (animación del carrusel, tapa recién cargada) ya lo hizo —
+antes de esto la marquesina del título solo avanzaba de cuadro en
+cuadro por coincidir con una carga de tapa pendiente.
 
 ## Entrada
 
-Pivote de una sola fila ("marea"), el **primero** de `music_pivots[]`
-(`metro_screen_hub.c`, D-029; D-051 lo movió del final al principio en
-v0.1.1: entrar a Música y pulsar SELECT abre Marea) — seleccionarlo
-empuja Marea como pantalla completa, un cuarto centinela junto a Ahora suena y el visor de fotos
-(`metro_main.c`).
+**D-051** movió Marea al primer pivote de `music_pivots[]`
+(`metro_screen_hub.c`) para que fuera la superficie de aterrizaje de
+Música en vez de Quickplay. **D-077** (esta ronda) retira el paso
+intermedio que quedaba: antes, entrar a Música mostraba la página de
+pivotes en su pivote 0 (una sola fila "Marea" que había que
+seleccionar); ahora `music_pivots[0].is_launcher = true` hace que
+`metro_screen_list_push()` dispare `marea_on_select()` —
+`moonlit_screen_marea_push()` — de inmediato, así que abrir Música
+entra directo a Marea, pantalla completa, un cuarto centinela junto a
+Ahora suena y el visor de fotos (`metro_main.c`). La ceja de Marea
+muestra "Marea" con el mismo estilo que el nombre de cualquier otro
+pivote (`LANG_MAREA_TITLE`), para que quede claro dónde está el
+usuario al llegar. Ver "Navegación" arriba para cómo se sale/vuelve a
+entrar con LEFT/RIGHT.

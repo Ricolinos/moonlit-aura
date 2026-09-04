@@ -77,6 +77,16 @@ int  metro_nav_pivot(const metro_nav_t *nav);
 bool metro_nav_pivot_next(metro_nav_t *nav);
 bool metro_nav_pivot_prev(metro_nav_t *nav);
 
+/* moonlit (D-077): escape hatch for the one caller that legitimately
+ * needs to JUMP to a specific pivot instead of stepping one at a time
+ * (Marea acting as an out-of-band "pivot -1" reached and left by its
+ * own sentinel screen, not by the generic list -- see
+ * moonlit_screen_marea_handle()'s MACT_PIVOT_PREV case). Does NOT
+ * reintroduce wrap into metro_nav_pivot_next()/_prev(): those keep the
+ * F.1 contract untouched. Clamps to [0, npivots-1]; no-op if pivot is
+ * already out of range for npivots <= 0. */
+void metro_nav_pivot_set(metro_nav_t *nav, int pivot);
+
 int  metro_nav_sel(const metro_nav_t *nav);
 int  metro_nav_first_visible(const metro_nav_t *nav);
 

@@ -105,4 +105,12 @@ bool moonlit_screen_marea_tick(void);
  * pendientes, no solo mientras moonlit_screen_marea_animating(). */
 bool moonlit_screen_marea_wants_ticks(void);
 
+/* D-078: un cuadro de marquesina del panel (titulo/subtitulo), asentado
+ * -- repinta SOLO el panel derecho (lcd_update_rect(), nunca la banda ni
+ * la cabecera). No lee disco ni decodifica nada. metro_main.c la llama
+ * desde su rama ociosa cuando moonlit_marquee_wants_ticks() es cierto y
+ * ni moonlit_screen_marea_animating() ni moonlit_screen_marea_tick() ya
+ * cubrieron ese cuadro. */
+void moonlit_screen_marea_show_panel(void);
+
 #endif /* MOONLIT_SCREEN_MAREA_H */

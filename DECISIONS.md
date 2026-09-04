@@ -3939,3 +3939,196 @@ Tag sugerido para cuando el dueño termine la lista de hardware:
 **`v0.2.0`**. Esta sesión no crea el tag ni el release — package_dist.sh
 corrió únicamente sin `--release-tag`, tal como pide el protocolo de
 la ronda.
+
+## Ronda "ajustes 2"
+
+Autorizada por la sesión supervisora tras el cierre de "ronda pulido"
+(v0.2.0 liberado y verificado en hardware). Plan hijo
+`docs/plans/PLAN-moonlit-ajustes-2.md`, maestro
+`docs/plans/PLAN-ronda-ajustes-2-maestro.md` (4 repos en paralelo:
+Aura-Firmware, Metro-Aura, moonlit-aura, Aura-Studio). Decisiones
+**D-076+**. Mismo protocolo que la ronda anterior: cada PARADA se
+reporta a la supervisora y la sesión continúa sin esperar; se detiene
+solo ante build en rojo, contrato, `.bss` sobre el techo D-043 sin
+arreglo claro, acción destructiva, o contradicción con este archivo.
+Sin tag ni release.
+
+## D-076 — La ceja queda delimitada: el título nunca choca con reloj, candado o transporte
+
+**Motivo.** `metro_draw_header()` dibujaba el título con
+`metro_draw_text()`, sin recorte, ANTES de calcular dónde iban a caer
+el candado, el glifo de transporte y el reloj — un título largo (un
+nombre de artista o álbum real, no una etiqueta fija de la interfaz)
+podía superponerse con esos elementos. Nadie lo había notado porque
+D-067 (marquesina) ya resolvía el caso general "texto largo que no
+cabe en su propia franja" en listas y filas; la ceja nunca se sometió
+a esa misma disciplina.
+
+**Decisión.** `metro_draw_header()` calcula PRIMERO `right_edge`: el
+borde izquierdo del elemento más a la izquierda entre los que
+realmente van a dibujarse esta vez (batería — siempre presente, es el
+límite por defecto si no hay nada más —, reloj si `get_time()` no es
+NULL, glifo de transporte si hay audio, candado si `button_hold()`).
+El título se dibuja despues, con `moonlit_marquee_draw()` (D-067) en
+vez de `metro_draw_text()`, con un ancho de recorte de
+`right_edge - 8 - METRO_DRAW_LEFT_X` — el hueco mínimo de 8 px que
+pide el maestro (§E.1). Nueva ranura `MOONLIT_MARQUEE_HEADER` en
+`moonlit_marquee.h`. El resto de la barra (candado, transporte, reloj,
+batería) no cambia de posición ni de lógica — solo el orden en que se
+calcula antes de dibujar.
+
+**Verificación mecánica, no a ojo.** `firmware/tools/check_tones.py
+--align` gana `--title-gap X0,W`: exige que la banda de columnas
+`[X0, X0+W)` de la captura no tenga NI UN píxel de tinta. No intenta
+adivinar cuál grupo de columnas es "el título" (una marquesina en
+pleno barrido puede partirse en varios grupos — dos copias con el
+hueco de bucle entre ellas —, y agrupar por heurística sería
+adivinar); le basta con que la banda que el propio llamador calculó
+(el hueco de 8 px) esté limpia. Corrido contra
+`f1-03-header-delimitado.png` (candado + transporte + reloj + batería,
+título largo desbordando) con `--title-gap 226,8`: **sin tinta,
+OK**. El chequeo de alineación vertical preexistente (D-068) se
+reverificó aparte contra una captura ESTÁTICA (`f1-01-marea-directo.png`,
+título corto "marea" sin marquesina): dispersión **1.0 px**, dentro
+del tope — confirma que el reordenamiento del cálculo no movió el eje
+Y de nada. (Una captura a mitad de barrido de marquesina SÍ puede dar
+más de 1.0 px de dispersión en ese chequeo preexistente porque el
+tramo de texto visible en ese instante no es necesariamente el mismo
+que se usó para calibrar `METRO_HEADER_TEXT_Y` — es ruido de contenido,
+no del código; ya advertido en el docstring de la herramienta desde
+D-068.)
+
+**Capturas** (`docs/screenshots/ajustes-2/`): `f1-03-header-delimitado.png`
+(título largo + Hold + reproduciendo + reloj, los cuatro elementos a
+la vez, la marquesina del título recortada limpiamente antes del
+candado).
+
+## D-077 — Música entra directo a Marea; LEFT/RIGHT recorren los pivotes
+
+**Motivo.** Música abría una página de pivotes cuyo primer pivote era
+una sola fila ("Marea") que había que seleccionar para de verdad llegar
+a la pantalla completa de Marea (D-051). Un paso intermedio sin
+contenido propio, dado que Marea ya es el destino natural desde D-051.
+
+**Decisión — mecanismo genérico, no un caso especial de Música.**
+`struct metro_pivot` (`metro_page.h`) gana un campo `is_launcher`
+(booleano, al final, default `false` — todo inicializador posicional
+existente sigue compilando igual, mismo patrón que `tile_cols`/
+`empty_message`). Un pivote `is_launcher` nunca se dibuja como lista:
+en cuanto el cursor aterriza en él —al empujar la página por primera
+vez (`metro_screen_list_push()` siempre arranca en pivote 0) o al
+retroceder con `MACT_PIVOT_PREV` desde el pivote 1—,
+`metro_screen_list.c` dispara su `on_select(ctx, 0)` de inmediato en
+vez de mostrar `count()`/`get_row()`. `music_pivots[0]` (Marea,
+`metro_screen_hub.c`) se marca así; su `on_select` ya era
+`moonlit_screen_marea_push()`, sin cambios. Resultado: abrir Música
+entra directo a Marea, y `metro_screen_hub.c` no necesita saber que
+Marea existe como caso especial — es el mismo mecanismo que usaría
+cualquier otro pivote de una sola acción.
+
+**LEFT/RIGHT en Marea.** Marea reusa `MCTX_LIST` desde D-030 (candado
++ transporte + reloj ya lo dejaban dicho: sin tocar `metro_keymap.c`).
+`moonlit_screen_marea_handle()` gana los casos `MACT_PIVOT_NEXT`/
+`MACT_PIVOT_PREV`: ambos hacen `metro_screen_list_pop()` (Marea es un
+centinela sobre el frame de `music_page`, que quedó en pivote 0 antes
+de mostrarse) y luego mueven ese frame — RIGHT con
+`metro_nav_pivot_next()` normal (pivote 0→1, Quickplay); LEFT con la
+función nueva `metro_nav_pivot_set()` (`metro_nav.h`/`.c`) directo al
+**último** pivote (Playlists). `metro_nav_pivot_set()` es un escape
+deliberado, PURO y probado en host (`test_nav.c`, `test_pivot_set()`,
++9 checks): salta y recorta a `[0, npivots-1]` sin pasar por
+`_next()`/`_prev()`, que **siguen** sin envolver en cualquier otra
+pantalla (F.1, `metro_nav.h`, intacto — verificado con
+`test_pivot_no_wrap()`, que no cambió). Simétrico: LEFT desde el
+primer pivote de lista (Quickplay, pivote 1) llega a pivote 0 vía
+`metro_nav_pivot_prev()` normal, y como pivote 0 es `is_launcher`,
+`metro_screen_list.c` dispara Marea en el acto — mismo mecanismo que
+la entrada inicial, sin código nuevo para "volver".
+
+`MACT_BACK` y `MACT_HOME` en Marea quedan iguales entre sí
+(`metro_screen_list_pop_to_root()`, directo al hub): ya no existe una
+página de pivotes intermedia útil que un solo `pop()` revelara — antes
+de esta ronda un `pop()` simple sí tenía sentido (mostraba la fila
+"Marea" seleccionable); ahora revelaría el mismo pivote 0 launcher, que
+nunca debe verse.
+
+**Verificación.** `test_nav`: 93 → **102 checks**, 0 fallos (9 nuevos de
+`metro_nav_pivot_set()`). Capturas
+(`docs/screenshots/ajustes-2/`): `f1-01-marea-directo.png` (Música →
+Marea directo, sin pasar por ninguna lista), `f1-05-marea-right-quickplay.png`
+(RIGHT desde Marea → "reproducir ya"), `f1-04-marea-left-wrap-playlists.png`
+(LEFT desde Marea → "listas", el único punto de todo el esquema de
+pivotes que envuelve), `f1-06-quickplay-left-marea.png` (LEFT desde
+Quickplay → de vuelta a Marea). Documentado en
+`docs/moonlit-design-system/componentes/marea.md` (secciones
+"Navegación" y "Entrada").
+
+## D-078 — Marquesina en el panel de Marea: título y subtítulo, desfasados medio ciclo
+
+**Motivo.** Solo el título del panel de Marea usaba marquesina
+(D-067); el artista/álbum se cortaba con `metro_draw_text_cut_right()`.
+El maestro (§E.3) pide que los dos desplacen, pero con cuidado: si los
+dos desbordan a la vez y barren juntos, compiten por la mirada y
+ninguno se termina de leer con comodidad.
+
+**Decisión.** `moonlit_marquee_draw()` gana una variante,
+`moonlit_marquee_draw_offset()`, con un parámetro `phase_ms` que se
+suma a `elapsed_ms` antes de calcular el desplazamiento — el reloj de
+la ranura (`since`) no se toca, así que el efecto es "esta ranura
+arranca su ciclo ya adelantado ese tanto", sin coordinarse con ninguna
+otra ranura ni con la pantalla. `moonlit_marquee_draw()` pasa a ser
+este mismo camino con `phase_ms=0`. Nueva ranura
+`MOONLIT_MARQUEE_MAREA_SUBTITLE`. El panel de Marea
+(`moonlit_screen_marea.c:draw_panel()`) dibuja el subtítulo con
+`phase_ms = MAREA_SUBTITLE_MARQUEE_PHASE_MS` = 3 500 ms — literal
+documentado (`(marquee_static_ms + marquee_scroll_ms) / 2`, mismo
+patrón D-037 que `MAREA_SCROLL_ANIM_MS`, este archivo no incluye
+`moonlit_tokens.h`, D-035). El conteo de canciones no cambia: sigue
+sin marquesina, siempre cabe.
+
+**El panel ahora también repinta en el tick ocioso.** Antes de esto no
+existía ningún camino que repintara el panel de Marea mientras estaba
+asentada y sin tapas pendientes — el título ya tenía marquesina desde
+D-067 pero solo avanzaba de cuadro cuando coincidía por casualidad con
+una carga de tapa. `moonlit_screen_marea_show_panel()` (nueva,
+exportada) repinta SOLO el panel (`lcd_update_rect()`, nunca la banda
+ni la cabecera, mismo nivel de finura que
+`moonlit_screen_marea_show_carousel()` con la banda) — `metro_main.c`
+la llama desde su rama ociosa cuando `moonlit_marquee_wants_ticks()`
+es cierto y ni la animación del carrusel ni una tapa recién cargada ya
+repintaron ese cuadro.
+
+**Verificación.** `test_marquee`: 596 checks totales (`test_desfase_subtitulo()`,
+nuevo, documenta con la matemática pura por qué las dos ranuras no
+compiten: en `t=0` el título está quieto mientras el subtítulo, con el
+mismo `since` pero desfasado, ya lleva 1 500 ms de barrido). Capturas
+en dos tics distintos (`docs/screenshots/ajustes-2/`):
+`f1-07-marea-marquee-tick-a.png`/`f1-08-marea-marquee-tick-b.png` —
+título y subtítulo muestran tramos de texto distintos entre los dos
+tics, y nunca coinciden en estar quietos o en movimiento al mismo
+tiempo.
+
+**Hallazgo aparte, fuera de esta fase.** Verificando estas capturas
+con un álbum de prueba nuevo se encontró que `metro-test.aiff`
+(`firmware/tools/gen_test_media.sh`) nunca tuvo tags de artista/álbum
+—solo título— desde que existe: `ffmpeg` no los escribe al codificar a
+AIFF con las opciones actuales del script (los otros cinco formatos del
+mismo helper sí los llevan). Produce un álbum real "álbum desconocido"
+de una sola pista en la biblioteca de prueba, que ordena primero
+alfabéticamente. No es un bug de esta ronda ni de Marea — tagcache
+etiqueta correctamente lo que de verdad no tiene tag — pero vale la
+pena una pasada futura sobre `gen_test_media.sh` si estorba alguna
+captura. Sin abrir una decisión propia por ahora: es un dato para la
+siguiente sesión que toque fixtures, no un cambio de producto.
+
+**PARADA 1 — Fase 1 cerrada.** Target (`rockbox.ipod` + bootloader) y
+simulador compilan en 0 errores (mismos warnings preexistentes de
+`-Wmissing-field-initializers` que ya arrastraban `tile_cols`/
+`empty_message` en otros pivotes — `is_launcher` solo agrega una
+instancia más de la misma clase, no una nueva). 19 suites de test
+host, 0 fallos. `.bss`: **8 467 804 B** (+96 B sobre el cierre de la
+ronda anterior — dos ranuras de marquesina nuevas,
+`MOONLIT_MARQUEE_MAREA_SUBTITLE` y `MOONLIT_MARQUEE_HEADER`), techo
+D-043 8 574 076 B, margen **106 272 B**. `make -C firmware/build-sim
+install` corrido antes de las capturas. Capturas en
+`docs/screenshots/ajustes-2/`. Sigue Fase 2 (ajustes compartidos).

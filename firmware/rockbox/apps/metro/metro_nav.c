@@ -119,6 +119,19 @@ bool metro_nav_pivot_prev(metro_nav_t *nav)
     return true;
 }
 
+void metro_nav_pivot_set(metro_nav_t *nav, int pivot)
+{
+    struct metro_nav_frame *f = current_frame(nav);
+
+    if (f->npivots <= 0)
+        return;
+    if (pivot < 0)
+        pivot = 0;
+    if (pivot >= f->npivots)
+        pivot = f->npivots - 1;
+    f->pivot = pivot;
+}
+
 int metro_nav_sel(const metro_nav_t *nav)
 {
     const struct metro_nav_frame *f = current_frame_c(nav);

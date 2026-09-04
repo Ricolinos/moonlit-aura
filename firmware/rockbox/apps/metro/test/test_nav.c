@@ -123,6 +123,39 @@ static void test_pivot_no_wrap(void)
     CHECK(metro_nav_pivot(&nav) == 1);
 }
 
+/* D-077: metro_nav_pivot_set() jumps directly, clamped -- the escape
+ * hatch Marea uses to reach the LAST pivot from pivot 0 in one step
+ * (LEFT from Marea) without reintroducing wrap into _next()/_prev(),
+ * which test_pivot_no_wrap() above still holds to the letter. */
+static void test_pivot_set(void)
+{
+    metro_nav_t nav;
+    metro_nav_init(&nav, 1);
+    metro_nav_push(&nav, 4);
+
+    CHECK(metro_nav_pivot(&nav) == 0);
+
+    metro_nav_pivot_set(&nav, 3);
+    CHECK(metro_nav_pivot(&nav) == 3);
+
+    /* Clamped, not wrapped: past the last pivot lands ON the last one. */
+    metro_nav_pivot_set(&nav, 99);
+    CHECK(metro_nav_pivot(&nav) == 3);
+
+    /* Clamped below zero too. */
+    metro_nav_pivot_set(&nav, -5);
+    CHECK(metro_nav_pivot(&nav) == 0);
+
+    metro_nav_pivot_set(&nav, 2);
+    CHECK(metro_nav_pivot(&nav) == 2);
+
+    /* _next()/_prev() still don't wrap after a direct jump. */
+    CHECK(metro_nav_pivot_next(&nav));
+    CHECK(metro_nav_pivot(&nav) == 3);
+    CHECK(!metro_nav_pivot_next(&nav));
+    CHECK(metro_nav_pivot(&nav) == 3);
+}
+
 static void test_selection_and_window_move(void)
 {
     metro_nav_t nav;
@@ -309,6 +342,7 @@ int main(void)
     test_max_pivots_is_respected();
     test_pop_to_root();
     test_pivot_no_wrap();
+    test_pivot_set();
     test_selection_and_window_move();
     test_selection_empty_list();
     test_selection_remembered_per_pivot();

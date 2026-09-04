@@ -293,6 +293,26 @@ void metro_draw_header(const char *page_title)
      * por encima del texto. */
     int clock_x = LCD_WIDTH - 40;
     int status = audio_status();
+    bool show_lock = button_hold();
+    bool show_transport = (status & (AUDIO_STATUS_PAUSE | AUDIO_STATUS_PLAY)) != 0;
+    /* moonlit (D-076): batería siempre presente, es el limite mas a la
+     * derecha de todos -- arranca aqui el minimo de la izquierda del
+     * lado derecho, igual que si fuera el unico elemento. */
+    int right_edge = LCD_WIDTH - 4 - METRO_BATTERY_NUB_W - METRO_BATTERY_W;
+
+    if (now != NULL)
+    {
+        lcd_setfont(metro_font_id(MFONT_LABEL));
+        snprintf(timebuf, sizeof(timebuf), "%02d:%02d", now->tm_hour, now->tm_min);
+        lcd_getstringsize((const unsigned char *)timebuf, &w, &h);
+        clock_x = LCD_WIDTH - 40 - w;
+        if (clock_x < right_edge)
+            right_edge = clock_x;
+    }
+    if (show_transport && clock_x - 6 - METRO_WIDGETS_ICON_SIZE < right_edge)
+        right_edge = clock_x - 6 - METRO_WIDGETS_ICON_SIZE;
+    if (show_lock && clock_x - 6 - 2 * METRO_WIDGETS_ICON_SIZE - 4 < right_edge)
+        right_edge = clock_x - 6 - 2 * METRO_WIDGETS_ICON_SIZE - 4;
 
     /* moonlit (D-011, M4): barra de estado propia, surface_container_lowest
      * (D-028) -- antes se leia directo sobre el fondo plano de la
@@ -306,24 +326,27 @@ void metro_draw_header(const char *page_title)
      * dibuja su propia cabecera de marca de 40px (metro_screen_hub.c)
      * y por eso NO quiere el creciente repetido aqui. Con titulo, el
      * texto ocupa el mismo lugar de siempre (sin tocar el eje
-     * METRO_DRAW_LEFT_X del que dependen pivots/filas/CONTINUUM). */
+     * METRO_DRAW_LEFT_X del que dependen pivots/filas/CONTINUUM).
+     * moonlit (D-076): el titulo queda DELIMITADO a la zona entre el
+     * margen izquierdo y right_edge (calculado arriba a partir de los
+     * elementos realmente presentes), con un hueco minimo de 8px --
+     * antes se dibujaba sin recorte y un titulo largo podia chocar con
+     * el reloj/candado/transporte. moonlit_marquee_draw() ya cae en
+     * metro_draw_text_clipped() si cabe (el caso comun, sin cambio
+     * visible) y solo desplaza bajo la misma puerta de energia de
+     * D-067 cuando de verdad desborda. */
     if (page_title != NULL && page_title[0] == '\0')
         moonlit_logo_draw_crescent(MOONLIT_LOGO_CRESCENT_SIZE_16, METRO_DRAW_LEFT_X,
                                    (METRO_HEADER_HEIGHT - MOONLIT_LOGO_CRESCENT_SIZE_16) / 2,
                                    metro_color_accent());
     else if (page_title != NULL)
-        metro_draw_text(MFONT_LABEL, METRO_DRAW_LEFT_X, METRO_HEADER_TEXT_Y, page_title,
-                         metro_color_secondary());
+        moonlit_marquee_draw(MOONLIT_MARQUEE_HEADER, MFONT_LABEL, METRO_DRAW_LEFT_X,
+                             right_edge - 8 - METRO_DRAW_LEFT_X, METRO_HEADER_TEXT_Y,
+                             page_title, metro_color_secondary());
 
     if (now != NULL)
-    {
-        lcd_setfont(metro_font_id(MFONT_LABEL));
-        snprintf(timebuf, sizeof(timebuf), "%02d:%02d", now->tm_hour, now->tm_min);
-        lcd_getstringsize((const unsigned char *)timebuf, &w, &h);
-        clock_x = LCD_WIDTH - 40 - w;
         metro_draw_text(MFONT_LABEL, clock_x, METRO_HEADER_TEXT_Y, timebuf,
                          metro_color_secondary());
-    }
 
     /* R5-F4 (M-084): hay música (sonando o en pausa) -> glifo a la
      * izquierda del reloj, misma asimetría de color de M-073: play en
@@ -335,7 +358,7 @@ void metro_draw_header(const char *page_title)
      * es sondeo, se lee aqui en cada dibujo), y hasta ahora moonlit no
      * lo reflejaba en ningun lado: se podia tener el aparato bloqueado
      * sin una sola pista en pantalla. */
-    if (button_hold())
+    if (show_lock)
         metro_widgets_draw_icon(MOONLIT_ICON_LOCK,
                                  clock_x - 6 - 2 * METRO_WIDGETS_ICON_SIZE - 4,
                                  header_icon_y(MOONLIT_ICON_LOCK),

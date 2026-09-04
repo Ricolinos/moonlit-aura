@@ -67,6 +67,14 @@ bool moonlit_marquee_draw(enum moonlit_marquee_slot slot,
                           enum metro_font_role role, int clip_x, int clip_w,
                           int y, const char *text, unsigned color)
 {
+    return moonlit_marquee_draw_offset(slot, role, clip_x, clip_w, y, text, color, 0);
+}
+
+bool moonlit_marquee_draw_offset(enum moonlit_marquee_slot slot,
+                                 enum metro_font_role role, int clip_x, int clip_w,
+                                 int y, const char *text, unsigned color,
+                                 long phase_ms)
+{
     struct marquee_state *st;
     int text_w, span, offset;
     long elapsed_ms;
@@ -102,7 +110,7 @@ bool moonlit_marquee_draw(enum moonlit_marquee_slot slot,
     }
 
     span = text_w + MOONLIT_MOTION_MARQUEE_LOOP_GAP_PX;
-    elapsed_ms = (current_tick - st->since) * 1000L / HZ;
+    elapsed_ms = (current_tick - st->since) * 1000L / HZ + phase_ms;
     offset = moonlit_marquee_offset_px(elapsed_ms, span,
                                         MOONLIT_MOTION_MARQUEE_STATIC_MS,
                                         MOONLIT_MOTION_MARQUEE_SCROLL_MS);

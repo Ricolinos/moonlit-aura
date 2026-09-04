@@ -20,6 +20,8 @@
 #ifndef METRO_PAGE_H
 #define METRO_PAGE_H
 
+#include <stdbool.h>
+
 #include "lcd.h" /* fb_data, R2-F2/DD-7 -- struct metro_pivot's get_tile() */
 #include "metro_lang.h"
 
@@ -86,6 +88,19 @@ struct metro_pivot {
      * actively wrong advice if it said "sincroniza con Aura Studio" --
      * sets this to its own lang id instead. */
     enum metro_lang_id empty_message;
+
+    /* moonlit (D-077): appended at the end, same reasoning as tile_cols/
+     * get_tile/empty_message above -- defaults to false, "browsable like
+     * any other pivot", the behaviour every pivot had before. true marks
+     * a pivot that is never actually RENDERED as a list: the instant the
+     * cursor lands on it (an initial push, or metro_nav_pivot_prev()
+     * stepping down onto it from pivot 1), metro_screen_list.c calls its
+     * on_select(ctx, 0) right away instead of drawing count()/get_row().
+     * Built for Marea (music_pivots[0]): "Música entra directo a Marea"
+     * without a special case in metro_screen_hub.c -- the pivot's
+     * on_select already knows how to push moonlit_screen_marea_push(),
+     * this just fires it automatically instead of waiting for SELECT. */
+    bool is_launcher;
 };
 
 struct metro_page {

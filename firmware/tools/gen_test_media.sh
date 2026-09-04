@@ -246,6 +246,16 @@ gen_track "Journey’s Edge" "Don’t Stop — “Live”…" "Rock" 1 "Believin
 gen_track "Journey’s Edge" "Don’t Stop — “Live”…" "Rock" 2 "Any Way You Want It" 195
 gen_track "Journey’s Edge" "Don’t Stop — “Live”…" "Rock" 3 "Wheel ♪ in the Sky" 230
 
+# moonlit (D-076, D-078): nombre de artista/album/pista deliberadamente
+# largo -- ejercita la ceja delimitada de metro_draw_header() (el
+# titulo dinamico de "canciones de este artista"/"de este album" es
+# justamente este nombre) con candado + transporte + reloj presentes a
+# la vez, el caso de MENOS espacio disponible para el titulo; la pista
+# tambien sirve para el titulo del panel de Marea (D-078).
+gen_track "Fundacion Panoramica de Instrumentacion Sinfonica Extendida" \
+  "Sinfonia Numero Catorce en Sostenido Menor, Movimiento Primero" \
+  "Classical" 1 "Obertura interminable para probar el desborde de texto" 300
+
 # R2-F1/DD-2: near-white cover art, worst-case contrast fixture for
 # Now Playing's semi-transparent text plate (METRO_NP_BG_ALPHA256,
 # metro_screen_nowplaying.c) -- the palest fixture that ships, on

@@ -214,6 +214,16 @@ metro_nav_t *metro_screen_nav(void)
     return &s_nav;
 }
 
+/* moonlit (D-077): pivot 0 de la pagina que se acaba de mostrar (recien
+ * empujada, o revelada por un metro_nav_pivot_prev() que aterrizo ahi)
+ * es un "launcher" -- no se dibuja nunca, se dispara solo. Ver el
+ * comentario de is_launcher en metro_page.h. */
+static void maybe_auto_launch_pivot_zero(const struct metro_page *page)
+{
+    if (page->npivots > 0 && page->pivots[0].is_launcher)
+        page->pivots[0].on_select(page->pivots[0].ctx, 0);
+}
+
 bool metro_screen_list_push(const struct metro_page *page)
 {
     if (!metro_nav_push(&s_nav, page->npivots))
@@ -231,6 +241,12 @@ bool metro_screen_list_push(const struct metro_page *page)
 
     page_stack[metro_nav_depth(&s_nav) - 1] = page;
     s_feather_pending = true;
+
+    /* moonlit (D-077): metro_nav_push() siempre arranca en pivot 0
+     * (metro_nav.h) -- "Música entra directo a Marea" es exactamente
+     * esto para music_page, sin que metro_screen_hub.c necesite saber
+     * que Marea existe. */
+    maybe_auto_launch_pivot_zero(page);
     return true;
 }
 
@@ -424,7 +440,14 @@ void metro_screen_list_handle(int action, int steps)
             break;
         case MACT_PIVOT_PREV:
             moonlit_marquee_reset(); /* D-067 addendum */
-            metro_nav_pivot_prev(&s_nav);
+            if (metro_nav_pivot_prev(&s_nav))
+                /* moonlit (D-077): "desde el primer pivote de lista LEFT
+                 * vuelve a Marea" -- pivot 0 de music_page es un
+                 * launcher (nunca se dibuja), asi que aterrizar ahi lo
+                 * dispara en vez de mostrarlo. En cualquier otra pagina
+                 * multi-pivote pivots[0].is_launcher es false (el valor
+                 * por defecto) y esto no hace nada, F.1 sigue intacto. */
+                maybe_auto_launch_pivot_zero(page);
             break;
         case MACT_PIVOT_NEXT:
             moonlit_marquee_reset();

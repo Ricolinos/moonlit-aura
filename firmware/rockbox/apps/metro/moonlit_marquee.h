@@ -53,7 +53,9 @@ enum moonlit_marquee_slot {
     MOONLIT_MARQUEE_NP_ARTIST,
     MOONLIT_MARQUEE_NP_ALBUM,
     MOONLIT_MARQUEE_MAREA,     /* titulo del panel de Marea */
+    MOONLIT_MARQUEE_MAREA_SUBTITLE, /* moonlit (D-078): artista/album del panel de Marea */
     MOONLIT_MARQUEE_ABOUT,     /* fila seleccionada de "Acerca de" */
+    MOONLIT_MARQUEE_HEADER,    /* moonlit (D-076): titulo de la ceja */
     MOONLIT_MARQUEE_COUNT
 };
 
@@ -77,6 +79,21 @@ int moonlit_marquee_offset_px(long elapsed_ms, int span_px,
 bool moonlit_marquee_draw(enum moonlit_marquee_slot slot,
                           enum metro_font_role role, int clip_x, int clip_w,
                           int y, const char *text, unsigned color);
+
+/* moonlit (D-078): igual que moonlit_marquee_draw(), pero el ciclo de
+ * ESTA ranura arranca `phase_ms` adelantado -- el reloj de la ranura
+ * (`since`) no se toca, solo se suma al tiempo transcurrido antes de
+ * calcular el desplazamiento, asi que dos ranuras con el mismo `since`
+ * (arrancaron juntas, ej. el panel de Marea) quedan en puntos distintos
+ * del ciclo sin coordinarse entre si. Panel de Marea: el subtitulo pasa
+ * MOONLIT_MOTION_MARQUEE_STATIC_MS + MOONLIT_MOTION_MARQUEE_SCROLL_MS
+ * (el ciclo completo) entre 2 para que su tramo de barrido no compita
+ * con el del titulo (maestro SS E.3). moonlit_marquee_draw() es
+ * exactamente esta funcion con phase_ms=0. */
+bool moonlit_marquee_draw_offset(enum moonlit_marquee_slot slot,
+                                 enum metro_font_role role, int clip_x, int clip_w,
+                                 int y, const char *text, unsigned color,
+                                 long phase_ms);
 
 /* true si ALGUNA ranura quedo desplazando en el ultimo dibujo -- la
  * puerta que metro_main.c consulta para bajar su espera a HZ/20 y

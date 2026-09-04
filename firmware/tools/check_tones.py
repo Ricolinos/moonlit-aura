@@ -40,6 +40,18 @@ Uso:
       arriba que la caja de mayusculas. Es esperado: no "corrijas" el
       codigo para que la herramienta de 0.0 -- la tolerancia de 1 px
       existe justo para eso.
+
+  check_tones.py --align <captura.png> --title-gap X0,W
+      moonlit (D-076): ademas de la alineacion de arriba, exige que la
+      banda de columnas [X0, X0+W) -- el hueco minimo de 8 px entre el
+      titulo delimitado y el elemento mas a la izquierda del lado
+      derecho, ver metro_draw_header() -- no tenga NI UN pixel de
+      tinta. No intenta adivinar cual grupo es "el titulo" (una
+      marquesina en pleno barrido puede partirse en varios grupos de
+      tinta, dos copias con el hueco de bucle entre ellas) -- basta con
+      que la banda calculada por el propio llamador este limpia para
+      probar que ningun elemento la invade. X0/W en pixeles de la
+      captura completa (no de --region).
 """
 import argparse
 import sys
@@ -122,7 +134,7 @@ def _luma(px):
     return (r * 299 + g * 587 + b * 114) // 1000
 
 
-def cmd_align(image, bar_h, tol, gap, min_w):
+def cmd_align(image, bar_h, tol, gap, min_w, title_gap=None):
     """Caja de tinta de cada grupo de columnas con tinta dentro de la barra."""
     from collections import Counter
 
@@ -138,6 +150,15 @@ def cmd_align(image, bar_h, tol, gap, min_w):
 
     def is_ink(x, y):
         return abs(_luma(px[x, y]) - bg_luma) > ALIGN_INK_DELTA
+
+    if title_gap is not None:
+        gx0, gw = title_gap
+        gx1 = min(gx0 + gw, w)
+        invaded = [x for x in range(gx0, gx1) if any(is_ink(x, y) for y in range(bar_h))]
+        if invaded:
+            die(f"tinta dentro del hueco del titulo, x={invaded[0]}..{invaded[-1]} "
+                f"(se esperaba x {gx0}..{gx1} sin tinta -- hueco minimo D-076)")
+        print(f"  hueco del titulo x {gx0}..{gx1}: sin tinta -- OK")
 
     ink_col = []
     for x in range(w):
@@ -205,6 +226,8 @@ def main():
                          help="--align: columnas en blanco que separan dos elementos (4)")
     parser.add_argument("--min-w", type=int, default=3,
                          help="--align: ancho minimo de un elemento en px (3)")
+    parser.add_argument("--title-gap", metavar="X0,W",
+                         help="--align: exige la banda [X0, X0+W) de la captura completa sin tinta (D-076)")
     parser.add_argument("--interior-dx", type=int, default=12,
                          help="--edge: distancia desde cada borde hacia el centro para el pixel 'interior' (default 12)")
     args = parser.parse_args()
@@ -225,7 +248,13 @@ def main():
         return
 
     if args.align:
-        cmd_align(img, args.bar_h, args.tol, args.gap, args.min_w)
+        title_gap = None
+        if args.title_gap:
+            parts = args.title_gap.split(",")
+            if len(parts) != 2:
+                die("--title-gap espera X0,W")
+            title_gap = tuple(int(p) for p in parts)
+        cmd_align(img, args.bar_h, args.tol, args.gap, args.min_w, title_gap)
         return
 
     region = None
