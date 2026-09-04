@@ -286,8 +286,15 @@ static int replaygain_rockbox_to_shared(int type)
 
 void metro_settings_apply_pending_shared(void)
 {
-    char buf[AURA_SHARED_SETTINGS_BUF];
-    moonlit_shared_settings_t s;
+    /* moonlit (D-082 addendum, stack_report SS E.3): estaticos, no de
+     * pila -- mismo idioma que write_marker() en metro_sync.c para el
+     * mismo problema (un buffer de E/S de una sola vez que, en pila,
+     * hacia que esta funcion superara el tope de 1024 B de apps/metro/).
+     * Solo se llama desde el hilo de UI, nunca reentrante ni concurrente
+     * con metro_settings_write_shared() (llamadas de handlers de
+     * pantalla y del arranque, siempre secuenciales). */
+    static char buf[AURA_SHARED_SETTINGS_BUF];
+    static moonlit_shared_settings_t s;
     bool touched_global = false;
     int v;
 
@@ -372,9 +379,14 @@ void metro_settings_apply_pending_shared(void)
  * misma capacidad de moonlit_shared_settings_t.unknown_lines. */
 void metro_settings_write_shared(void)
 {
-    char buf[AURA_SHARED_SETTINGS_BUF];
+    /* moonlit (D-082 addendum, stack_report SS E.3): estaticos, no de
+     * pila -- ver el comentario gemelo en metro_settings_apply_pending_
+     * shared(). Dos structs completos (`s` y `old`) mas el buffer de
+     * 1024 B en la pila hacian que esta funcion superara el tope al
+     * doble. */
+    static char buf[AURA_SHARED_SETTINGS_BUF];
     char tmp_path[sizeof(AURA_SHARED_SETTINGS_PATH) + 4];
-    moonlit_shared_settings_t s;
+    static moonlit_shared_settings_t s;
     long old_rev = 0;
     int fd, n;
     const char *word;
@@ -387,7 +399,7 @@ void metro_settings_write_shared(void)
     moonlit_shared_settings_init(&s);
     if (read_shared_settings_text(buf, sizeof(buf)) >= 0)
     {
-        moonlit_shared_settings_t old;
+        static moonlit_shared_settings_t old;
         if (moonlit_shared_settings_parse(buf, &old))
         {
             old_rev = old.rev;
