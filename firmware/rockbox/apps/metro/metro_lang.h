@@ -227,6 +227,11 @@ enum metro_lang_id {
     LANG_SETTING_LEGAL,
     LANG_LEGAL_BODY,
 
+    /* moonlit (D-071 addendum, maestro SS C): replaygain. */
+    LANG_SETTING_REPLAYGAIN,
+    LANG_REPLAYGAIN_TRACK,
+    LANG_REPLAYGAIN_ALBUM,
+
     LANG_COUNT
 };
 

@@ -3450,6 +3450,30 @@ entre pocas posiciones—, sin leer disco (la cadena vive en
 `f5-avisos-legales.png` (párrafos ajustados). Target y simulador en 0
 errores, 0 warnings nuevos; 18 suites en verde.
 
+### D-071, addendum — "ajuste de volumen" (replaygain) sí entra en la ronda
+
+Yo lo había dejado fuera leyendo "P2" en el plan hijo; la supervisora
+corrigió el alcance: **solo fecha y hora** queda fuera. Se agrega, con el
+mismo idioma visual que las demás filas de valor.
+
+Tres valores —**desactivado · por pista · por álbum**—, sobre
+`global_settings.replaygain_settings.type` + `dsp_replaygain_set_settings()`
+para que el DSP lo aplique a la pista **en curso** y no al siguiente
+arranque, más el flush de `save_global_settings_now()`.
+
+Rockbox tiene un cuarto valor, `REPLAYGAIN_SHUFFLE` ("por pista, pero
+solo cuando el aleatorio está puesto"), que **no se expone**: es una
+condición que hay que explicar para poder elegirla, y en una lista de
+tres palabras no cabe explicarla. Quien lo traiga puesto desde otro
+firmware ve la fila en "por pista", que es lo que ese valor hace la mitad
+del tiempo — y es además el predeterminado de Rockbox, así que es el
+estado en que la fila aparece de fábrica. Mismo criterio que Metro
+(M-103).
+
+Verificado en el simulador: la fila cicla `por pista` → `por álbum`
+(`f5-ajuste-volumen.png`). `.bss` sin cambio (8 467 612): la fila no
+agrega estáticas.
+
 ## D-072 — Fotos: la maestra ES el tile, y el visor se navega como se espera
 
 **(a) La rejilla lee la maestra directo.** La maestra de una foto mide

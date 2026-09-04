@@ -24,6 +24,7 @@
 #include "settings.h"
 #include "backlight.h"
 #include "ata_idle_notify.h" /* call_storage_idle_notifys() -- moonlit (D-071) */
+#include "dsp_misc.h"  /* dsp_replaygain_set_settings() -- moonlit (D-071) */
 #include "powermgmt.h" /* R3-F6/DD-10: set_sleeptimer_duration()/get_sleep_timer() */
 #include "eq.h" /* R3-F6/DD-10: dsp_eq_enable()/dsp_set_eq_coefs() */
 
@@ -353,6 +354,42 @@ static void save_global_settings_now(void)
     call_storage_idle_notifys(true);
 }
 
+/* moonlit (D-071 addendum, maestro SS C): "ajuste de volumen"
+ * (replaygain) con TRES valores -- desactivado / por pista / por album.
+ * Rockbox tiene un cuarto, REPLAYGAIN_SHUFFLE ("track shuffle"), que
+ * NO se expone: significa "por pista solo cuando el aleatorio esta
+ * puesto", una condicion que hay que explicar para poder elegirla y que
+ * en una lista de tres palabras no cabe explicar. El que no lo tenga
+ * puesto desde otro firmware ve la fila en "por pista", que es lo que
+ * REPLAYGAIN_SHUFFLE hace la mitad del tiempo. Mismo criterio que
+ * Metro (M-103). */
+static enum metro_lang_id replaygain_label(void)
+{
+    switch (global_settings.replaygain_settings.type)
+    {
+        case REPLAYGAIN_ALBUM: return LANG_REPLAYGAIN_ALBUM;
+        case REPLAYGAIN_OFF:   return LANG_VALUE_OFF;
+        default:               return LANG_REPLAYGAIN_TRACK;
+    }
+}
+
+static void cycle_replaygain(void)
+{
+    int next;
+
+    switch (global_settings.replaygain_settings.type)
+    {
+        case REPLAYGAIN_OFF:   next = REPLAYGAIN_TRACK; break;
+        case REPLAYGAIN_ALBUM: next = REPLAYGAIN_OFF;   break;
+        default:               next = REPLAYGAIN_ALBUM; break;
+    }
+    global_settings.replaygain_settings.type = next;
+    /* En vivo: el DSP lo aplica a la pista en curso, no al siguiente
+     * arranque. */
+    dsp_replaygain_set_settings(&global_settings.replaygain_settings);
+    save_global_settings_now();
+}
+
 static const char *poweroff_subtitle(void)
 {
     static char buf[16];
@@ -367,7 +404,7 @@ static const char *poweroff_subtitle(void)
 static int general_count(void *ctx)
 {
     (void)ctx;
-    return 13; /* moonlit (D-071): +3 filas (apagado, clicker, legales) */
+    return 14; /* moonlit (D-071): +4 filas (apagado, clicker, replaygain, legales) */
 }
 
 static void general_get_row(void *ctx, int index, struct metro_row *out)
@@ -440,13 +477,18 @@ static void general_get_row(void *ctx, int index, struct metro_row *out)
             out->kind = METRO_ROW_SETTING;
             break;
         case 10:
+            out->title = metro_lang_str(LANG_SETTING_REPLAYGAIN);
+            out->subtitle = metro_lang_str(replaygain_label());
+            out->kind = METRO_ROW_SETTING;
+            break;
+        case 11:
             /* GPL v2 SS3: el aviso de licencia tiene que estar a la vista
              * del usuario, no solo en el repositorio. */
             out->title = metro_lang_str(LANG_SETTING_LEGAL);
             out->subtitle = NULL;
             out->kind = METRO_ROW_NAV;
             break;
-        case 11:
+        case 12:
             /* R5 (M-090, contrato v10) / moonlit D-047: submenu con una
              * fila por familia hermana (Aura, Metro). La fila siempre
              * se ve, para que se sepa que existe la opcion; las hermanas
@@ -557,11 +599,15 @@ static void general_on_select(void *ctx, int index)
             break;
 
         case 10:
+            cycle_replaygain();
+            break;
+
+        case 11:
             metro_screen_text_show(metro_lang_str(LANG_SETTING_LEGAL),
                                     metro_lang_str(LANG_LEGAL_BODY));
             break;
 
-        case 11:
+        case 12:
             metro_screen_list_push(&switch_page);
             break;
 

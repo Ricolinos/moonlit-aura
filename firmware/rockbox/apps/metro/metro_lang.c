@@ -210,6 +210,9 @@ static const char *const strings_es[LANG_COUNT] = {
     [LANG_SETTING_POWEROFF]  = "apagado automático",
     [LANG_SETTING_CLICKER]   = "clicker",
     [LANG_SETTING_LEGAL]     = "avisos legales",
+    [LANG_SETTING_REPLAYGAIN] = "ajuste de volumen",
+    [LANG_REPLAYGAIN_TRACK]  = "por pista",
+    [LANG_REPLAYGAIN_ALBUM]  = "por álbum",
     [LANG_LEGAL_BODY] =
         "moonlit.aura es software libre.\n"
         "\n"
@@ -416,6 +419,9 @@ static const char *const strings_en[LANG_COUNT] = {
     [LANG_SETTING_POWEROFF]  = "auto power-off",
     [LANG_SETTING_CLICKER]   = "clicker",
     [LANG_SETTING_LEGAL]     = "legal notices",
+    [LANG_SETTING_REPLAYGAIN] = "volume levelling",
+    [LANG_REPLAYGAIN_TRACK]  = "per track",
+    [LANG_REPLAYGAIN_ALBUM]  = "per album",
     [LANG_LEGAL_BODY] =
         "moonlit.aura is free software.\n"
         "\n"
