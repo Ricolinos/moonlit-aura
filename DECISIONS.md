@@ -4957,6 +4957,22 @@ make_version="$VERSION"` aborta bajo `set -u` cuando `build_target.sh`
 corre **sin** `package_dist.sh` (el uso normal en desarrollo, donde nadie
 exporta `VERSION`). Corregido a `${VERSION:-}` antes de publicar.
 
+**Publicado en v0.2.2** (2026-09-04, con autorización directa del dueño
+pedida en la terminal de esta sesión), junto con los dos addenda de
+D-081. Tag `v0.2.2` sobre `18f49401`.
+
+<https://github.com/Ricolinos/moonlit-aura/releases/tag/v0.2.2>
+
+```
+checksums.txt del release v0.2.2 (BOOT-1 sigue vigente como versión de
+FUENTE -- el binario cambia una última vez porque cambió la cadena
+horneada, D-083; de aquí en adelante solo si cambian sus fuentes):
+  546fee177dd2d78e5288bfed8c52d456a98b64a474617f5b2cedbe3bcb2f7999  rockbox.zip
+  ee7d1bea805bf2f3e36c3ca6b1ad9e773a541f22b788f93b1eb671b9e7876846  rockbox.ipod
+  035e14db2be7ce093a434a2dac8fff419c64a8be84644122710e2a1850fc3a91  mks5lboot
+  c8765b1541df0640ce45dd5ad9525173bae4a21bf4b6c55292fed47a4dcfaa2c  bootloader-ipod6g.ipod
+```
+
 **Regla operativa**: quien toque `bootloader/`, `utils/mks5lboot/` o los
 bitmaps de arranque sube `firmware/BOOT_VERSION` en la misma pasada, y
 anota el `BOOT-N` nuevo en `CONTRATO-moonlit-studio.md` §B. Si no lo
