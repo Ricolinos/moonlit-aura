@@ -4754,9 +4754,35 @@ del bug M-109 después de portar el sufijo `+HOLD` de Metro a
 en D-082.
 
 Tag sugerido para cuando el dueño termine la lista de hardware:
-**`v0.2.1`**. Esta sesión no crea el tag ni el release --
-`package_dist.sh` corrió únicamente sin `--release-tag`, tal como pide
-el protocolo de la ronda (maestro §F).
+**`v0.2.1`**.
+
+**Publicado el 2026-09-04 con autorización directa del dueño** (pedida
+en la terminal de esta sesión, no por relevo de la supervisora -- un
+tag y un Release público son irreversibles y hacia afuera). Tag
+`v0.2.1` sobre `c21674f4`, árbol limpio (`.serena/` apartado durante el
+empaquetado y devuelto después, nunca comiteado ni agregado a
+`.gitignore`), `package_dist.sh --release-tag v0.2.1` con build limpio,
+`make dep` y `stack_report.py` en verde dentro del script.
+`rockbox.zip` verificado antes de publicar: `version.txt` = `v0.2.1`,
+nada más bajo `aura/` (sin fantasmas de corridas anteriores, D-075),
+las 7 fuentes cirílicas, las 6 de puntuación y las 7 primarias
+presentes. Los 7 assets exactos del contrato, sin `README.md`.
+
+<https://github.com/Ricolinos/moonlit-aura/releases/tag/v0.2.1>
+
+```
+checksums.txt del release v0.2.1 (BOOT-1 sigue vigente: fuentes de bootloader y
+mks5lboot sin cambios; el SHA del bootloader cambia solo por el RBVERSION embebido):
+  3caef31def72184501999d7d4b7d9bcd64bf812c56c766bc9d785bf1cc3d004a  rockbox.zip
+  47c96676c3af37b6a6d213dc5b8b0a2457401d7ae6f58eea95bf9c903ef3d251  rockbox.ipod
+  035e14db2be7ce093a434a2dac8fff419c64a8be84644122710e2a1850fc3a91  mks5lboot
+  252e90c0a0029280fe09731d33724e5ee9153961003b07c2344e957ece15a892  bootloader-ipod6g.ipod
+```
+
+La lista de verificación en hardware de arriba sigue **pendiente**: el
+Release se publicó antes de recorrerla, por decisión del dueño. Llega
+al iPod cuando Aura-Studio actualice su pin (`FIRMWARE_VERSION`), no
+desde este repo.
 
 **Nota para la próxima ronda que toque `.bss`.** El margen bajo el
 techo D-043 quedó en **89 472 B**, el más bajo de los cerrados hasta
