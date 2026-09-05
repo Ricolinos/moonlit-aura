@@ -4546,13 +4546,23 @@ Es la clase de defecto que D-081 no podía ver en la Fase 3: las capturas
 de entonces (hub, Ajustes, "Acerca de", Marea) son todas de cadenas
 **cortas**, de menos de doce tramos.
 
-**`METRO_TEXTSEG_BUF` 256 → 1024 y `METRO_TEXTSEG_MAX` 12 → 128**, con
+**`METRO_TEXTSEG_BUF` 256 → 2048 y `METRO_TEXTSEG_MAX` 12 → 160**, con
 los tramos en un arreglo **estático compartido** en vez de uno por pila
 — mismo invariante ya documentado para `s_textseg_buf` (solo hilo de UI,
 una llamada termina antes de que empiece la siguiente; ninguna primitiva
 de `metro_draw.c` llama a otra mientras usa los suyos, verificado). Así
 el tope generoso no cuesta pila: **quita** 96 B de marco a cada una de
-las tres y cuesta **+1 792 B de `.bss`**.
+las tres y cuesta **+3 072 B de `.bss`**.
+
+El primer intento fue 1024/128, que también entra — pero deja solo 124 B
+de margen sobre el peor caso medido (12 %), y quedarse corto **trunca en
+silencio**, que es exactamente el defecto que este bloque corrige. Metro
+midió **113 tramos / 1157 B** en su propio texto de licencias (M-118),
+más que moonlit: los avisos legales son la cadena más larga de cualquiera
+de las tres familias y no tienen por qué coincidir entre repos. Así que
+el número se **remidió aquí** (85 / 900, sin cambio) y el tope se puso
+con holgura sobre lo medido — no copiado del hermano, pero sí con su
+criterio.
 
 **Verificación.** `f5-04-ruso-completo-despues.png`: el detalle en ruso
 completo en sus tres líneas, sin nada perdido. Test de regresión nuevo
@@ -4564,6 +4574,20 @@ vez de quedarse callado. 20 suites de host: **0 fallos** (`test_textseg`
 60/60). Target y simulador: 0 errores, sin warnings nuevos. `.bss`
 **8 486 396 B**, margen **87 680 B** bajo el techo D-043.
 `stack_report.py`: OK, 5528 B (45.0 %).
+
+**Solapamiento del diálogo (M-120 de Metro): verificado, NO aplica.**
+Metro encontró que su diálogo de confirmación encimaba los tres bloques
+(pregunta de dos líneas → detalle → respuestas) y tuvo que encadenarlos
+por altura medida. Aquí se midió con las capturas, no a ojo: bandas de
+tinta del diálogo real en **español y en ruso** (el ruso usa las caras
+cirílicas, derivadas de Montserrat, con métricas distintas a Libre
+Baskerville — el riesgo propio de moonlit que Metro no tiene). Huecos
+entre bloques: pregunta → detalle **16 px** (es) / **19 px** (ru);
+detalle → respuestas **18 px** (es) / **19 px** (ru). Ninguno se toca.
+D-061 ya había fijado esta geometría para el peor caso real (pregunta de
+dos líneas, que es el tope de `draw_question_at()`, más detalle de tres,
+que es `CONFIRM_DETAIL_LINES`), y se sostiene también en ruso. No se
+cambia nada.
 
 **Alcance en lo ya publicado.** v0.2.1 salió con el tope en 12: en ruso,
 cualquier cadena de más de ~6 palabras dibujada de una sola vez sale
@@ -4916,6 +4940,22 @@ contenido pasa a ser una constante del repo, y la pantalla de arranque
 pasa a leer "moonlit - arranque BOOT-1" — que es más honesto que un hash
 del firmware, porque el bootloader no es ese firmware y sobrevive a sus
 actualizaciones.
+
+**Verificado en las dos direcciones.** (a) *Estable ante la versión del
+firmware*: dos compilaciones limpias con `VERSION` completamente distinta
+(`aaaaaaaaaa-260101` y `ffffffffff-991231`) y un empaquetado real en otro
+commit dan el **mismo** SHA-256,
+`c8765b1541df0640ce45dd5ad9525173bae4a21bf4b6c55292fed47a4dcfaa2c`, y el
+binario lleva `BOOT-1` en vez del hash del firmware. (b) *Sensible a lo
+que debe serlo*: poniendo `BOOT-TEST` en `firmware/BOOT_VERSION` el hash
+**sí** cambia (`88c36613…`) — el mecanismo no es "el hash nunca cambia",
+es "cambia solo cuando cambia lo suyo". Al restaurar `BOOT-1` vuelve
+exactamente el hash de (a).
+
+Esa segunda prueba encontró además un defecto propio: `local
+make_version="$VERSION"` aborta bajo `set -u` cuando `build_target.sh`
+corre **sin** `package_dist.sh` (el uso normal en desarrollo, donde nadie
+exporta `VERSION`). Corregido a `${VERSION:-}` antes de publicar.
 
 **Regla operativa**: quien toque `bootloader/`, `utils/mks5lboot/` o los
 bitmaps de arranque sube `firmware/BOOT_VERSION` en la misma pasada, y

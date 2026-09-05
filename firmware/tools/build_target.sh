@@ -95,7 +95,10 @@ build_one() {
   # version es PROPIA (firmware/BOOT_VERSION, se sube a mano al tocar
   # bootloader/ -- CONTRATO-moonlit-studio.md SS B, "BOOT-N"), asi el
   # binario solo cambia cuando cambian sus fuentes.
-  local make_version="$VERSION"
+  # ${VERSION:-}: build_target.sh corre tambien SIN package_dist.sh
+  # (el uso normal en desarrollo), y `set -u` aborta con una variable
+  # sin definir.
+  local make_version="${VERSION:-}"
   if [[ "$type" == "B" ]]; then
     make_version="$(cat "$ROOT_DIR/firmware/BOOT_VERSION")"
     echo "==> Version del bootloader: $make_version (D-083, firmware/BOOT_VERSION)"

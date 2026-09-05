@@ -83,6 +83,14 @@ void metro_draw_clear(void)
  * recortaba. Medido sobre las seis tablas de metro_lang.c, el peor
  * caso real es de 85 tramos y 900 B (el cuerpo de "Acerca de" en
  * ruso, que ademas llega ya partido en lineas por metro_screen_text.c).
+ * El tope se pone en 2048/160, no en 1024/128, por holgura: 1024 dejaba
+ * solo 124 B de margen sobre ese peor caso (12 %), y el modo de fallo de
+ * quedarse corto es TRUNCAR EN SILENCIO -- que es justo el defecto que
+ * este bloque corrige. Metro midio 113 tramos / 1157 B en su propio
+ * texto de licencias (M-118), mas que moonlit: los avisos legales son la
+ * cadena mas larga de cualquiera de las tres familias y no tienen por
+ * que coincidir entre repos, asi que el numero se mide aqui y el tope se
+ * pone con margen sobre lo medido, no copiado del hermano.
  *
  * Los tramos pasan a un arreglo ESTATICO compartido, igual que
  * s_textseg_buf y por la misma razon e invariante (solo hilo de UI, una
@@ -90,8 +98,8 @@ void metro_draw_clear(void)
  * de este archivo llama a otra mientras usa los suyos). Asi el tope
  * generoso no cuesta pila -- de hecho QUITA 96 B de marco a cada una de
  * las tres -- sino 1 792 B de .bss. */
-#define METRO_TEXTSEG_BUF 1024
-#define METRO_TEXTSEG_MAX 128
+#define METRO_TEXTSEG_BUF 2048
+#define METRO_TEXTSEG_MAX 160
 static char s_textseg_buf[METRO_TEXTSEG_BUF];
 static struct moonlit_textseg s_textsegs[METRO_TEXTSEG_MAX];
 
