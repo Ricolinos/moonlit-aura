@@ -4631,12 +4631,27 @@ interfaz en ruso, la cabecera de pivotes se encima en toda pantalla con
 más de un pivote. No afecta a los otros cinco idiomas (sus nombres de
 pivote son latinos y la fuente primaria los mide bien).
 
-**Publicación: agrupada, no inmediata.** Se le presentaron al dueño las
-dos opciones (un `v0.2.3` chico ahora, o esperar) y decidió —vía la
-sesión supervisora— **agruparlo con lo que salga de la verificación en
-hardware**. Queda corregido en `main` desde `acc7e81e`, sin tag: el
-próximo release lo lleva junto con lo que aparezca del recorrido en el
-iPod.
+**Publicado en v0.2.3** (2026-09-05, por orden directa del dueño en la
+terminal de esta sesión). Primero se decidió agruparlo con la
+verificación en hardware; después el dueño pidió publicarlo ya. Tag
+`v0.2.3` sobre `e483eb60`.
+
+<https://github.com/Ricolinos/moonlit-aura/releases/tag/v0.2.3>
+
+```
+checksums.txt del release v0.2.3 (BOOT-1 vigente):
+  5eada8c8778b413703f1ae0e976bfef03610e757410923d84f5747ca04b78973  rockbox.zip
+  bd00eec065abae67288157dc94c866bdcf738b4a97c7cc90f366323a1297e768  rockbox.ipod
+  035e14db2be7ce093a434a2dac8fff419c64a8be84644122710e2a1850fc3a91  mks5lboot
+  c8765b1541df0640ce45dd5ad9525173bae4a21bf4b6c55292fed47a4dcfaa2c  bootloader-ipod6g.ipod
+```
+
+**D-083, confirmada entre dos releases reales.** El
+`bootloader-ipod6g.ipod` de v0.2.3 es **byte por byte el mismo** que el
+de v0.2.2 (`c8765b15…`) — es la primera comprobación release-contra-
+release del mecanismo, la que las pruebas sintéticas de D-083 solo
+podían anticipar. Studio (ST-143) no debería ofrecer "Actualizar el
+arranque" en esta actualización.
 
 ## D-082 — Visor de fotos responsivo: la misma fila de REPEAT que faltaba en Metro, más debounce
 
