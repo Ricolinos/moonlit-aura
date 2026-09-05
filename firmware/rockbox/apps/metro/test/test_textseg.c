@@ -242,6 +242,49 @@ static void test_display_sin_punct_pero_con_cirilico(void)
     CHECK(segs[0].kind == MOONLIT_TEXTSEG_CYRILLIC);
 }
 
+
+/* moonlit (D-081, addendum 2): una frase RUSA entera cabe en el tope de
+ * tramos que usa metro_draw.c. Un espacio ASCII es PRIMARY y parte la
+ * corrida cirilica, asi que el ruso gasta ~2 tramos por palabra: con el
+ * tope viejo de 12 esta frase -- el detalle del dialogo de biblioteca,
+ * la cadena mas larga que se dibuja de una sola vez -- se cortaba en
+ * "это может занять несколько минут, в " y el resto NO se dibujaba, en
+ * silencio. Este test fija el contrato que metro_draw.c necesita: con
+ * su tope actual, lo que sale reconstruye la cadena COMPLETA. */
+#define TEXTSEG_MAX_DE_METRO_DRAW 128
+
+static void test_frase_rusa_larga_no_se_trunca(void)
+{
+    static const char ru[] =
+        "\xd1\x8d\xd1\x82\xd0\xbe\x20\xd0\xbc\xd0\xbe\xd0\xb6\xd0\xb5\xd1"
+        "\x82\x20\xd0\xb7\xd0\xb0\xd0\xbd\xd1\x8f\xd1\x82\xd1\x8c\x20\xd0"
+        "\xbd\xd0\xb5\xd1\x81\xd0\xba\xd0\xbe\xd0\xbb\xd1\x8c\xd0\xba\xd0"
+        "\xbe\x20\xd0\xbc\xd0\xb8\xd0\xbd\xd1\x83\xd1\x82\x2c\x20\xd0\xb2"
+        "\x20\xd0\xb7\xd0\xb0\xd0\xb2\xd0\xb8\xd1\x81\xd0\xb8\xd0\xbc\xd0"
+        "\xbe\xd1\x81\xd1\x82\xd0\xb8\x20\xd0\xbe\xd1\x82\x20\xd0\xba\xd0"
+        "\xbe\xd0\xbb\xd0\xb8\xd1\x87\xd0\xb5\xd1\x81\xd1\x82\xd0\xb2\xd0"
+        "\xb0\x20\xd1\x84\xd0\xb0\xd0\xb9\xd0\xbb\xd0\xbe\xd0\xb2\x20\xd0"
+        "\xb8\x20\xd1\x81\xd0\xbe\xd1\x81\xd1\x82\xd0\xbe\xd1\x8f\xd0\xbd"
+        "\xd0\xb8\xd1\x8f\x20\xd0\xb4\xd0\xb8\xd1\x81\xd0\xba\xd0\xb0\x2e";
+    char buf[1024];
+    struct moonlit_textseg segs[TEXTSEG_MAX_DE_METRO_DRAW];
+    char rearmado[1024];
+    int n, i;
+
+    n = moonlit_textseg_build(ru, true, true, buf, sizeof(buf),
+                              segs, TEXTSEG_MAX_DE_METRO_DRAW);
+    /* Que de verdad necesita mas de los 12 de antes -- si algun dia la
+     * segmentacion deja de partir en cada espacio, este numero baja y
+     * el test lo dice en vez de quedarse callado. */
+    CHECK(n > 12);
+    CHECK(n < TEXTSEG_MAX_DE_METRO_DRAW);
+
+    rearmado[0] = '\0';
+    for (i = 0; i < n; i++)
+        strcat(rearmado, segs[i].text);
+    CHECK(strcmp(rearmado, ru) == 0);
+}
+
 int main(void)
 {
     test_sin_fuente_de_puntuacion();
@@ -255,6 +298,7 @@ int main(void)
     test_cirilico_y_latin_alternan();
     test_sin_fuente_cirilica_no_clasifica_cyrillic();
     test_display_sin_punct_pero_con_cirilico();
+    test_frase_rusa_larga_no_se_trunca();
 
     printf("test_textseg: %d/%d checks OK\n", checks - failures, checks);
     if (failures)

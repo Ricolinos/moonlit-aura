@@ -68,9 +68,32 @@ void metro_draw_clear(void)
  * hilo de UI (el constructor de maestras nunca dibuja, D-059), y una
  * llamada termina de usar el buffer antes de que empiece la siguiente
  * -- lcd_putsxy() no cede la CPU. */
-#define METRO_TEXTSEG_BUF 256
-#define METRO_TEXTSEG_MAX 12
+/* moonlit (D-081, addendum 2): 12 tramos NO alcanzaban para el ruso, y
+ * el resultado era texto TRUNCADO en pantalla, en silencio.
+ *
+ * Un espacio ASCII es PRIMARY y parte la corrida cirilica, asi que una
+ * frase en ruso gasta ~2 tramos por palabra: "это может занять
+ * несколько минут, в зависимости от количества файлов и состояния
+ * диска." (el detalle del dialogo de biblioteca) necesita **26**. Con
+ * el tope en 12, moonlit_textseg_build() cortaba en el tramo 12 y
+ * metro_draw_text() dibujaba solo hasta ahi -- se veia "это может
+ * занять несколько минут, в " y el resto desaparecia. La MEDIDA salia
+ * corta por lo mismo, asi que el bucle de corte de linea de
+ * metro_widgets.c aceptaba lineas larguisimas que la pantalla luego
+ * recortaba. Medido sobre las seis tablas de metro_lang.c, el peor
+ * caso real es de 85 tramos y 900 B (el cuerpo de "Acerca de" en
+ * ruso, que ademas llega ya partido en lineas por metro_screen_text.c).
+ *
+ * Los tramos pasan a un arreglo ESTATICO compartido, igual que
+ * s_textseg_buf y por la misma razon e invariante (solo hilo de UI, una
+ * llamada termina antes de que empiece la siguiente; ninguna primitiva
+ * de este archivo llama a otra mientras usa los suyos). Asi el tope
+ * generoso no cuesta pila -- de hecho QUITA 96 B de marco a cada una de
+ * las tres -- sino 1 792 B de .bss. */
+#define METRO_TEXTSEG_BUF 1024
+#define METRO_TEXTSEG_MAX 128
 static char s_textseg_buf[METRO_TEXTSEG_BUF];
+static struct moonlit_textseg s_textsegs[METRO_TEXTSEG_MAX];
 
 static int build_segs(enum metro_font_role role, const char *str,
                       struct moonlit_textseg *segs)
@@ -101,7 +124,7 @@ static int seg_font_id(enum metro_font_role role,
 void metro_draw_text_size(enum metro_font_role role, const char *str,
                            int *w, int *h)
 {
-    struct moonlit_textseg segs[METRO_TEXTSEG_MAX];
+    struct moonlit_textseg *segs = s_textsegs;
     int n = build_segs(role, str, segs);
     int total = 0, tallest = 0, i;
 
@@ -127,6 +150,16 @@ void metro_draw_text_size(enum metro_font_role role, const char *str,
         lcd_getstringsize((const unsigned char *)"Ag", &sw, &tallest);
     }
 
+    /* moonlit (D-081, addendum 2; Metro M-117): la fuente del viewport
+     * queda en la del ULTIMO tramo medido, que depende del CONTENIDO de
+     * la cadena -- un titulo que termina en cirilico deja puesta la
+     * cirilica. Un llamador que despues midiera con lcd_getstringsize()
+     * a pelo (varios lo hacen, midiendo prefijos dentro de un bucle de
+     * corte de linea) heredaba esa fuente sin saberlo. Se restaura la
+     * primaria del rol al salir: el estado que queda es SIEMPRE el
+     * mismo, no una funcion del texto que se acaba de medir. */
+    lcd_setfont(metro_font_id(role));
+
     if (w)
         *w = total;
     if (h)
@@ -144,7 +177,7 @@ int metro_draw_text_width(enum metro_font_role role, const char *str)
 void metro_draw_text(enum metro_font_role role, int x, int y,
                       const char *str, unsigned color)
 {
-    struct moonlit_textseg segs[METRO_TEXTSEG_MAX];
+    struct moonlit_textseg *segs = s_textsegs;
     int n = build_segs(role, str, segs);
     int cx = x, i;
 
@@ -162,6 +195,12 @@ void metro_draw_text(enum metro_font_role role, int x, int y,
             cx += w;
         }
     }
+    /* moonlit (D-081, addendum 2): ver metro_draw_text_size(). Aqui el
+     * riesgo es mas viejo que la conversion de esta ronda -- existe
+     * desde D-074, para cualquier bucle que dibuje una linea y mida la
+     * siguiente (metro_widgets.c lo hace). metro_draw_text_clipped() no
+     * lo necesita: trabaja sobre su PROPIO viewport y lo restaura. */
+    lcd_setfont(metro_font_id(role));
 }
 
 void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
@@ -175,7 +214,7 @@ void metro_draw_text_clipped(enum metro_font_role role, int clip_x, int clip_w,
 {
     struct viewport vp;
     struct viewport *old_vp;
-    struct moonlit_textseg segs[METRO_TEXTSEG_MAX];
+    struct moonlit_textseg *segs = s_textsegs;
     int n, cx, i;
 
     if (clip_w <= 0)

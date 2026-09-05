@@ -58,8 +58,9 @@ static int wrap(const char *body, int max_w)
     int n = 0;
     const char *p = body;
 
-    lcd_setfont(metro_font_id(MFONT_LIST));
-
+    /* moonlit (D-081, addendum 2): ya no hace falta fijar la fuente
+     * aqui -- todo lo que este bucle mide pasa por
+     * metro_draw_text_width(), que elige la fuente por tramo. */
     while (*p && n < TEXT_MAX_LINES)
     {
         const char *nl = strchr(p, '\n');
@@ -87,7 +88,11 @@ static int wrap(const char *body, int max_w)
                 {
                     memcpy(s_lines[n], p + off, i);
                     s_lines[n][i] = '\0';
-                    lcd_getstringsize((const unsigned char *)s_lines[n], &w, NULL);
+                    /* moonlit (D-081, addendum 2): por tramos -- el
+                     * cuerpo de "Acerca de"/licencias tambien se
+                     * traduce (D-080), y en ruso el corte de linea
+                     * medido contra la primaria queda mal. */
+                    w = metro_draw_text_width(MFONT_LIST, s_lines[n]);
                     if (w > max_w)
                         break;
                     cut = i;

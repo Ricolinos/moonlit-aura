@@ -69,7 +69,10 @@ static void draw_question_at(const char *question, int qy)
             break;
         memcpy(head, question, n);
         head[n] = '\0';
-        lcd_getstringsize((const unsigned char *)head, &w, NULL);
+        /* moonlit (D-081, addendum 2): por tramos, igual que la medida
+         * de arriba -- este prefijo tambien puede traer cirilico, y
+         * ademas asi no depende de que fuente quedo puesta. */
+        w = metro_draw_text_width(MFONT_TITLE, head);
         if (w > max_w)
             break;
         cut = n;
@@ -127,7 +130,10 @@ static void draw_detail_at(const char *detail, int dy)
         {
             memcpy(line, p, len);
             line[len] = '\0';
-            lcd_getstringsize((const unsigned char *)line, &w, NULL);
+            /* moonlit (D-081, addendum 2): por tramos -- el bucle
+             * dibuja una linea y mide la siguiente, asi que medir a
+             * pelo heredaba la fuente del ultimo tramo dibujado. */
+            w = metro_draw_text_width(MFONT_BODY, line);
             if (w <= max_w)
             {
                 metro_draw_text(MFONT_BODY, CONFIRM_QUESTION_X, y, line,
@@ -144,7 +150,10 @@ static void draw_detail_at(const char *detail, int dy)
                 break;
             memcpy(line, p, n);
             line[n] = '\0';
-            lcd_getstringsize((const unsigned char *)line, &w, NULL);
+            /* moonlit (D-081, addendum 2): por tramos -- el bucle
+             * dibuja una linea y mide la siguiente, asi que medir a
+             * pelo heredaba la fuente del ultimo tramo dibujado. */
+            w = metro_draw_text_width(MFONT_BODY, line);
             if (w > max_w)
                 break;
             cut = n;

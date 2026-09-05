@@ -4494,6 +4494,85 @@ elige). Las 20 suites de host: **0 fallos**. Target y simulador: 0
 errores, sin warnings nuevos. `.bss` **sin cambio** (8 484 604 B,
 margen 89 472 B); `text` +32 B. `stack_report.py`: OK, 5528 B (45.0 %).
 
+### D-081, addendum 2 — la fuente que quedaba puesta (Metro M-117), y el tope de tramos que truncaba el ruso EN SILENCIO
+
+**Encargo** (M-117 de Metro, vía la supervisora): `metro_draw_text_size()`
+deja la fuente del viewport en la del ÚLTIMO tramo medido; un llamador
+que después midiera con `lcd_getstringsize()` a pelo hereda esa fuente
+sin saberlo. Revisar los nueve sitios convertidos en el addendum 1.
+
+**Sí aplicaba, y en dos lugares.** Uno lo introduje yo al convertir solo
+la primera medición de `draw_question_at()` (`metro_widgets.c`): el
+`lcd_getstringsize()` del bucle de corte, más abajo, dependía del
+`lcd_setfont()` que quité. El otro es **más viejo que esta ronda**:
+`draw_detail_at()` dibuja una línea y mide la siguiente dentro del mismo
+bucle, así que heredaba la fuente del último tramo dibujado desde D-074
+(una línea terminada en comilla curva dejaba puesta la de puntuación).
+
+**Corregido en la primitiva, no solo en los llamadores.**
+`metro_draw_text_size()` y `metro_draw_text()` restauran la fuente
+PRIMARIA del rol al salir: el estado que queda es siempre el mismo, no
+una función del texto que se acaba de dibujar. `metro_draw_text_clipped()`
+no lo necesita — trabaja sobre su propio viewport y lo restaura.
+Además, los tres bucles que medían a mano (`draw_question_at()`,
+`draw_detail_at()` y el `wrap()` de `metro_screen_text.c`, que parte el
+cuerpo de "Acerca de"/licencias) pasan a `metro_draw_text_width()`:
+medían cirílico contra la fuente primaria, que es el defecto original de
+todo este addendum.
+
+**Y verificando eso apareció algo bastante peor, ya publicado en
+v0.2.1.** Al mirar el diálogo de "actualizar biblioteca" en ruso, al
+detalle le faltaba un pedazo **en medio**: se leía "это может занять
+несколько минут, в" y luego "и состояния диска.", sin "зависимости от
+количества файлов". Primero descarté que fuera mío: con mis cambios
+guardados en `git stash` y el build reconstruido, la captura salió
+**idéntica** — defecto preexistente de D-080/D-081, no una regresión de
+esta pasada (`f5-03-ruso-truncado-antes.png`).
+
+**Causa, medida con el módulo puro en el host, no deducida.** Un espacio
+ASCII se clasifica PRIMARY y **parte la corrida cirílica**, así que una
+frase en ruso gasta ~2 tramos por palabra. Esa frase necesita **26
+tramos**; `METRO_TEXTSEG_MAX` valía **12**. `moonlit_textseg_build()`
+cortaba en el tramo 12 y `metro_draw_text()` dibujaba solo hasta ahí:
+exactamente `"это может занять несколько минут, в "`, que es lo que se
+veía. La medición salía corta por lo mismo, así que el bucle de corte de
+línea aceptaba una línea larguísima que la pantalla recortaba después —
+por eso parecía que faltaba el medio y no el final. Barriendo las seis
+tablas de `metro_lang.c`, el peor caso real es **85 tramos / 900 B** (el
+cuerpo de "Acerca de" en ruso, que de todos modos llega ya partido en
+líneas).
+
+Es la clase de defecto que D-081 no podía ver en la Fase 3: las capturas
+de entonces (hub, Ajustes, "Acerca de", Marea) son todas de cadenas
+**cortas**, de menos de doce tramos.
+
+**`METRO_TEXTSEG_BUF` 256 → 1024 y `METRO_TEXTSEG_MAX` 12 → 128**, con
+los tramos en un arreglo **estático compartido** en vez de uno por pila
+— mismo invariante ya documentado para `s_textseg_buf` (solo hilo de UI,
+una llamada termina antes de que empiece la siguiente; ninguna primitiva
+de `metro_draw.c` llama a otra mientras usa los suyos, verificado). Así
+el tope generoso no cuesta pila: **quita** 96 B de marco a cada una de
+las tres y cuesta **+1 792 B de `.bss`**.
+
+**Verificación.** `f5-04-ruso-completo-despues.png`: el detalle en ruso
+completo en sus tres líneas, sin nada perdido. Test de regresión nuevo
+en `test_textseg.c` (`test_frase_rusa_larga_no_se_trunca`) que fija el
+contrato que `metro_draw.c` necesita: esa frase reconstruye la cadena
+COMPLETA dentro del tope, y afirma también `n > 12` para que si algún
+día la segmentación deja de partir en cada espacio, el test lo diga en
+vez de quedarse callado. 20 suites de host: **0 fallos** (`test_textseg`
+60/60). Target y simulador: 0 errores, sin warnings nuevos. `.bss`
+**8 486 396 B**, margen **87 680 B** bajo el techo D-043.
+`stack_report.py`: OK, 5528 B (45.0 %).
+
+**Alcance en lo ya publicado.** v0.2.1 salió con el tope en 12: en ruso,
+cualquier cadena de más de ~6 palabras dibujada de una sola vez sale
+truncada (el detalle de los diálogos es el caso visible; los rótulos
+cortos de la interfaz no llegan al tope). No es pérdida de datos ni
+afecta a las otras cinco lenguas. Queda corregido en `main` para la
+próxima publicación; **no se creó tag ni release nuevo por esto** — esa
+decisión es del dueño.
+
 ## D-082 — Visor de fotos responsivo: la misma fila de REPEAT que faltaba en Metro, más debounce
 
 **Causa raíz, citada por comparación directa de código (no repetida
