@@ -4631,6 +4631,13 @@ interfaz en ruso, la cabecera de pivotes se encima en toda pantalla con
 más de un pivote. No afecta a los otros cinco idiomas (sus nombres de
 pivote son latinos y la fuente primaria los mide bien).
 
+**Publicación: agrupada, no inmediata.** Se le presentaron al dueño las
+dos opciones (un `v0.2.3` chico ahora, o esperar) y decidió —vía la
+sesión supervisora— **agruparlo con lo que salga de la verificación en
+hardware**. Queda corregido en `main` desde `acc7e81e`, sin tag: el
+próximo release lo lleva junto con lo que aparezca del recorrido en el
+iPod.
+
 ## D-082 — Visor de fotos responsivo: la misma fila de REPEAT que faltaba en Metro, más debounce
 
 **Causa raíz, citada por comparación directa de código (no repetida
