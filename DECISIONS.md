@@ -4597,6 +4597,40 @@ afecta a las otras cinco lenguas. Queda corregido en `main` para la
 próxima publicación; **no se creó tag ni release nuevo por esto** — esa
 decisión es del dueño.
 
+### D-081, addendum 3 — los tres sitios que quedaban en `metro_draw.c`, encontrados capturando el README
+
+Los addenda 1 y 2 barrieron los llamadores de FUERA de `metro_draw.c`.
+Dentro quedaban tres mediciones a mano que no salieron en aquel barrido
+porque no van seguidas de un `lcd_setfont()` propio —el patrón que se
+buscó entonces— sino que confían en el que dejó puesto otra cosa.
+Aparecieron **poniendo la interfaz en ruso para una captura del README
+público**, no leyendo código:
+
+1. **Nombres de pivote** (`metro_draw_pivots()`). El ancho medido decide
+   dónde empieza el pivote SIGUIENTE. Contra la fuente primaria, un
+   nombre cirílico da el ancho del defaultchar y los nombres se
+   **dibujaban encima unos de otros**: la cabecera de Ajustes en ruso
+   se leía "общ**ие**кран**программе**" en vez de "общие · экран · о
+   программе". Es el peor de los tres: se ve en la PRIMERA pantalla de
+   Ajustes, en el idioma entero.
+2. y 3. **Subtítulo de fila** (`metro_draw_row()` y su gemelo de
+   cuadrícula). El subtítulo va **alineado a la derecha** por su ancho, y
+   ese mismo ancho recorta el título: con un valor cirílico ("Русский",
+   "полная") quedaban mal las dos cosas.
+
+Los tres pasan a `metro_draw_text_size()`. El reloj de la barra
+(`"%02d:%02d"`) se deja como estaba: ASCII por construcción.
+
+**Verificación.** `f5-06-pivotes-rusos-despues.png`: la cabecera de
+Ajustes en ruso con los tres pivotes separados y los valores de la
+derecha en su sitio. 20 suites: 0 fallos. `.bss` sin cambio
+(8 487 676 B), `text` -24 B, `stack_report.py` OK.
+
+**Alcance en lo publicado.** El defecto viajó en v0.2.1 y v0.2.2: con la
+interfaz en ruso, la cabecera de pivotes se encima en toda pantalla con
+más de un pivote. No afecta a los otros cinco idiomas (sus nombres de
+pivote son latinos y la fuente primaria los mide bien).
+
 ## D-082 — Visor de fotos responsivo: la misma fila de REPEAT que faltaba en Metro, más debounce
 
 **Causa raíz, citada por comparación directa de código (no repetida

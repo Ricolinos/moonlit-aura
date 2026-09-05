@@ -472,7 +472,12 @@ void metro_draw_pivots(const struct metro_page *page, int active_pivot,
         int w, h;
         const char *name = metro_lang_str(page->pivots[i].name);
 
-        lcd_getstringsize((const unsigned char *)name, &w, &h);
+        /* moonlit (D-081, addendum 3): por tramos. Este ancho decide
+         * donde empieza el pivote SIGUIENTE -- medido contra la fuente
+         * primaria, un nombre cirilico ("общие", "экран") daba el ancho
+         * del defaultchar y los nombres se DIBUJABAN ENCIMA unos de
+         * otros en la cabecera. */
+        metro_draw_text_size(MFONT_DISPLAY, name, &w, &h);
         metro_draw_text(MFONT_DISPLAY, x, METRO_PIVOT_Y, name,
                          i == active_pivot ? metro_color_fg()
                                             : metro_color_tertiary());
@@ -502,8 +507,11 @@ static void draw_row_text(const struct metro_row *row, int x, int row_y, bool se
     if (row->subtitle)
     {
         int sub_w, sub_h;
-        lcd_setfont(metro_font_id(MFONT_LABEL));
-        lcd_getstringsize((const unsigned char *)row->subtitle, &sub_w, &sub_h);
+        /* moonlit (D-081, addendum 3): por tramos -- el subtitulo va
+         * ALINEADO A LA DERECHA por su ancho, y ese mismo ancho recorta
+         * el titulo; con un valor cirilico ("Русский") las dos cosas
+         * salian mal. */
+        metro_draw_text_size(MFONT_LABEL, row->subtitle, &sub_w, &sub_h);
         metro_draw_text(MFONT_LABEL, LCD_WIDTH - 12 - sub_w, row_y + 4,
                          row->subtitle, metro_color_tertiary());
         title_clip_w = LCD_WIDTH - 12 - sub_w - x - 8;
@@ -720,8 +728,9 @@ static void draw_tile_caption(const struct metro_pivot *pivot, int sel, int coun
     {
         int sub_w, sub_h;
 
-        lcd_setfont(metro_font_id(MFONT_LABEL));
-        lcd_getstringsize((const unsigned char *)row.subtitle, &sub_w, &sub_h);
+        /* moonlit (D-081, addendum 3): por tramos -- ver el gemelo de
+         * metro_draw_row(). */
+        metro_draw_text_size(MFONT_LABEL, row.subtitle, &sub_w, &sub_h);
         metro_draw_text(MFONT_LABEL, LCD_WIDTH - METRO_ROWS_LEFT_X - sub_w,
                          y + 4, row.subtitle, metro_color_tertiary());
         title_clip_w = LCD_WIDTH - METRO_ROWS_LEFT_X - sub_w
