@@ -4872,3 +4872,53 @@ ronda de un idioma con alfabeto grande y sin mapeo 1:1 a Unicode básico
 cirílico de D-081) necesita presupuestar ese costo ANTES de
 implementar, no medirlo al final: a este ritmo de consumo, dos rondas
 más de este tamaño agotan el margen actual.
+
+## D-083 — El bootloader vuelve a ser reproducible: su versión es propia, no el hash del firmware
+
+**Reporte** (Studio, vía la supervisora): `bootloader-ipod6g.ipod` cambió
+de SHA-256 entre v0.2.0 (`4da6a720…`) y v0.2.1 (`252e90c0…`) **sin que
+cambiara nada en `bootloader/` ni en sus bitmaps**. Con la actualización
+selectiva por CRC32 de Studio (ST-143), eso hace que cada release ofrezca
+"Actualizar el arranque": un DFU innecesario, que es justo la operación
+más delicada que puede pedirle al dueño.
+
+**Confirmado, no supuesto.** `package_dist.sh` exporta
+`VERSION="<hash>-<fecha>"` y `build_target.sh` se lo pasa a `make` en
+`build_one()`, que es **compartida** por las dos compilaciones — así que
+el bootloader recibe la misma cadena que el firmware. El bootloader la
+hornea: `bootloader/ipod-s5l87xx.c` imprime `rbversion` en la pantalla de
+arranque (D-073) y en un `printf` de diagnóstico. Verificado con
+`strings` sobre el binario ya compilado: contiene `7b89e2c678M-260905`.
+Nótese la **fecha**: no es solo "cambia por commit", es que el mismo
+commit empaquetado otro día ya da otro binario.
+
+**Por qué el de Aura no cambia** (comparado, `../Aura-Firmware`, solo
+lectura): su `package_dist.sh` **no compila el bootloader** — se compila
+aparte, a mano, con el toolchain tipo B y se copia ya hecho, así que
+nunca recibe un `VERSION=`. No es un diseño que copiar: aquí el
+bootloader sí se compila dentro del script, y eso es deseable.
+
+**Decisión.** El bootloader deja de llevar la versión del **firmware** y
+lleva una **propia**, que sube a mano solo cuando cambian sus fuentes.
+No es un concepto nuevo: `CONTRATO-moonlit-studio.md` §B ya define
+exactamente eso —"Versión de frontera GPL: `BOOT-1`… sube a `BOOT-2`
+**solo** si cambia cualquiera de los dos fuentes"— y ya dejaba anotado el
+defecto que ahora se corrige: *"El SHA-256 cambia con cada recompilación
+(RBVERSION embebido), por eso no sirve como versión de fuente (PA-4)"*.
+Lo que faltaba era que el binario lo cumpliera.
+
+**Cómo.** Un archivo `firmware/BOOT_VERSION` con la cadena (`BOOT-1`
+hoy). `build_one()` pasa `VERSION=$(cat firmware/BOOT_VERSION)` a la
+compilación **de tipo B** y deja la del firmware exactamente como estaba
+(Studio necesita el hash ahí). No hace falta tocar
+`bootloader/ipod-s5l87xx.c`: `rbversion` sigue siendo la vía, solo que su
+contenido pasa a ser una constante del repo, y la pantalla de arranque
+pasa a leer "moonlit - arranque BOOT-1" — que es más honesto que un hash
+del firmware, porque el bootloader no es ese firmware y sobrevive a sus
+actualizaciones.
+
+**Regla operativa**: quien toque `bootloader/`, `utils/mks5lboot/` o los
+bitmaps de arranque sube `firmware/BOOT_VERSION` en la misma pasada, y
+anota el `BOOT-N` nuevo en `CONTRATO-moonlit-studio.md` §B. Si no lo
+sube, el binario sigue siendo idéntico y Studio no ofrece el DFU — que
+es el comportamiento correcto cuando de verdad no cambió nada.

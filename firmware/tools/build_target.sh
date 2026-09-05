@@ -84,8 +84,25 @@ build_one() {
   echo "==> Regenerando la base de dependencias ($dir, make dep, D-348)"
   PATH="$TC_BIN:$PATH" make dep
 
+  # moonlit (D-083): el BOOTLOADER no lleva la version del firmware.
+  # build_one() es compartida, asi que hasta ahora el tipo B recibia el
+  # mismo VERSION="<hash>-<fecha>" que package_dist.sh arma para el
+  # firmware, y bootloader/ipod-s5l87xx.c lo hornea (pantalla de
+  # arranque D-073 + printf de diagnostico). Resultado: el binario del
+  # bootloader cambiaba en cada release -- y hasta el mismo commit
+  # empaquetado otro dia daba otro SHA-256 -- asi que Studio (ST-143)
+  # ofrecia "Actualizar el arranque" siempre, un DFU innecesario. Su
+  # version es PROPIA (firmware/BOOT_VERSION, se sube a mano al tocar
+  # bootloader/ -- CONTRATO-moonlit-studio.md SS B, "BOOT-N"), asi el
+  # binario solo cambia cuando cambian sus fuentes.
+  local make_version="$VERSION"
+  if [[ "$type" == "B" ]]; then
+    make_version="$(cat "$ROOT_DIR/firmware/BOOT_VERSION")"
+    echo "==> Version del bootloader: $make_version (D-083, firmware/BOOT_VERSION)"
+  fi
+
   echo "==> Compilando $dir"
-  PATH="$TC_BIN:$PATH" make -j"$(sysctl -n hw.ncpu)" ${VERSION:+VERSION="$VERSION"}
+  PATH="$TC_BIN:$PATH" make -j"$(sysctl -n hw.ncpu)" ${make_version:+VERSION="$make_version"}
 }
 
 if [[ "$WHAT" == "--all" || "$WHAT" == "--firmware" ]]; then

@@ -1,5 +1,14 @@
 # Contrato entre `moonlit-aura` y Aura Studio
 
+**Versión 8 — 2026-09-04 (D-083).** Cambio respecto a v7: §B declara
+que la versión del bootloader vive en `firmware/BOOT_VERSION` y es la
+que el binario hornea de verdad, en vez del `<hash>-<fecha>` del
+firmware que recibía por compartir `build_one()`. Con eso el binario del
+bootloader solo cambia cuando cambian sus fuentes, y Studio (ST-143)
+deja de ofrecer "Actualizar el arranque" en cada actualización. Nada
+que Studio tenga que implementar: es una propiedad del artefacto que ya
+consume.
+
 **Versión 7 — 2026-09-04 (ronda "ajustes 2", D-079).** Cambio respecto
 a v6: referencia al contrato canónico **v19** (redactado por
 Aura-Firmware en paralelo); §A.12 nueva, ajustes compartidos entre
@@ -251,8 +260,30 @@ mks5lboot
 ```
 
 `BOOT-1` sube a `BOOT-2` **solo** si cambia cualquiera de los dos
-fuentes. El SHA-256 cambia con cada recompilación (RBVERSION embebido),
-por eso no sirve como versión de fuente (PA-4). Los SHA-256 reales de
+fuentes. **Desde v0.2.2 (D-083) la cadena vive en `firmware/BOOT_VERSION`
+y es la que el bootloader hornea de verdad**: `build_target.sh` se la
+pasa como `VERSION=` a la compilación de tipo B, en vez del
+`<hash>-<fecha>` del firmware que recibía antes por compartir
+`build_one()`. Con eso el binario del bootloader **solo cambia cuando
+cambian sus fuentes** — verificado empaquetando dos veces con versiones
+de firmware distintas: mismo SHA-256. Antes cambiaba en cada release (y
+hasta el mismo commit empaquetado otro día daba otro hash), así que
+Studio ofrecía "Actualizar el arranque" siempre: un DFU innecesario en
+cada actualización.
+
+Quien toque `bootloader/`, `utils/mks5lboot/` o los bitmaps de arranque
+sube `firmware/BOOT_VERSION` en la misma pasada y anota el `BOOT-N`
+nuevo aquí. La pantalla de arranque (D-073) muestra esa cadena
+("moonlit - arranque BOOT-1"), no el hash del firmware — el bootloader
+no es ese firmware y sobrevive a sus actualizaciones.
+
+Nota de transición: el binario de v0.2.2 **sí** difiere del de v0.2.1,
+porque la cadena horneada cambió (`<hash>-<fecha>` → `BOOT-1`). Es el
+último cambio de este tipo: una actualización del arranque más y de ahí
+en adelante estable. `BOOT-1` sigue vigente como versión de FUENTE — no
+subió a `BOOT-2` porque las fuentes no cambiaron, solo lo que se hornea.
+
+El SHA-256 sigue sin servir como versión de fuente (PA-4). Los SHA-256 reales de
 cada release se anotan aquí en M12 de `docs/plan/05-plan-correctivo.md`
 (= H7 del plan 03; ningún binario de este par cambió en M1…M11,
 `BOOT-1` sigue vigente):
