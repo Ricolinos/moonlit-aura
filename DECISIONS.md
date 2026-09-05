@@ -4938,6 +4938,33 @@ cirílico de D-081) necesita presupuestar ese costo ANTES de
 implementar, no medirlo al final: a este ritmo de consumo, dos rondas
 más de este tamaño agotan el margen actual.
 
+**Addendum (2026-09-05): hay 307 200 B a la mano, y una decisión
+pendiente del dueño que los libera o los reclama.** Revisando un
+encargo de fondo de foto de artista para "Ahora suena" —que **no se
+implementó** porque contradice D-013, vinculante y elevado a regla del
+sistema de diseño ("plano tonal, nunca la portada")— salió que
+`s_bg_scratch` (`metro_albumart.c`), el buffer de pantalla completa de
+aquel fondo, **sigue en `.bss` sin un solo llamador desde D-013**.
+Medido, no supuesto: `nm -S` sobre el `rockbox.elf` que se publica lo
+da en `0x4b000` = **307 200 B**, símbolo `b`; y `grep` confirma cero
+llamadores de `metro_albumart_load_background()`,
+`_load_background_file()` y `_background_bitmap()` fuera de su propio
+archivo. El visor de fotos y la maestra no dependen de él (usan
+`s_preview_master` y los de `moonlit_master_art.c`).
+
+Son **~3.5× todo el margen actual**. Las dos salidas son excluyentes:
+
+- **Mantener D-013 y retirar el buffer** → margen de 86 400 B a
+  **~394 000 B**, que es justo el presupuesto que este addendum pedía
+  para el japonés.
+- **Revertir D-013** (decisión de diseño del dueño, no de una sesión) →
+  el buffer recupera dueño y el margen se queda en 86 400 B.
+
+Preguntado directo al dueño, respondió **"dejarlo como está por ahora"**:
+se decide después de la verificación en hardware. Queda anotado aquí
+para que el diagnóstico no se pierda. La siguiente decisión libre es
+**D-084**.
+
 ## D-083 — El bootloader vuelve a ser reproducible: su versión es propia, no el hash del firmware
 
 **Reporte** (Studio, vía la supervisora): `bootloader-ipod6g.ipod` cambió
