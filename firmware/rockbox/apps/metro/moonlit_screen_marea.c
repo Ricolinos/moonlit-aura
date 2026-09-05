@@ -411,8 +411,12 @@ static void draw_monogram_into_tile(void)
     lcd_set_foreground(moonlit_color(MROLE_PRIMARY_CONTAINER));
     lcd_fillrect(0, 0, MAREA_COVER_SIZE, MAREA_COVER_SIZE);
 
-    lcd_setfont(metro_font_id(MFONT_HEADLINE));
-    lcd_getstringsize((const unsigned char *)initial, &w, &h);
+    /* moonlit (D-081, addendum): medido POR TRAMOS -- el dibujo ya
+     * pasaba por metro_draw_text() (por eso la inicial cirilica sale
+     * bien), pero la MEDIDA era contra la fuente primaria, que para un
+     * codepoint cirilico devuelve el ancho del defaultchar: el glifo
+     * salia bien pero descentrado. */
+    metro_draw_text_size(MFONT_HEADLINE, initial, &w, &h);
     metro_draw_text(MFONT_HEADLINE, (MAREA_COVER_SIZE - w) / 2,
                      (MAREA_COVER_SIZE - h) / 2, initial,
                      moonlit_color(MROLE_ON_PRIMARY_CONTAINER));

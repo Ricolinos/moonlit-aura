@@ -73,6 +73,21 @@ void metro_draw_text(enum metro_font_role role, int x, int y,
  * que el numero decida geometria. */
 int metro_draw_text_width(enum metro_font_role role, const char *str);
 
+/* moonlit (D-081, addendum): ancho Y alto de `str` tal como se DIBUJA
+ * -- la forma completa de metro_draw_text_width(), para quien ademas
+ * necesita centrar en vertical. `w`/`h` pueden ser NULL. El alto es el
+ * MAYOR de los tramos: una cadena mixta latin+cirilico se dibuja con
+ * dos fuentes distintas (D-081) y la caja que la contiene es la del
+ * tramo mas alto.
+ *
+ * Usa esto, no `lcd_setfont(metro_font_id(role))` + `lcd_getstringsize()`:
+ * eso mide contra la fuente PRIMARIA del rol, que para un codepoint
+ * cirilico devuelve el ancho del defaultchar (`·`) en vez del glifo que
+ * de verdad se va a dibujar -- centrado y marquesinas quedaban
+ * desplazados por esa diferencia. */
+void metro_draw_text_size(enum metro_font_role role, const char *str,
+                           int *w, int *h);
+
 void metro_draw_text_cut_right(enum metro_font_role role, int x, int y,
                                 const char *str, unsigned color, int clip_w);
 

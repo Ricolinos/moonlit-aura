@@ -195,8 +195,10 @@ static void erase_dest_eyebrow(void)
 {
     int w, h;
 
-    lcd_setfont(metro_font_id(MFONT_LABEL));
-    lcd_getstringsize((const unsigned char *)s_cont_text, &w, &h);
+    /* moonlit (D-081, addendum): por tramos -- el rotulo que viaja en
+     * CONTINUUM es dato de la biblioteca y puede ser cirilico; la caja
+     * que se borra tiene que ser la del texto REAL. */
+    metro_draw_text_size(MFONT_LABEL, s_cont_text, &w, &h);
 
     metro_fb_fill_rect(s_fb_to, METRO_DRAW_LEFT_X, METRO_CONTINUUM_TO_Y,
                         w, h, metro_color_bg());

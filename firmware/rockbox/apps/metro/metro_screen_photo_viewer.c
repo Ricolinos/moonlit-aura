@@ -345,13 +345,14 @@ static void draw_preview_caption(void)
     lcd_fillrect(0, y, LCD_WIDTH, METRO_PHOTO_PREVIEW_CAPTION_H);
 
     snprintf(buf, sizeof(buf), "%s", s_items[s_index].filename);
-    lcd_setfont(metro_font_id(MFONT_LABEL));
-    lcd_getstringsize((const unsigned char *)buf, &w, &h);
+    /* moonlit (D-081, addendum): por tramos -- un nombre de archivo
+     * cirilico se mide con su propia fuente, no con la primaria. */
+    metro_draw_text_size(MFONT_LABEL, buf, &w, &h);
     metro_draw_text_cut_right(MFONT_LABEL, (LCD_WIDTH - w) / 2 > 0 ? (LCD_WIDTH - w) / 2 : 4,
                               y + 4, buf, metro_color_fg(), LCD_WIDTH - 8);
 
     snprintf(buf, sizeof(buf), "%d / %d", s_index + 1, s_count);
-    lcd_getstringsize((const unsigned char *)buf, &w, &h);
+    metro_draw_text_size(MFONT_LABEL, buf, &w, &h);
     metro_draw_text(MFONT_LABEL, (LCD_WIDTH - w) / 2, y + 4 + h + 2,
                     buf, metro_color_secondary());
 }
@@ -442,8 +443,8 @@ static void draw_centered_message(enum metro_lang_id id)
     const char *text = metro_lang_str(id);
     int w, h;
 
-    lcd_setfont(metro_font_id(MFONT_LABEL));
-    lcd_getstringsize((const unsigned char *)text, &w, &h);
+    /* moonlit (D-081, addendum): por tramos -- cadena traducida. */
+    metro_draw_text_size(MFONT_LABEL, text, &w, &h);
     metro_draw_text(MFONT_LABEL, (LCD_WIDTH - w) / 2, (LCD_HEIGHT - h) / 2,
                      text, metro_color_fg());
 }

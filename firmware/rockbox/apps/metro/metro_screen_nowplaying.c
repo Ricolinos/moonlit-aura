@@ -526,8 +526,8 @@ static void draw_cover_initial(const char *label)
     if (!initial[0] || initial[0] == ' ')
         return;
 
-    lcd_setfont(metro_font_id(MFONT_DISPLAY));
-    lcd_getstringsize((const unsigned char *)initial, &w, &h);
+    /* moonlit (D-081, addendum): medido por tramos -- ver metro_draw_tile(). */
+    metro_draw_text_size(MFONT_DISPLAY, initial, &w, &h);
     metro_draw_text(MFONT_DISPLAY,
                      NP_LEFT_X + (METRO_ALBUMART_SIZE - w) / 2,
                      NP_COVER_Y + (METRO_ALBUMART_SIZE - h) / 2,

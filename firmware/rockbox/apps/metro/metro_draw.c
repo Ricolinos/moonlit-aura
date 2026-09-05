@@ -98,21 +98,47 @@ static int seg_font_id(enum metro_font_role role,
  * distinto en la fuente de puntuacion que en la normal). Medir la
  * cadena original daria otro numero, y quien centra o decide si hace
  * falta marquesina se equivocaria por esa diferencia. */
-int metro_draw_text_width(enum metro_font_role role, const char *str)
+void metro_draw_text_size(enum metro_font_role role, const char *str,
+                           int *w, int *h)
 {
     struct moonlit_textseg segs[METRO_TEXTSEG_MAX];
     int n = build_segs(role, str, segs);
-    int total = 0, i;
+    int total = 0, tallest = 0, i;
 
     for (i = 0; i < n; i++)
     {
-        int w, h;
+        int sw, sh;
 
         lcd_setfont(seg_font_id(role, &segs[i]));
-        lcd_getstringsize((const unsigned char *)segs[i].text, &w, &h);
-        total += w;
+        lcd_getstringsize((const unsigned char *)segs[i].text, &sw, &sh);
+        total += sw;
+        if (sh > tallest)
+            tallest = sh;
     }
-    return total;
+
+    /* Cadena vacia (o que se segmenta en nada): el alto sigue siendo el
+     * de la fuente primaria del rol -- quien centra una caja vacia
+     * espera la altura de linea, no cero. */
+    if (n == 0)
+    {
+        int sw;
+
+        lcd_setfont(metro_font_id(role));
+        lcd_getstringsize((const unsigned char *)"Ag", &sw, &tallest);
+    }
+
+    if (w)
+        *w = total;
+    if (h)
+        *h = tallest;
+}
+
+int metro_draw_text_width(enum metro_font_role role, const char *str)
+{
+    int w;
+
+    metro_draw_text_size(role, str, &w, NULL);
+    return w;
 }
 
 void metro_draw_text(enum metro_font_role role, int x, int y,
@@ -580,11 +606,17 @@ void metro_draw_tile(int x, int y, int size, const char *label)
      * of blank pixels. */
     if (initial[0] != ' ')
     {
-        lcd_setfont(metro_font_id(MFONT_DISPLAY));
-        lcd_getstringsize((const unsigned char *)initial, &w, &h);
-        lcd_set_foreground(moonlit_color(MROLE_ON_PRIMARY_CONTAINER)); /* D-070 */
-        lcd_set_drawmode(DRMODE_FG); /* M-051 -- see metro_draw_text() */
-        lcd_putsxy(x + (size - w) / 2, y + (size - h) / 2, (const unsigned char *)initial);
+        /* moonlit (D-081, addendum; mismo hallazgo que Metro M-116):
+         * por el dibujo POR TRAMOS, no con lcd_putsxy() a pelo. La
+         * inicial de un album/artista cirilico ("Лунный Свет" -> "Л")
+         * se dibujaba con la fuente PRIMARIA del rol, que solo cubre
+         * 32-383, asi que salia el defaultchar (`·`) mientras el rotulo
+         * de abajo -- ese si por metro_draw_text() -- se leia bien. La
+         * fuente cirilica de MFONT_DISPLAY existe desde D-081; lo unico
+         * que faltaba era pasar por el despachador que la elige. */
+        metro_draw_text_size(MFONT_DISPLAY, initial, &w, &h);
+        metro_draw_text(MFONT_DISPLAY, x + (size - w) / 2, y + (size - h) / 2,
+                         initial, moonlit_color(MROLE_ON_PRIMARY_CONTAINER)); /* D-070 */
     }
 }
 

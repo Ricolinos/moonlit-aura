@@ -4438,6 +4438,62 @@ intermedia del álbum alemán confirmando ß/ü sin fuente aparte.
 **PARADA 3 — Fase 3 cerrada.** Sigue Fase 4 (visor de fotos, porta el
 diff de Metro M-109 cuando exista).
 
+### D-081, addendum — el dibujo por tramos también manda al MEDIR (mismo hallazgo que Metro M-116)
+
+**Encargo**: la supervisora reporta M-116 de Metro — `metro_draw_tile()`
+dibujaba la inicial del mosaico con `lcd_setfont()` + `lcd_putsxy()` a
+pelo, saltándose el despacho por tramos, así que una inicial cirílica
+salía como el defaultchar aunque el rótulo de abajo se leyera bien — y
+pide revisar lo mismo aquí, más el monograma de Marea (D-065).
+
+**Reproducido, no supuesto.** Cuadrícula de Álbumes con el álbum ruso
+de las fixtures (`Ночная Симфония`, sin carátula, mosaico de respaldo):
+la inicial salía **`·`** mientras el rótulo decía "Ночная Симфония" en
+cirílico correcto — `f5-01-tile-cirilico-antes.png`. Es el mismo bug de
+Metro, línea por línea: `metro_draw.c` era el ÚNICO `lcd_putsxy()` de
+`apps/metro/` fuera de las dos funciones de dibujo por tramos que lo
+tienen permitido.
+
+**Y un segundo defecto, del mismo origen, que Metro no reportó: medir.**
+El monograma de Marea sí **dibujaba** por tramos (`metro_draw_text()`,
+por eso la captura `f3-03` de la Fase 3 mostraba la "Н" bien) pero
+**medía** con `lcd_setfont(metro_font_id(rol))` + `lcd_getstringsize()`
+— es decir, contra la fuente PRIMARIA del rol, que para un codepoint
+cirílico devuelve el ancho del defaultchar. El glifo salía bien y
+descentrado. El comentario de `metro_draw_text_width()` (D-066/D-067/
+D-074) ya decía exactamente por qué eso está mal —"quien centra o decide
+si hace falta marquesina se equivocaría por esa diferencia"— pero nueve
+sitios seguían midiendo a mano; D-074 arregló el ancho y nadie barrió a
+los llamadores.
+
+**`metro_draw_text_size(role, str, &w, &h)`** (nuevo, `metro_draw.c`):
+la forma completa de `metro_draw_text_width()` — recorre los mismos
+tramos, suma anchos y toma el alto MAYOR (una cadena mixta se dibuja con
+dos fuentes y su caja es la del tramo más alto). `metro_draw_text_width()`
+pasa a delegar en él, sin duplicar el recorrido.
+
+**Convertidos** (los que miden cadenas que HOY pueden traer cirílico —
+dato de la biblioteca o cadena traducida de las seis lenguas de D-080):
+mosaico (`metro_draw.c`, el del glifo equivocado), monograma de Marea
+(`moonlit_screen_marea.c`), monograma de Ahora suena
+(`metro_screen_nowplaying.c`), ciclo de la marquesina del hub
+(`metro_screen_hub.c` — con un título cirílico el `span` salía corto y
+las dos copias se encimaban), pregunta y mensaje vacío de los widgets
+(`metro_widgets.c`), pantalla de biblioteca (`moonlit_screen_library.c`),
+mensaje centrado de `metro_main.c`, caja de borrado de CONTINUUM
+(`metro_transitions.c`) y las dos leyendas del visor de fotos
+(`metro_screen_photo_viewer.c`, D-082 — un nombre de archivo cirílico).
+Se dejan como estaban los que miden ASCII por construcción: un dígito
+del candado, `"Ag"` para altura de línea, y el tiempo total formateado.
+
+**Verificación.** `f5-02-tile-cirilico-despues.png`: mismo recorrido,
+misma posición de la cuadrícula, la inicial **"Н"** dibujada con la
+fuente cirílica de `MFONT_DISPLAY` (la que D-081 ya generaba desde la
+Fase 3 — lo único que faltaba era pasar por el despachador que la
+elige). Las 20 suites de host: **0 fallos**. Target y simulador: 0
+errores, sin warnings nuevos. `.bss` **sin cambio** (8 484 604 B,
+margen 89 472 B); `text` +32 B. `stack_report.py`: OK, 5528 B (45.0 %).
+
 ## D-082 — Visor de fotos responsivo: la misma fila de REPEAT que faltaba en Metro, más debounce
 
 **Causa raíz, citada por comparación directa de código (no repetida
@@ -4665,6 +4721,11 @@ solo se prueba en el iPod real. Agrupado por decisión.
   el `·` de transliteración.
 - [ ] Un álbum con `ß`/`ü`/`ö`/`Ä` (alemán) se lee bien en los mismos
   tres lugares.
+- [ ] La INICIAL de un álbum/artista cirílico sin carátula sale como
+  letra cirílica en el mosaico de la cuadrícula, en el monograma de
+  Marea y en el de Ahora suena -- no como `·` ni descentrada (D-081,
+  addendum; el mosaico está verificado en simulador, falta confirmar
+  que en el aparato no cambie por la fuente cargada de disco).
 
 **Visor de fotos responsivo (D-082)**
 - [ ] Girar la rueda sin levantar el dedo recorre varias fotos
@@ -4681,8 +4742,11 @@ solo se prueba en el iPod real. Agrupado por decisión.
 Siete decisiones cerradas (D-076 a D-082, sin contar addenda): barra de
 estado delimitada y entrada directa a Marea, marquesina doble
 desfasada, ajustes compartidos entre las tres familias (contrato v19),
-seis idiomas con soporte cirílico completo, y visor de fotos
-responsivo con debounce -- este último con un hallazgo propio de Fase 5
+seis idiomas con soporte cirílico completo (más su addendum: el
+despacho por tramos también manda al MEDIR, no solo al dibujar --
+mismo hallazgo que Metro M-116, ampliado a los nueve sitios que medían
+a mano), y visor de fotos responsivo con debounce -- este último con un
+hallazgo propio de Fase 5
 (la FALLA de `stack_report.py` en el módulo de ajustes compartidos de
 D-079, corregida en la misma pasada) y una reproducción dinámica real
 del bug M-109 después de portar el sufijo `+HOLD` de Metro a

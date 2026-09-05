@@ -1055,8 +1055,11 @@ static void draw_now_playing_row(int y, bool selected)
     {
         int w, h, span, offset;
 
-        lcd_setfont(metro_font_id(MFONT_DISPLAY));
-        lcd_getstringsize((const unsigned char *)row.title, &w, &h);
+        /* moonlit (D-081, addendum): el ancho que fija el ciclo de la
+         * marquesina se mide por tramos -- con un titulo cirilico, la
+         * medida contra la fuente primaria daba un `span` corto y las
+         * dos copias se encimaban. */
+        metro_draw_text_size(MFONT_DISPLAY, row.title, &w, &h);
         span = w + METRO_HUB_MARQUEE_GAP;
         offset = (int)((current_tick / METRO_HUB_MARQUEE_TICKS_PX) % span);
 

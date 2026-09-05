@@ -184,8 +184,8 @@ static void draw_shutdown_screen(void)
     int w, h;
 
     metro_draw_clear();
-    lcd_setfont(metro_font_id(MFONT_TITLE));
-    lcd_getstringsize((const unsigned char *)text, &w, &h);
+    /* moonlit (D-081, addendum): por tramos -- cadena traducida. */
+    metro_draw_text_size(MFONT_TITLE, text, &w, &h);
     metro_draw_text(MFONT_TITLE, (LCD_WIDTH - w) / 2, (LCD_HEIGHT - h) / 2,
                      text, metro_color_fg());
     lcd_update();

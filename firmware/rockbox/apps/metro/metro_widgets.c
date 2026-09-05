@@ -50,8 +50,9 @@ static void draw_question_at(const char *question, int qy)
     const char *tail;
     size_t cut;
 
-    lcd_setfont(metro_font_id(MFONT_TITLE));
-    lcd_getstringsize((const unsigned char *)question, &w, &h);
+    /* moonlit (D-081, addendum): por tramos -- `question` es una cadena
+     * traducida y en ruso se mide entera con la fuente cirilica. */
+    metro_draw_text_size(MFONT_TITLE, question, &w, &h);
     if (w <= max_w)
     {
         metro_draw_text(MFONT_TITLE, CONFIRM_QUESTION_X, qy,
@@ -254,8 +255,8 @@ void metro_widgets_draw_empty_state(const char *message)
 
     metro_draw_tile(x, y, METRO_EMPTY_TILE_SIZE, " ");
 
-    lcd_setfont(metro_font_id(MFONT_BODY));
-    lcd_getstringsize((const unsigned char *)message, &w, &h);
+    /* moonlit (D-081, addendum): por tramos -- cadena traducida. */
+    metro_draw_text_size(MFONT_BODY, message, &w, &h);
     metro_draw_text(MFONT_BODY, (LCD_WIDTH - w) / 2, y + METRO_EMPTY_TILE_SIZE + 16,
                      message, metro_color_secondary());
 }

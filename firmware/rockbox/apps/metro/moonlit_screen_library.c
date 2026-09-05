@@ -63,8 +63,8 @@ static void draw_centered(enum metro_font_role role, int y, const char *text, un
 {
     int w, h;
 
-    lcd_setfont(metro_font_id(role));
-    lcd_getstringsize((const unsigned char *)text, &w, &h);
+    /* moonlit (D-081, addendum): por tramos -- ver metro_draw_text_size(). */
+    metro_draw_text_size(role, text, &w, &h);
     metro_draw_text(role, (LCD_WIDTH - w) / 2, y, text, color);
 }
 
