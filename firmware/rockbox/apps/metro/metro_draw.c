@@ -38,6 +38,7 @@
  * moonlit_screen_marea.c con los tokens de movimiento. */
 #include "moonlit_tokens.h"
 #include "moonlit_textseg.h" /* moonlit (D-066/D-074): puntuacion tipografica por tramos */
+#include "metro_sync.h"    /* moonlit (D-084): metro_sync_work_pending() */
 #include "metro_thumbs.h"   /* moonlit (D-072): presupuesto por cuadro */
 #include "moonlit_marquee.h"  /* moonlit (D-067): texto largo que desborda */
 #include "moonlit_logo.h" /* moonlit (D-016, D-044, M9): creciente 16px en la barra vacia */
@@ -371,6 +372,10 @@ void metro_draw_header(const char *page_title)
     int status = audio_status();
     bool show_lock = button_hold();
     bool show_transport = (status & (AUDIO_STATUS_PAUSE | AUDIO_STATUS_PLAY)) != 0;
+    /* moonlit (D-084): trabajo de biblioteca en curso -- el usuario pudo
+     * posponer la pantalla con MENU y el trabajo sigue en segundo plano;
+     * sin esto, posponer lo dejaba sin una sola pista de que continua. */
+    bool show_sync = metro_sync_work_pending();
     /* moonlit (D-076): batería siempre presente, es el limite mas a la
      * derecha de todos -- arranca aqui el minimo de la izquierda del
      * lado derecho, igual que si fuera el unico elemento. */
@@ -389,6 +394,12 @@ void metro_draw_header(const char *page_title)
         right_edge = clock_x - 6 - METRO_WIDGETS_ICON_SIZE;
     if (show_lock && clock_x - 6 - 2 * METRO_WIDGETS_ICON_SIZE - 4 < right_edge)
         right_edge = clock_x - 6 - 2 * METRO_WIDGETS_ICON_SIZE - 4;
+    /* Tercera ranura, a la izquierda de la del candado. Las posiciones de
+     * las otras dos NO se tocan: son ranuras fijas desde D-068 y moverlas
+     * cambiaria la barra en pantallas que no tienen nada que ver con
+     * D-084. */
+    if (show_sync && clock_x - 6 - 3 * METRO_WIDGETS_ICON_SIZE - 8 < right_edge)
+        right_edge = clock_x - 6 - 3 * METRO_WIDGETS_ICON_SIZE - 8;
 
     /* moonlit (D-011, M4): barra de estado propia, surface_container_lowest
      * (D-028) -- antes se leia directo sobre el fondo plano de la
@@ -441,6 +452,15 @@ void metro_draw_header(const char *page_title)
                                  /* secundario, no acento: el acento esta
                                   * reservado a la pausa (M-073) -- el
                                   * candado informa, no reclama. */
+                                 metro_color_secondary());
+
+    if (show_sync)
+        metro_widgets_draw_icon(MOONLIT_ICON_SYNC,
+                                 clock_x - 6 - 3 * METRO_WIDGETS_ICON_SIZE - 8,
+                                 header_icon_y(MOONLIT_ICON_SYNC),
+                                 /* Secundario, igual que el candado: informa,
+                                  * no reclama -- el acento sigue reservado a
+                                  * la pausa (M-073). */
                                  metro_color_secondary());
 
     if (status & AUDIO_STATUS_PAUSE)

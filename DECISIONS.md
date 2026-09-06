@@ -5061,3 +5061,119 @@ bitmaps de arranque sube `firmware/BOOT_VERSION` en la misma pasada, y
 anota el `BOOT-N` nuevo en `CONTRATO-moonlit-studio.md` §B. Si no lo
 sube, el binario sigue siendo idéntico y Studio no ofrece el DFU — que
 es el comportamiento correcto cuando de verdad no cambió nada.
+
+## D-084 — Una sola pantalla de espera para la biblioteca, con barra y fases
+
+**Encargo del dueño** (vía la Sesión Maestra, referencia de comportamiento
+`Aura-Firmware/aura_sync.c` + `docs/aura-design-system/componentes/library-sync.md`,
+D-293/D-344, leídos solo lectura): al actualizar la biblioteca no se ve el
+avance; que haya un gráfico equivalente al de Aura.
+
+**La premisa, corregida antes de codificar.** Sí se ve avance: D-061 ya
+puso las tres fases de imágenes en la pantalla de sync
+(`draw_sync_screen()` en `metro_main.c`) con sus conteos —"preparando
+carátulas 12/340", "preparando fotos de artistas 8"—, y
+`moonlit_master_art_builder_progress()` ya expone fase, hechos y total.
+Lo que falta no es el dato, es **la forma**, y son tres cosas concretas:
+
+1. **No hay barra.** Solo una línea de texto. El dato está, el gráfico no.
+2. **La fase de base de datos no informa NADA.** Es la más larga (4 min 18 s
+   medidos en el iPod del dueño, D-059) y la pantalla de sync solo dice
+   "actualizando biblioteca…" fijo mientras tanto.
+3. **Son dos pantallas distintas para la misma espera.**
+   `moonlit_screen_library.c` (D-049) tiene el diseño bueno —creciente,
+   título, subtítulo de fase, barra, contador, centrado como bloque— pero
+   solo se usa para el bloqueo de tagcache al entrar a Música;
+   `draw_sync_screen()` dibuja texto plano en `x=12,y=100` con la barra de
+   estado vacía. Al usuario le tocan las dos, según por dónde entre.
+
+**Decisión: una sola pantalla, la que ya está diseñada.**
+`moonlit_screen_library.c` pasa a exponer el dibujo como componente
+—título, fase, barra, contador— y `metro_run_sync_screen_if_needed()` lo
+usa en vez de su texto plano. Las cuatro fases del encargo (base de datos
+→ carátulas → fotos de artista → fotos) son las que ya existen: la de
+tagcache de `run_phase_db()` y las tres de
+`moonlit_master_art_phase_t`.
+
+**Sin animación indeterminada, y no por pereza.** El encargo pedía
+"indeterminada con animación si no hay conteo". Aura resolvió el mismo
+problema **al revés** y su nota lo dice explícito: *"Sin animación
+propia: la cadencia de refresco la pone el loop principal, **fuera** de la
+puerta `lcd_active()` a propósito — el trabajo debe seguir con la pantalla
+dormida"*. Aquí manda además una regla propia (`CLAUDE.md`): animación
+solo bajo `lcd_active()` y con `animations != OFF`. Una barra que se
+mueve sola sería la única animación del firmware obligada a repintar con
+la pantalla apagada, o se congelaría justo cuando el usuario vuelve a
+mirar. Se hace como Aura: **la barra es determinada cuando hay total y es
+la pista vacía cuando no**, y lo que informa en ese caso es el **contador
+real**, que siempre avanza aunque el porcentaje no se pueda estimar
+(D-344 de Aura llama a eso "N elementos leídos"). Honesto y a costo cero
+por cuadro.
+
+**Sin cadenas nuevas.** Las seis lenguas ya tienen todo lo necesario
+—`LANG_MUSIC_DB_UPDATING`, `LANG_LIBRARY_PREPARING`,
+`LANG_LIBRARY_PHASE_DB`, `LANG_LIBRARY_COUNT_FMT`, `LANG_SYNC_ART_ALBUMS`
+/`_ARTISTS`/`_PHOTOS`—, así que no se agregan traducciones: se reusa lo
+que D-061 y D-049 ya dejaron traducido y revisado.
+
+**Posponer, con señal.** MENU sigue posponiendo (`metro_sync_postpone()`,
+sin cancelar: el trabajo sigue en segundo plano). Para que eso no sea
+invisible, la barra de estado gana el ícono `MOONLIT_ICON_SYNC` —que ya
+existe en la tabla generada, sin llamador— a la izquierda del transporte,
+mientras haya trabajo de biblioteca pendiente. Es la contraparte de "no
+cancelable pero posponible": si se puede posponer, tiene que verse que
+sigue.
+
+**Implementación.** `moonlit_screen_library.c` expone
+`moonlit_screen_library_draw_progress(title, phase, done, total)` —el
+mismo bloque centrado de siempre— y `draw_sync_screen()`
+(`metro_main.c`) la usa. Los dos estados terminales (versión y tres
+intentos) siguen siendo texto: no hay progreso que mostrar y el mensaje
+es lo único que importa. La barra de estado gana el ícono de sync bajo
+`metro_sync_work_pending()`, predicado nuevo que excluye a propósito los
+dos estados de error —ahí no corre nada y un indicador de actividad
+mentiría— y ocupa una TERCERA ranura a la izquierda del candado, sin
+mover las dos existentes (son fijas desde D-068 y moverlas cambiaría la
+barra en pantallas ajenas a esto).
+
+**Un defecto propio, encontrado al fotografiar.** Las cadenas de D-061
+nacieron para `snprintf` y llevan el conteo dentro
+(`"preparando carátulas %d/%d"`); pasadas como nombre de fase salían
+**crudas en pantalla**: se leía literalmente "preparing album art
+%d/%d" (`02-bug-formato-crudo.png`). Se corrige en el componente con
+`phase_name()`, que corta en el primer `%` y recorta espacios —
+verificado antes de escribirlo que los marcadores van al FINAL en las
+**dieciocho** cadenas (seis lenguas × tres fases), que es lo que hace
+seguro el corte; si una lengua futura los pusiera en medio, quedaría a
+medias, y por eso el corte vive en un solo sitio y no en cada llamador.
+
+**Verificación.** Capturas en `docs/screenshots/d084/`:
+- `01-fase-base-de-datos.png` — la fase que **antes no decía nada**:
+  ahora "actualizando biblioteca…" + "construyendo la base de música" +
+  barra + "0 de 10".
+- `03-fase-caratulas.png` — fase de carátulas con barra determinada real
+  y "195 de 268", ya sin el `%d/%d`.
+- `04-fase-streaming.png` — la rama `total <= 0` (artistas/fotos): pista
+  vacía y el conteo solo, sin porcentaje inventado.
+
+Las fases de artistas y fotos **no se pudieron fotografiar en una
+corrida real**: en el simulador duran menos de un tick incluso con la
+biblioteca inflada a 268 álbumes y 73 fotos de artista
+(`gen_readme_media.py --bulk`, opción nueva para esto). En vez de
+afirmar que se ven bien, la captura `04` es un **render forzado** de esa
+rama —llamada directa con `(37, 0)`, build aparte, revertido después— y
+así queda dicho: es una prueba de dibujo, no de una pasada real. El
+camino de código es el mismo que el de carátulas, que sí está
+fotografiado en vivo.
+
+20 suites de host: **0 fallos**. Target y simulador: 0 errores, sin
+warnings nuevos. `.bss` **8 487 740 B** (+64 B: el buffer estático de
+`phase_name()`), margen **86 336 B** bajo el techo D-043.
+`stack_report.py`: OK, 5528 B (45.0 %).
+
+**Pendiente, anotado y no hecho:** la fase de base de datos muestra "0
+de 10" durante todo el escaneo porque `tagcache_get_commit_step()` vale
+0 hasta que empieza el commit. Aura parte esa barra en dos tramos
+(escaneo 0…200/256, indexado 200…256, D-344) y aquí se podría hacer lo
+mismo, pero requiere un conteo de escaneo que este árbol no expone
+todavía. Queda para quien retome, no se finge.

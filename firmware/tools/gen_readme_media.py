@@ -273,6 +273,58 @@ def write_photos(root):
                                   "JPEG", quality=90, subsampling=0)
 
 
+# --- fotos de artista (.rockbox/aura/artists/ + artist_images.cfg) ---
+
+ARTIST_PX = (320, 320)
+
+
+def artist_portrait(seed):
+    """Retrato geometrico: bandas diagonales + disco. Original, sintetico."""
+    im = Image.new("RGB", ARTIST_PX)
+    d = ImageDraw.Draw(im)
+    w, h = ARTIST_PX
+    bg = (18 + (seed * 13) % 50, 20 + (seed * 7) % 46, 34 + (seed * 11) % 52)
+    fg = (190 + (seed * 5) % 60, 200 + (seed * 3) % 50, 225)
+    ac = (110 + (seed * 17) % 130, 140 + (seed * 9) % 100, 210)
+    d.rectangle([0, 0, w, h], fill=bg)
+    for k in range(-6, 12):
+        x = k * 40 + (seed % 5) * 8
+        d.line([x, 0, x + h, h], fill=(ac if k % 3 == 0 else fg), width=7)
+    r = w * 0.24
+    d.ellipse([w * .5 - r, h * .42 - r, w * .5 + r, h * .42 + r], fill=bg)
+    d.ellipse([w * .5 - r, h * .42 - r, w * .5 + r, h * .42 + r], outline=fg, width=6)
+    return im
+
+
+def slugify(name):
+    out = []
+    for ch in name.lower():
+        if ch.isalnum():
+            out.append(ch)
+        elif out and out[-1] != "-":
+            out.append("-")
+    return ("".join(out).strip("-") or "artist")[:40]
+
+
+def write_artist_images(aura_dir, artists):
+    """Una foto por artista, mas el indice del contrato (SS D.3)."""
+    art_dir = os.path.join(aura_dir, "artists")
+    os.makedirs(art_dir, exist_ok=True)
+    lines = ["# artist_images.cfg v1 (CONTRATO-firmware-studio.md SS D.3)"]
+    seen = set()
+    for i, name in enumerate(artists):
+        slug = slugify(name)
+        if slug in seen:
+            continue
+        seen.add(slug)
+        artist_portrait(i).save(os.path.join(art_dir, slug + ".jpg"),
+                                "JPEG", quality=88, subsampling=0)
+        lines.append("%s.jpg: %s" % (slug, name))
+    with open(os.path.join(aura_dir, "artist_images.cfg"), "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    print("==> %d fotos de artista" % (len(seen)))
+
+
 def gen_track(path, title, artist, album, track_no, freq):
     subprocess.run(
         ["ffmpeg", "-y", "-loglevel", "error",
@@ -292,6 +344,15 @@ def main():
                     help="no borrar el arbol existente antes de escribir")
     ap.add_argument("--photos", default="firmware/build-sim/simdisk/Photos",
                     help="donde escribir las fotos sinteticas")
+    ap.add_argument("--artists",
+                    default="firmware/build-sim/simdisk/.rockbox/aura",
+                    help="directorio aura/ donde escribir artists/ y "
+                         "artist_images.cfg (vacio para no escribirlos)")
+    ap.add_argument("--bulk", type=int, default=0, metavar="N",
+                    help="N albumes extra de relleno (una pista, una caratula). "
+                         "Para VERIFICAR pantallas de progreso: con la biblioteca "
+                         "chica de arriba, las fases de imagenes duran menos de un "
+                         "tick y no se pueden capturar (D-084).")
     args = ap.parse_args()
 
     root = os.path.abspath(args.out)
@@ -313,6 +374,30 @@ def main():
             bg, fg, accent = colors
             cover_fn(bg, fg, accent).save(os.path.join(d, "cover.jpg"),
                                           "JPEG", quality=92, subsampling=0)
+
+    # Relleno: mismos generadores, rotando colores, para que la pasada de
+    # imagenes dure lo suficiente como para fotografiar cada fase.
+    if args.bulk > 0:
+        fillers = [wave, horizon, grid, arcs, blocks, crescent, staves]
+        for n in range(args.bulk):
+            artist = "Test Ensemble %02d" % (n // 4 + 1)
+            album = "Volume %02d" % (n + 1)
+            d = os.path.join(root, artist, album)
+            os.makedirs(d, exist_ok=True)
+            gen_track(os.path.join(d, "01 Track One.mp3"),
+                      "Track One", artist, album, 1, 300 + (n % 12) * 40)
+            bg = (14 + (n * 7) % 40, 16 + (n * 11) % 40, 30 + (n * 13) % 40)
+            fg = (200 + (n * 5) % 55, 210 + (n * 3) % 45, 230)
+            ac = (120 + (n * 17) % 120, 150 + (n * 9) % 90, 200)
+            fillers[n % len(fillers)](bg, fg, ac).save(
+                os.path.join(d, "cover.jpg"), "JPEG", quality=88, subsampling=0)
+        print("==> %d albumes de relleno" % args.bulk)
+
+    if args.artists:
+        names = [a for a, _al, _f, _c, _t in ALBUMS]
+        if args.bulk > 0:
+            names += ["Test Ensemble %02d" % (n // 4 + 1) for n in range(args.bulk)]
+        write_artist_images(os.path.abspath(args.artists), names)
 
     photos_root = os.path.abspath(args.photos)
     if os.path.isdir(photos_root) and not args.keep:

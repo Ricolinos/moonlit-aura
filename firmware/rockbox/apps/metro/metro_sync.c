@@ -284,6 +284,17 @@ void metro_sync_check_pending(void)
     s_state = METRO_SYNC_WAIT_TAGCACHE;
 }
 
+/* moonlit (D-084): "hay trabajo de biblioteca EN CURSO", que no es lo
+ * mismo que needs_screen() -- ese incluye los dos estados de error, en
+ * los que no corre nada y un indicador de actividad mentiria. Lo usa la
+ * barra de estado para que posponer con MENU no sea invisible. */
+bool metro_sync_work_pending(void)
+{
+    return s_state == METRO_SYNC_WAIT_TAGCACHE
+        || s_state == METRO_SYNC_RUNNING
+        || s_state == METRO_SYNC_BUILDING_ART;
+}
+
 bool metro_sync_needs_screen(void)
 {
     return s_state == METRO_SYNC_WAIT_TAGCACHE

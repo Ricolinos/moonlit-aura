@@ -25,6 +25,7 @@
 /* config.h before tagcache.h -- see DECISIONS.md M-030. */
 #include "config.h"
 #include "tagcache.h"
+#include "moonlit_screen_library.h" /* moonlit (D-084) */
 #include "kernel.h"
 #include "button.h"
 #include "lcd.h"
@@ -134,41 +135,56 @@ static void draw_sync_screen(void)
             break;
     }
 
-    metro_draw_clear();
-    metro_draw_header("");
-    metro_draw_text(MFONT_TITLE, 12, 100, metro_lang_str(msg), metro_color_fg());
     if (is_error)
+    {
+        /* Los dos estados terminales siguen siendo texto: no hay
+         * progreso que mostrar y el mensaje es lo unico que importa. */
+        metro_draw_clear();
+        metro_draw_header("");
+        metro_draw_text(MFONT_TITLE, 12, 100, metro_lang_str(msg), metro_color_fg());
         metro_draw_text(MFONT_LABEL, 12, 140, metro_lang_str(LANG_SYNC_DISMISS_HINT),
                          metro_color_secondary());
-    else
+        lcd_update();
+        return;
+    }
+
+    /* moonlit (D-084): la MISMA pantalla que la espera de
+     * moonlit_screen_library.c -- creciente, titulo, fase, barra y
+     * contador -- en vez del texto plano en x=12,y=100 que habia aqui.
+     * Eran dos pantallas distintas para la misma espera.
+     *
+     * Cuatro fases, todas con dato que ya existia: la base de datos
+     * (pasos de commit de tagcache, D-049) y las tres de imagenes que
+     * D-061 ya reportaba (carátulas -> fotos de artista -> fotos). */
     {
-        /* D-061: la fase de imagenes comparte esta pantalla -- es parte
-         * de "preparar la biblioteca", no una espera nueva. */
         moonlit_master_art_phase_t phase = MOONLIT_MASTER_ART_PHASE_IDLE;
         int done = 0, total = 0;
 
         if (metro_sync_art_progress(&phase, &done, &total))
         {
-            char line[48];
-            enum metro_lang_id fmt;
+            enum metro_lang_id sub;
 
             if (phase == MOONLIT_MASTER_ART_PHASE_PHOTOS)
-                fmt = LANG_SYNC_ART_PHOTOS;
+                sub = LANG_SYNC_ART_PHOTOS;
             else if (phase == MOONLIT_MASTER_ART_PHASE_ARTISTS)
-                fmt = LANG_SYNC_ART_ARTISTS;
+                sub = LANG_SYNC_ART_ARTISTS;
             else
-                fmt = LANG_SYNC_ART_ALBUMS;
-
-            /* ART_ALBUMS lleva dos %d (hay total); ARTISTS y PHOTOS
-             * uno solo -- sus recorridos son en streaming. */
-            if (total > 0)
-                snprintf(line, sizeof(line), metro_lang_str(fmt), done, total);
-            else
-                snprintf(line, sizeof(line), metro_lang_str(fmt), done);
-            metro_draw_text(MFONT_LABEL, 12, 140, line, metro_color_secondary());
+                sub = LANG_SYNC_ART_ALBUMS;
+            moonlit_screen_library_draw_progress(msg, sub, done, total);
+        }
+        else
+        {
+            /* D-084: la fase mas larga (4 min 18 s medidos, D-059) era
+             * justo la que no decia NADA -- solo el titulo fijo. Ahora
+             * lleva su nombre de fase y, en cuanto el commit empieza a
+             * reportar pasos, su barra; durante el escaneo previo la
+             * pista va vacia, que es lo honesto (no hay total que
+             * estimar). */
+            moonlit_screen_library_draw_progress(msg, LANG_LIBRARY_PHASE_DB,
+                                                  tagcache_get_commit_step(),
+                                                  tagcache_get_max_commit_step());
         }
     }
-    lcd_update();
 }
 
 /* F9: with show_shutdown_message=false (M-019), Rockbox's own

@@ -59,6 +59,11 @@ void metro_sync_check_pending(void);
  * of whatever it would draw otherwise. */
 bool metro_sync_needs_screen(void);
 
+/* moonlit (D-084): trabajo de biblioteca EN CURSO (sin los estados de
+ * error). La barra de estado dibuja el icono de sync mientras sea
+ * true, para que posponer con MENU se vea que sigue. */
+bool metro_sync_work_pending(void);
+
 /* True while a rebuild/update job is in flight or postponed-but-still-
  * finishing in the background -- metro_music_db_ready() cedes to this
  * (never starts its own tagcache_rebuild()/tagcache_start_scan() while

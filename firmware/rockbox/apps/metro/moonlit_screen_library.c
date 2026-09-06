@@ -22,6 +22,7 @@
  ****************************************************************************/
 /* moonlit (D-049): ver moonlit_screen_library.h. */
 #include <stdio.h>
+#include <string.h>
 #include "config.h"
 #include "lcd.h"
 #include "kernel.h"
@@ -68,11 +69,54 @@ static void draw_centered(enum metro_font_role role, int y, const char *text, un
     metro_draw_text(role, (LCD_WIDTH - w) / 2, y, text, color);
 }
 
-/* `done`/`total` <= 0: no bar, no counter (before the commit starts
- * reporting steps). D-059: this screen only ever has the ONE phase
- * left (tagcache) -- the subtitle is always LANG_LIBRARY_PHASE_DB, no
- * longer a parameter. */
-static void draw_screen(int done, int total)
+/* Nombre de la fase SIN sus marcadores de formato. Las cadenas de
+ * D-061 (LANG_SYNC_ART_*) nacieron para snprintf y llevan el conteo
+ * dentro ("preparando carátulas %d/%d"); aquí el conteo lo dicen la
+ * barra y el contador de abajo, así que la línea de fase se queda con
+ * la parte descriptiva. Se corta en el primer '%' y se recortan los
+ * espacios que queden.
+ *
+ * Verificado que los marcadores van al FINAL en las dieciocho cadenas
+ * (seis lenguas x tres fases) antes de escribir esto -- si alguna
+ * lengua futura los pusiera en medio, esta función la dejaría a
+ * medias, y por eso el corte vive aquí y no en cada llamador. La fase
+ * de base de datos (LANG_LIBRARY_PHASE_DB) no tiene marcadores y pasa
+ * intacta. */
+static const char *phase_name(enum metro_lang_id phase)
+{
+    static char buf[64];
+    const char *src = metro_lang_str(phase);
+    size_t n = 0;
+
+    while (src[n] && src[n] != '%' && n + 1 < sizeof(buf))
+        n++;
+    while (n > 0 && src[n - 1] == ' ')
+        n--;
+    memcpy(buf, src, n);
+    buf[n] = '\0';
+    return buf;
+}
+
+/* moonlit (D-084): el dibujo de las DOS esperas de biblioteca -- esta
+ * y la de metro_run_sync_screen_if_needed(). `title`/`phase` salen de
+ * metro_lang.c (sin cadenas nuevas: D-049 y D-061 ya las dejaron en
+ * las seis lenguas).
+ *
+ * `total > 0`  -> barra determinada + "N de M" debajo.
+ * `total <= 0` -> pista vacia y, si `done > 0`, el contador real solo.
+ *                 Es el caso de los recorridos en streaming (artistas,
+ *                 fotos) y del escaneo de tagcache antes de que empiece
+ *                 el commit: el porcentaje no se puede estimar, pero el
+ *                 conteo SI avanza, y eso es lo que hay que mostrar.
+ *                 Sin animacion indeterminada -- ver D-084: Aura
+ *                 resolvio lo mismo sin animacion propia a proposito
+ *                 (su cadencia vive fuera de lcd_active() porque el
+ *                 trabajo sigue con la pantalla dormida), y la regla de
+ *                 CLAUDE.md solo permite animar bajo lcd_active() y con
+ *                 animations != OFF. */
+void moonlit_screen_library_draw_progress(enum metro_lang_id title,
+                                           enum metro_lang_id phase,
+                                           int done, int total)
 {
     int y = LIB_TOP;
     char count[32];
@@ -81,17 +125,18 @@ static void draw_screen(int done, int total)
     moonlit_logo_draw_crescent(LIB_CRESCENT_SIZE, (LCD_WIDTH - LIB_CRESCENT_SIZE) / 2, y,
                                 moonlit_color(MROLE_ON_SURFACE));
     y += LIB_CRESCENT_SIZE + LIB_TITLE_GAP;
-    draw_centered(MFONT_HEADLINE, y, metro_lang_str(LANG_LIBRARY_PREPARING),
+    draw_centered(MFONT_HEADLINE, y, metro_lang_str(title),
                   moonlit_color(MROLE_ON_SURFACE));
     y += LIB_TITLE_H + LIB_SUB_GAP;
-    draw_centered(MFONT_BODY, y, metro_lang_str(LANG_LIBRARY_PHASE_DB),
+    draw_centered(MFONT_BODY, y, phase_name(phase),
                   moonlit_color(MROLE_ON_SURFACE_VARIANT));
     y += LIB_SUB_H + LIB_BAR_GAP;
 
+    if (done < 0)
+        done = 0;
+
     if (total > 0)
     {
-        if (done < 0)
-            done = 0;
         if (done > total)
             done = total;
         metro_draw_progress((LCD_WIDTH - LIB_BAR_W) / 2, y, LIB_BAR_W, LIB_BAR_H,
@@ -100,7 +145,25 @@ static void draw_screen(int done, int total)
         snprintf(count, sizeof(count), metro_lang_str(LANG_LIBRARY_COUNT_FMT), done, total);
         draw_centered(MFONT_LABEL, y, count, moonlit_color(MROLE_ON_SURFACE_VARIANT));
     }
+    else
+    {
+        /* Pista vacia: la misma primitiva al 0 %, para que el bloque no
+         * cambie de altura entre fases y la pantalla no salte. */
+        metro_draw_progress((LCD_WIDTH - LIB_BAR_W) / 2, y, LIB_BAR_W, LIB_BAR_H, 0);
+        y += LIB_BAR_H + LIB_COUNT_GAP;
+        if (done > 0)
+        {
+            snprintf(count, sizeof(count), "%d", done);
+            draw_centered(MFONT_LABEL, y, count, moonlit_color(MROLE_ON_SURFACE_VARIANT));
+        }
+    }
     lcd_update();
+}
+
+static void draw_screen(int done, int total)
+{
+    moonlit_screen_library_draw_progress(LANG_LIBRARY_PREPARING,
+                                          LANG_LIBRARY_PHASE_DB, done, total);
 }
 
 /* Shared by both phases: true = the user (MENU) or the system (USB)
