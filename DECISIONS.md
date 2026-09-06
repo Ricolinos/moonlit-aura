@@ -5233,3 +5233,23 @@ carátulas, y esa **sí** está fotografiada en vivo
 20 suites: **0 fallos**. Target y simulador: 0 errores. `.bss`
 **8 487 740 B** (sin cambio respecto a la entrega anterior de D-084),
 margen **86 336 B**. `stack_report.py`: OK, 5528 B (45.0 %).
+
+**Desbordamiento del contador (M-123 de Metro): verificado, NO aplica.**
+Metro reporta que `processed_entries` se pasa de `total_entries` y en
+pantalla les salía "28/27". Revisado aquí, y no puede ocurrir por dos
+razones independientes:
+
+1. El contador "N de M" se dibuja en **un solo sitio** de todo
+   `apps/metro/` —dentro de `moonlit_screen_library_draw_progress()`— y
+   ahí el numerador ya se topa al denominador (`if (done > total) done =
+   total;`) antes de formatear. No hay un segundo contador que se
+   escapara del tope.
+2. Esta pantalla **nunca empareja** `processed_entries` con
+   `total_entries`, que es de donde sale el "28/27" de Metro: durante el
+   escaneo el denominador se pasa deliberadamente como 0, y con
+   denominador 0 se dibuja el conteo solo. `total_entries` se usa en
+   moonlit únicamente como **sello de cambio** (invalidar listas y el
+   memo de claves de carátula en `metro_screen_hub.c`/`metro_music.c`),
+   jamás como total en pantalla.
+
+No se cambia nada; queda anotado para que no se vuelva a investigar.
