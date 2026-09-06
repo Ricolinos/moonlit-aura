@@ -5177,3 +5177,59 @@ de 10" durante todo el escaneo porque `tagcache_get_commit_step()` vale
 (escaneo 0…200/256, indexado 200…256, D-344) y aquí se podría hacer lo
 mismo, pero requiere un conteo de escaneo que este árbol no expone
 todavía. Queda para quien retome, no se finge.
+
+### D-084, addendum — la fase de la base de datos deja de decir "0 de 10" durante cuatro minutos
+
+La entrega anterior dejó esto anotado como pendiente y la supervisora
+tiene razón en que era lo que motivó el encargo: **es la fase que dura
+4 min 18 s en el iPod del dueño** (D-059), y mostraba "0 de 10" de
+principio a fin porque `tagcache_get_commit_step()` vale 0 hasta que
+el escaneo termina y empieza el commit.
+
+**De dónde sale el dato.** Aura lo resuelve con
+`tagcache_get_stat()->progress` y `->processed_entries` (D-344,
+`aura_sync.c:812`). Verificado en este árbol antes de portar nada:
+los dos campos son de `struct tagcache_stat` **de Rockbox de fábrica**
+(`apps/tagcache.h`), no algo que Aura haya agregado —su
+`MODIFICATIONS.md` toca `apps/tagcache.c` por otras cosas (contador de
+trabajos de D-293, manejo del temporal), no por estos campos—. Así que
+**no se modifica Rockbox y no hay entrada nueva en `MODIFICATIONS.md`**.
+
+**Dos tramos, mismo reparto que Aura.** El escaneo se queda con el
+primer **78 %** de la barra y el commit con el último **22 %**, en vez
+de dos barridos independientes de 0 a 100 que parecerían reiniciar la
+barra a la mitad. Vive en `moonlit_screen_library_db_progress()`,
+compartida por las dos esperas: son la misma cosa y tienen que medirla
+igual.
+
+**Barra y contador se separan.** `draw_progress()` recibe ahora un
+`pct` propio además de `done`/`total`: durante el escaneo la barra usa
+la **estimación** de tagcache y el contador dice **archivos
+procesados**, que son dos números sin relación entre sí. Antes iban
+acoplados y por eso no se podía expresar este caso.
+
+**Un detalle que solo se ve leyendo `apps/tagcache.c`:**
+`get_progress()` devuelve **-1**, no 0, cuando no tiene con qué estimar
+—sin dircache y sin base previa en RAM, que es exactamente el primer
+build—. Se trata explícitamente como "no se sabe" (pista vacía) en vez
+de dibujar un 0 % que parecería estancado; con una base previa
+(actualización, no build desde cero) sí hay estimación y la barra
+avanza. En los dos casos el contador de archivos avanza, que es lo que
+de verdad informa durante esos minutos.
+
+**Verificación.** `05-escaneo-con-conteo.png`: la fase de base de datos
+durante el escaneo, con el conteo real de archivos procesados
+(**1805**) donde antes decía "0 de 10". Capturado en vivo, en dos
+corridas distintas con conteos distintos (1805 y 287), que es lo que
+prueba que el número avanza de verdad y no es una constante.
+
+El tramo de commit (78…100 %) **no se pudo capturar en vivo**: en el
+simulador dura menos de lo que tarda un dump, porque el escaneo que en
+el iPod son minutos aquí es una fracción de segundo sobre SSD. No se
+finge: usa exactamente el mismo camino `total > 0` que la fase de
+carátulas, y esa **sí** está fotografiada en vivo
+(`03-fase-caratulas.png`, "195 de 268" con la barra llena al 73 %).
+
+20 suites: **0 fallos**. Target y simulador: 0 errores. `.bss`
+**8 487 740 B** (sin cambio respecto a la entrega anterior de D-084),
+margen **86 336 B**. `stack_report.py`: OK, 5528 B (45.0 %).

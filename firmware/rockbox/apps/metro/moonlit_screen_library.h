@@ -61,13 +61,23 @@ bool moonlit_screen_library_prepare(void);
  * entrara.
  *
  * `title`/`phase` son ids de cadena (las seis lenguas ya las tienen,
- * D-049/D-061: no se agrego ninguna). `done`/`total`: con `total > 0`
- * la barra es determinada y debajo va "N de M"; con `total <= 0` se
- * dibuja la pista vacia y, si `done > 0`, el contador real -- que
- * siempre avanza aunque el porcentaje no se pueda estimar. Sin
- * animacion indeterminada, a proposito: ver D-084. */
+ * D-049/D-061: no se agrego ninguna).
+ *
+ * `pct` (0..100, o < 0 para pista vacia) manda SOLO sobre la barra, y
+ * `done`/`total` SOLO sobre el contador de abajo: con `total > 0` va
+ * "N de M", con `total <= 0` y `done > 0` va el conteo solo. Van
+ * separados desde D-084 (addendum) porque el escaneo de la base los
+ * necesita distintos -- la barra avanza con el porcentaje estimado de
+ * tagcache y el contador dice archivos procesados, que son dos numeros
+ * sin relacion. Sin animacion indeterminada, a proposito: ver D-084. */
 void moonlit_screen_library_draw_progress(enum metro_lang_id title,
                                            enum metro_lang_id phase,
-                                           int done, int total);
+                                           int pct, int done, int total);
+
+/* moonlit (D-084 addendum): los dos tramos de la fase de base de datos
+ * (escaneo 0..78 %, commit 78..100 %), listos para pasar a
+ * draw_progress(). Compartido para que las DOS esperas de biblioteca
+ * midan igual la misma cosa. */
+void moonlit_screen_library_db_progress(int *pct, int *done, int *total);
 
 #endif /* MOONLIT_SCREEN_LIBRARY_H */

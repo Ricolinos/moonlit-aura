@@ -170,7 +170,9 @@ static void draw_sync_screen(void)
                 sub = LANG_SYNC_ART_ARTISTS;
             else
                 sub = LANG_SYNC_ART_ALBUMS;
-            moonlit_screen_library_draw_progress(msg, sub, done, total);
+            moonlit_screen_library_draw_progress(msg, sub,
+                                                  total > 0 ? done * 100 / total : -1,
+                                                  done, total);
         }
         else
         {
@@ -180,9 +182,15 @@ static void draw_sync_screen(void)
              * reportar pasos, su barra; durante el escaneo previo la
              * pista va vacia, que es lo honesto (no hay total que
              * estimar). */
+            /* D-084 addendum: los dos tramos (escaneo/commit). Antes
+             * pasaba commit_step directo, que vale 0 durante TODO el
+             * escaneo -- justo la fase de 4 min que motivo el encargo,
+             * mostrando "0 de 10" de principio a fin. */
+            int pct, dbdone, dbtotal;
+
+            moonlit_screen_library_db_progress(&pct, &dbdone, &dbtotal);
             moonlit_screen_library_draw_progress(msg, LANG_LIBRARY_PHASE_DB,
-                                                  tagcache_get_commit_step(),
-                                                  tagcache_get_max_commit_step());
+                                                  pct, dbdone, dbtotal);
         }
     }
 }

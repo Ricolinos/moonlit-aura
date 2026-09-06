@@ -116,7 +116,7 @@ static const char *phase_name(enum metro_lang_id phase)
  *                 animations != OFF. */
 void moonlit_screen_library_draw_progress(enum metro_lang_id title,
                                            enum metro_lang_id phase,
-                                           int done, int total)
+                                           int pct, int done, int total)
 {
     int y = LIB_TOP;
     char count[32];
@@ -134,36 +134,72 @@ void moonlit_screen_library_draw_progress(enum metro_lang_id title,
 
     if (done < 0)
         done = 0;
+    if (pct < 0)
+        pct = 0;   /* pista vacia: la misma primitiva al 0 %, para que el
+                    * bloque no cambie de altura entre fases. */
+    if (pct > 100)
+        pct = 100;
+
+    metro_draw_progress((LCD_WIDTH - LIB_BAR_W) / 2, y, LIB_BAR_W, LIB_BAR_H, pct);
+    y += LIB_BAR_H + LIB_COUNT_GAP;
 
     if (total > 0)
     {
         if (done > total)
             done = total;
-        metro_draw_progress((LCD_WIDTH - LIB_BAR_W) / 2, y, LIB_BAR_W, LIB_BAR_H,
-                             done * 100 / total);
-        y += LIB_BAR_H + LIB_COUNT_GAP;
         snprintf(count, sizeof(count), metro_lang_str(LANG_LIBRARY_COUNT_FMT), done, total);
         draw_centered(MFONT_LABEL, y, count, moonlit_color(MROLE_ON_SURFACE_VARIANT));
     }
-    else
+    else if (done > 0)
     {
-        /* Pista vacia: la misma primitiva al 0 %, para que el bloque no
-         * cambie de altura entre fases y la pantalla no salte. */
-        metro_draw_progress((LCD_WIDTH - LIB_BAR_W) / 2, y, LIB_BAR_W, LIB_BAR_H, 0);
-        y += LIB_BAR_H + LIB_COUNT_GAP;
-        if (done > 0)
-        {
-            snprintf(count, sizeof(count), "%d", done);
-            draw_centered(MFONT_LABEL, y, count, moonlit_color(MROLE_ON_SURFACE_VARIANT));
-        }
+        snprintf(count, sizeof(count), "%d", done);
+        draw_centered(MFONT_LABEL, y, count, moonlit_color(MROLE_ON_SURFACE_VARIANT));
     }
     lcd_update();
 }
 
-static void draw_screen(int done, int total)
+/* moonlit (D-084 addendum): los dos tramos de la fase de base de datos,
+ * compartidos por esta pantalla y la de metro_main.c -- son la MISMA
+ * espera y tienen que verse igual. Mismo reparto que Aura (D-344):
+ * el escaneo se queda con el primer 78 % de la barra y el commit con el
+ * ultimo 22 %, en vez de dos barridos independientes de 0 a 100 que
+ * pareceria que la barra se reinicia a la mitad.
+ *
+ * Durante el escaneo, `progress` de tagcache es una ESTIMACION (0 sin
+ * dircache) y `processed_entries` es un conteo real que siempre avanza:
+ * por eso la barra usa uno y el contador el otro. */
+void moonlit_screen_library_db_progress(int *pct, int *done, int *total)
 {
+    const struct tagcache_stat *st = tagcache_get_stat();
+    int max_step = tagcache_get_max_commit_step();
+
+    if (st->commit_step > 0 && max_step > 0)
+    {
+        *pct = 78 + (22 * st->commit_step) / max_step;
+        *done = st->commit_step;
+        *total = max_step;
+        return;
+    }
+    /* get_progress() (apps/tagcache.c) devuelve -1 cuando NO tiene con
+     * que estimar: sin dircache y sin una base previa en RAM, que es
+     * justo el primer build. No es 0, es "no se sabe" -- se pasa como
+     * pista vacia en vez de dibujar un 0 % que parecería estancado.
+     * Con base previa (una actualizacion, no un build desde cero) si
+     * hay estimacion y la barra avanza. En los dos casos el contador
+     * de archivos procesados avanza, que es lo que de verdad informa
+     * durante estos minutos. */
+    *pct = st->progress < 0 ? -1 : (78 * st->progress) / 100;
+    *done = st->processed_entries;
+    *total = 0;
+}
+
+static void draw_screen(void)
+{
+    int pct, done, total;
+
+    moonlit_screen_library_db_progress(&pct, &done, &total);
     moonlit_screen_library_draw_progress(LANG_LIBRARY_PREPARING,
-                                          LANG_LIBRARY_PHASE_DB, done, total);
+                                          LANG_LIBRARY_PHASE_DB, pct, done, total);
 }
 
 /* Shared by both phases: true = the user (MENU) or the system (USB)
@@ -204,14 +240,14 @@ static bool run_phase_db(void)
     if (db_ready())
         return true;
 
-    draw_screen(tagcache_get_commit_step(), tagcache_get_max_commit_step());
+    draw_screen();
     while (!db_ready())
     {
         if (poll_interrupt(HZ / 10))
             return false;
         /* apps/main.c:380-388 pattern: commit_step is 0 until the scan
          * finishes and the commit starts, then 1..max_commit_step. */
-        draw_screen(tagcache_get_commit_step(), tagcache_get_max_commit_step());
+        draw_screen();
     }
     return true;
 }
