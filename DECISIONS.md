@@ -5253,3 +5253,20 @@ razones independientes:
    jamás como total en pantalla.
 
 No se cambia nada; queda anotado para que no se vuelva a investigar.
+
+**Publicado en v0.2.4** (2026-09-05, con autorización directa del dueño
+pedida en la terminal de esta sesión). Tag `v0.2.4` sobre `b5911144`.
+
+<https://github.com/Ricolinos/moonlit-aura/releases/tag/v0.2.4>
+
+```
+checksums.txt del release v0.2.4 (BOOT-1 vigente):
+  ff61fefb44b9402997079b53d3cb1e799f58c098f2e8a3712fa4cae4058bdebc  rockbox.zip
+  f8205e9324acc8d2916c646c5d42251659a98da2200985ec3481ef2795298650  rockbox.ipod
+  035e14db2be7ce093a434a2dac8fff419c64a8be84644122710e2a1850fc3a91  mks5lboot
+  c8765b1541df0640ce45dd5ad9525173bae4a21bf4b6c55292fed47a4dcfaa2c  bootloader-ipod6g.ipod
+```
+
+**D-083 sostenida por tercer release consecutivo**: el bootloader es el
+mismo binario que en v0.2.2 y v0.2.3. Studio no debería ofrecer
+"Actualizar el arranque".
